@@ -1,0 +1,51 @@
+FROM node:20-alpine AS base
+
+# Install pnpm
+RUN corepack enable && corepack prepare pnpm@9.0.0 --activate
+
+WORKDIR /app
+
+# Copy workspace files
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
+COPY turbo.json ./
+
+# Copy package files
+COPY packages/shared/package.json ./packages/shared/
+COPY packages/backend/package.json ./packages/backend/
+
+# Install dependencies
+RUN pnpm install --frozen-lockfile
+
+# Copy source code
+COPY packages/shared ./packages/shared
+COPY packages/backend ./packages/backend
+
+# Build
+RUN pnpm --filter @safeguard/shared build
+RUN pnpm --filter @safeguard/backend build
+
+# Production stage
+FROM node:20-alpine AS production
+
+RUN corepack enable && corepack prepare pnpm@9.0.0 --activate
+
+WORKDIR /app
+
+# Copy built artifacts and dependencies
+COPY --from=base /app/package.json ./
+COPY --from=base /app/pnpm-workspace.yaml ./
+COPY --from=base /app/node_modules ./node_modules
+COPY --from=base /app/packages/shared/package.json ./packages/shared/
+COPY --from=base /app/packages/shared/dist ./packages/shared/dist
+COPY --from=base /app/packages/shared/node_modules ./packages/shared/node_modules
+COPY --from=base /app/packages/backend/package.json ./packages/backend/
+COPY --from=base /app/packages/backend/dist ./packages/backend/dist
+COPY --from=base /app/packages/backend/node_modules ./packages/backend/node_modules
+COPY --from=base /app/packages/backend/src/prompts ./packages/backend/dist/prompts
+
+ENV NODE_ENV=production
+ENV PORT=3001
+
+EXPOSE 3001
+
+CMD ["node", "packages/backend/dist/index.js"]

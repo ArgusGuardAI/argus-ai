@@ -1,0 +1,53 @@
+# WhaleShield API - Cloudflare Workers Configuration
+# Documentation: https://developers.cloudflare.com/workers/wrangler/configuration/
+
+name = "whaleshield-api"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+# ===========================================
+# SETUP INSTRUCTIONS
+# ===========================================
+# 1. Create KV namespace:
+#    wrangler kv:namespace create SCAN_CACHE
+#    wrangler kv:namespace create SCAN_CACHE --preview
+#
+# 2. Update the KV namespace IDs below with the returned values
+#
+# 3. Set secrets (do NOT commit these):
+#    wrangler secret put TOGETHER_AI_API_KEY
+#    wrangler secret put SUPABASE_URL
+#    wrangler secret put SUPABASE_ANON_KEY
+#
+# 4. For local development, create .dev.vars file:
+#    cp .dev.vars.example .dev.vars
+#    Then fill in your API keys
+#
+# 5. Deploy:
+#    pnpm deploy (or wrangler deploy)
+# ===========================================
+
+[vars]
+ENVIRONMENT = "production"
+
+# KV Namespace for caching honeypot scan results
+# Run: wrangler kv:namespace create SCAN_CACHE
+# Then replace the IDs below
+[[kv_namespaces]]
+binding = "SCAN_CACHE"
+id = "f68ebeb06b094a29a537c65738f6c50e"
+preview_id = "3fd64db66b4f49f3b56d77f64d8138b3"
+
+# Development environment
+[env.dev]
+name = "whaleshield-api-dev"
+
+[env.dev.vars]
+ENVIRONMENT = "development"
+
+# Staging environment (optional)
+[env.staging]
+name = "whaleshield-api-staging"
+
+[env.staging.vars]
+ENVIRONMENT = "staging"

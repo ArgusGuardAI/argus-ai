@@ -1,0 +1,53 @@
+{
+  "name": "@whaleshield/extension",
+  "displayName": "WhaleShield",
+  "version": "1.0.0",
+  "description": "AI-Powered Security Layer for Pump.fun and Crypto Twitter",
+  "private": true,
+  "scripts": {
+    "dev": "plasmo dev",
+    "build": "plasmo build",
+    "build:firefox": "plasmo build --target=firefox-mv3",
+    "build:edge": "plasmo build --target=edge-mv3",
+    "build:all": "plasmo build && plasmo build --target=firefox-mv3 && plasmo build --target=edge-mv3",
+    "package": "plasmo package",
+    "package:firefox": "plasmo package --target=firefox-mv3",
+    "package:edge": "plasmo package --target=edge-mv3",
+    "package:all": "plasmo package && plasmo package --target=firefox-mv3 && plasmo package --target=edge-mv3"
+  },
+  "dependencies": {
+    "@plasmohq/storage": "^1.9.0",
+    "@solana/wallet-adapter-base": "^0.9.23",
+    "@solana/wallet-adapter-phantom": "^0.9.24",
+    "@solana/wallet-adapter-react": "^0.15.35",
+    "@solana/wallet-adapter-react-ui": "^0.9.35",
+    "@solana/web3.js": "^1.95.0",
+    "@whaleshield/shared": "workspace:*",
+    "bs58": "^6.0.0",
+    "plasmo": "^0.90.5",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.260",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "autoprefixer": "^10.4.16",
+    "postcss": "^8.4.32",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5.3.3"
+  },
+  "manifest": {
+    "permissions": [
+      "storage",
+      "activeTab"
+    ],
+    "host_permissions": [
+      "https://pump.fun/*",
+      "https://twitter.com/*",
+      "https://x.com/*",
+      "https://birdeye.so/*",
+      "https://dexscreener.com/*"
+    ]
+  }
+}

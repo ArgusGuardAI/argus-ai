@@ -1,0 +1,52 @@
+<svg width="440" height="280" viewBox="0 0 440 280" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0a0a0f"/>
+      <stop offset="100%" style="stop-color:#0f1419"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#00d4ff"/>
+      <stop offset="100%" style="stop-color:#0088cc"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="440" height="280" fill="url(#bg)"/>
+
+  <!-- Grid pattern -->
+  <g opacity="0.05">
+    <line x1="0" y1="40" x2="440" y2="40" stroke="#00d4ff" stroke-width="1"/>
+    <line x1="0" y1="80" x2="440" y2="80" stroke="#00d4ff" stroke-width="1"/>
+    <line x1="0" y1="120" x2="440" y2="120" stroke="#00d4ff" stroke-width="1"/>
+    <line x1="0" y1="160" x2="440" y2="160" stroke="#00d4ff" stroke-width="1"/>
+    <line x1="0" y1="200" x2="440" y2="200" stroke="#00d4ff" stroke-width="1"/>
+    <line x1="0" y1="240" x2="440" y2="240" stroke="#00d4ff" stroke-width="1"/>
+    <line x1="80" y1="0" x2="80" y2="280" stroke="#00d4ff" stroke-width="1"/>
+    <line x1="160" y1="0" x2="160" y2="280" stroke="#00d4ff" stroke-width="1"/>
+    <line x1="240" y1="0" x2="240" y2="280" stroke="#00d4ff" stroke-width="1"/>
+    <line x1="320" y1="0" x2="320" y2="280" stroke="#00d4ff" stroke-width="1"/>
+    <line x1="400" y1="0" x2="400" y2="280" stroke="#00d4ff" stroke-width="1"/>
+  </g>
+
+  <!-- Glow circle behind whale -->
+  <circle cx="220" cy="95" r="50" fill="#00d4ff" opacity="0.15"/>
+  <circle cx="220" cy="95" r="35" fill="#00d4ff" opacity="0.1"/>
+
+  <!-- Brand name -->
+  <text x="220" y="175" font-family="Arial Black, Helvetica, sans-serif" font-size="32" font-weight="900" fill="#00d4ff" text-anchor="middle" letter-spacing="3">WHALESHIELD</text>
+
+  <!-- Tagline -->
+  <text x="220" y="210" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#888888" text-anchor="middle" letter-spacing="2">AI-POWERED RUG PROTECTION</text>
+
+  <!-- Bottom accent line -->
+  <rect x="120" y="235" width="200" height="2" fill="url(#glow)" opacity="0.6" rx="1"/>
+
+  <!-- Corner accents -->
+  <path d="M0 0 L30 0 L30 3 L3 3 L3 30 L0 30 Z" fill="#00d4ff" opacity="0.3"/>
+  <path d="M440 0 L410 0 L410 3 L437 3 L437 30 L440 30 Z" fill="#00d4ff" opacity="0.3"/>
+  <path d="M0 280 L30 280 L30 277 L3 277 L3 250 L0 250 Z" fill="#00d4ff" opacity="0.3"/>
+  <path d="M440 280 L410 280 L410 277 L437 277 L437 250 L440 250 Z" fill="#00d4ff" opacity="0.3"/>
+
+  <!-- Border -->
+  <rect x="0" y="0" width="440" height="280" fill="none" stroke="#00d4ff" stroke-width="1" opacity="0.3"/>
+</svg>

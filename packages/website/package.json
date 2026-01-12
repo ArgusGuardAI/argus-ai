@@ -1,0 +1,11 @@
+{
+  "name": "@whaleshield/website",
+  "version": "1.0.0",
+  "description": "WhaleShield landing page",
+  "scripts": {
+    "dev": "npx serve .",
+    "preview": "open index.html"
+  },
+  "keywords": ["whaleshield", "solana", "crypto", "landing-page"],
+  "license": "MIT"
+}

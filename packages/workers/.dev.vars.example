@@ -1,0 +1,11 @@
+# Cloudflare Workers Environment Variables
+# Copy this file to .dev.vars for local development
+
+# Together AI API Key
+# Get yours at: https://api.together.xyz/
+TOGETHER_AI_API_KEY=your-together-ai-api-key
+
+# Supabase Configuration
+# Get these from your Supabase project settings
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your-supabase-anon-key

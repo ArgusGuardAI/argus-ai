@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhaleShield - The First Whale Token With REAL Utility</title>
+  <meta name="description" content="AI-powered browser extension that protects you from rugs on pump.fun. Honeypot detection, bundle bot alerts, and deployer history tracking.">
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="WhaleShield - The First Whale With REAL Utility">
+  <meta property="og:description" content="AI-powered browser extension that protects you from rugs on pump.fun">
+  <meta property="og:image" content="https://whaleshield.io/img/whale.png">
+  <meta property="og:url" content="https://whaleshield.io">
+  <meta name="twitter:card" content="summary_large_image">
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            whale: {
+              50: '#e6f9ff',
+              100: '#b3ecff',
+              200: '#80dfff',
+              300: '#4dd2ff',
+              400: '#1ac5ff',
+              500: '#00a8e8',
+              600: '#0088cc',
+              700: '#006699',
+              800: '#004466',
+              900: '#002233',
+            },
+            cyber: {
+              blue: '#00d4ff',
+              purple: '#7b2cbf',
+              pink: '#ff006e',
+            },
+            dark: {
+              950: '#050508',
+              900: '#0a0a0f',
+              800: '#0f0f18',
+              700: '#151520',
+              600: '#1a1a28',
+            }
+          },
+          animation: {
+            'float': 'float 6s ease-in-out infinite',
+            'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            'gradient': 'gradient 8s ease infinite',
+            'glow-pulse': 'glow-pulse 2s ease-in-out infinite',
+            'scan-line': 'scan-line 3s linear infinite',
+          },
+          keyframes: {
+            float: {
+              '0%, 100%': { transform: 'translateY(0px)' },
+              '50%': { transform: 'translateY(-20px)' },
+            },
+            gradient: {
+              '0%, 100%': { backgroundPosition: '0% 50%' },
+              '50%': { backgroundPosition: '100% 50%' },
+            },
+            'glow-pulse': {
+              '0%, 100%': { boxShadow: '0 0 20px rgba(0, 212, 255, 0.3)' },
+              '50%': { boxShadow: '0 0 40px rgba(0, 212, 255, 0.6)' },
+            },
+            'scan-line': {
+              '0%': { transform: 'translateY(-100%)' },
+              '100%': { transform: 'translateY(100%)' },
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700;800&display=swap');
+
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+
+    .font-cyber {
+      font-family: 'Orbitron', sans-serif;
+    }
+
+    .gradient-text {
+      background: linear-gradient(135deg, #00d4ff 0%, #00a8e8 50%, #0088cc 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .gradient-text-alt {
+      background: linear-gradient(135deg, #00d4ff 0%, #7b2cbf 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .gradient-bg {
+      background: linear-gradient(135deg, #00d4ff 0%, #0088cc 100%);
+    }
+
+    .cyber-border {
+      border: 1px solid rgba(0, 212, 255, 0.3);
+      box-shadow: 0 0 20px rgba(0, 212, 255, 0.1), inset 0 0 20px rgba(0, 212, 255, 0.05);
+    }
+
+    .cyber-glow {
+      box-shadow: 0 0 60px rgba(0, 212, 255, 0.4);
+    }
+
+    .card-hover:hover {
+      border-color: rgba(0, 212, 255, 0.5);
+      box-shadow: 0 0 40px rgba(0, 212, 255, 0.2);
+      transform: translateY(-4px);
+    }
+
+    .hero-video {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      min-width: 100%;
+      min-height: 100%;
+      object-fit: cover;
+      opacity: 0.3;
+    }
+
+    .hero-overlay {
+      background: linear-gradient(180deg,
+        rgba(5, 5, 8, 0.7) 0%,
+        rgba(5, 5, 8, 0.5) 50%,
+        rgba(5, 5, 8, 0.9) 100%);
+    }
+
+    .whale-image {
+      filter: drop-shadow(0 0 30px rgba(0, 212, 255, 0.5));
+    }
+
+    .scan-effect {
+      position: relative;
+      overflow: hidden;
+    }
+
+    .scan-effect::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, #00d4ff, transparent);
+      animation: scan-line 3s linear infinite;
+    }
+
+    .tech-grid {
+      background-image:
+        linear-gradient(rgba(0, 212, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 212, 255, 0.03) 1px, transparent 1px);
+      background-size: 50px 50px;
+    }
+
+    /* Custom scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0a0a0f;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #00d4ff;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+
+<body class="bg-dark-950 text-white min-h-screen">
+  <!-- Navigation -->
+  <nav class="fixed top-0 left-0 right-0 z-50 bg-dark-950/90 backdrop-blur-xl border-b border-cyan-500/10">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-20">
+        <div class="flex items-center gap-3">
+          <img src="img/whale.png" alt="WhaleShield" class="w-12 h-12 object-contain">
+          <span class="text-xl font-bold font-cyber tracking-wider">WHALESHIELD</span>
+        </div>
+        <div class="hidden md:flex items-center gap-8">
+          <a href="#features" class="text-gray-400 hover:text-cyber-blue transition font-medium">Features</a>
+          <a href="#how-it-works" class="text-gray-400 hover:text-cyber-blue transition font-medium">How It Works</a>
+          <a href="#token" class="text-gray-400 hover:text-cyber-blue transition font-medium">Token</a>
+          <a href="#roadmap" class="text-gray-400 hover:text-cyber-blue transition font-medium">Roadmap</a>
+          <a href="https://twitter.com/WhaleShield" target="_blank" class="text-gray-400 hover:text-cyber-blue transition font-medium">Twitter</a>
+        </div>
+        <a href="#" class="gradient-bg text-dark-950 px-6 py-2.5 rounded-lg font-bold hover:opacity-90 transition cyber-border">
+          Launch App
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero Section with Video Background -->
+  <section class="relative min-h-screen flex items-center justify-center overflow-hidden">
+    <!-- Video Background -->
+    <video autoplay muted loop playsinline class="hero-video">
+      <source src="img/Gen-4-whale-compressed.mp4" type="video/mp4">
+    </video>
+
+    <!-- Overlay -->
+    <div class="absolute inset-0 hero-overlay"></div>
+
+    <!-- Tech Grid -->
+    <div class="absolute inset-0 tech-grid opacity-50"></div>
+
+    <!-- Content -->
+    <div class="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20">
+      <div class="grid lg:grid-cols-2 gap-12 items-center">
+        <!-- Left: Text -->
+        <div class="text-center lg:text-left">
+          <!-- Badge -->
+          <div class="inline-flex items-center gap-2 bg-cyber-blue/10 border border-cyber-blue/30 rounded-full px-4 py-2 mb-8">
+            <span class="w-2 h-2 bg-cyber-blue rounded-full animate-pulse"></span>
+            <span class="text-cyber-blue text-sm font-bold font-cyber tracking-wider">FIRST WHALE WITH REAL UTILITY</span>
+          </div>
+
+          <!-- Main headline -->
+          <h1 class="text-5xl md:text-6xl lg:text-7xl font-black mb-6 leading-tight font-cyber">
+            <span class="gradient-text">PROTECT</span><br>
+            <span class="text-white">YOUR</span><br>
+            <span class="gradient-text-alt">PORTFOLIO</span>
+          </h1>
+
+          <p class="text-xl md:text-2xl text-gray-300 max-w-xl mb-10">
+            AI-powered browser extension that scans pump.fun tokens and detects
+            <span class="text-cyber-blue font-semibold">honeypots</span>,
+            <span class="text-cyber-blue font-semibold">rugs</span>, and
+            <span class="text-cyber-blue font-semibold">scams</span> before you ape.
+          </p>
+
+          <!-- CTA Buttons -->
+          <div class="flex flex-col sm:flex-row items-center lg:items-start gap-4 mb-12">
+            <a href="#" class="gradient-bg text-dark-950 px-8 py-4 rounded-lg font-bold text-lg hover:opacity-90 transition cyber-glow w-full sm:w-auto text-center">
+              Download Extension
+            </a>
+            <a href="#how-it-works" class="bg-dark-700/50 border border-cyber-blue/30 text-white px-8 py-4 rounded-lg font-bold text-lg hover:bg-dark-600/50 transition w-full sm:w-auto text-center">
+              Watch Demo
+            </a>
+          </div>
+
+          <!-- Stats -->
+          <div class="grid grid-cols-3 gap-6">
+            <div class="text-center lg:text-left">
+              <div class="text-2xl md:text-3xl font-bold font-cyber gradient-text">10K+</div>
+              <div class="text-gray-500 text-sm">Tokens Scanned</div>
+            </div>
+            <div class="text-center lg:text-left">
+              <div class="text-2xl md:text-3xl font-bold font-cyber gradient-text">99%</div>
+              <div class="text-gray-500 text-sm">Accuracy</div>
+            </div>
+            <div class="text-center lg:text-left">
+              <div class="text-2xl md:text-3xl font-bold font-cyber gradient-text">$2M+</div>
+              <div class="text-gray-500 text-sm">Rugs Prevented</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Whale Image -->
+        <div class="hidden lg:flex justify-center items-center">
+          <div class="relative">
+            <div class="absolute inset-0 bg-cyber-blue/20 rounded-full blur-3xl scale-75"></div>
+            <img src="img/whale.png" alt="WhaleShield Guardian" class="relative w-full max-w-lg whale-image animate-float">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scroll indicator -->
+    <div class="absolute bottom-8 left-1/2 -translate-x-1/2 animate-bounce">
+      <div class="w-6 h-10 border-2 border-cyber-blue/50 rounded-full flex justify-center pt-2">
+        <div class="w-1 h-3 bg-cyber-blue rounded-full animate-pulse"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Problem Section -->
+  <section class="py-24 bg-dark-900 relative overflow-hidden">
+    <div class="absolute inset-0 tech-grid opacity-30"></div>
+
+    <div class="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="text-center mb-16">
+        <h2 class="text-4xl md:text-5xl font-bold mb-4 font-cyber">THE <span class="gradient-text">THREAT</span></h2>
+        <p class="text-xl text-gray-400">Every day on pump.fun, thousands lose everything to scams</p>
+      </div>
+
+      <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div class="bg-dark-800/50 cyber-border rounded-2xl p-6 text-center card-hover transition-all duration-300">
+          <div class="text-5xl mb-4 text-red-400"><i class="fa-solid fa-skull"></i></div>
+          <h3 class="text-lg font-bold text-red-400 mb-2 font-cyber">RUG PULLS</h3>
+          <p class="text-gray-400 text-sm">Devs drain liquidity and vanish with your money</p>
+        </div>
+        <div class="bg-dark-800/50 cyber-border rounded-2xl p-6 text-center card-hover transition-all duration-300">
+          <div class="text-5xl mb-4 text-orange-400"><i class="fa-solid fa-robot"></i></div>
+          <h3 class="text-lg font-bold text-orange-400 mb-2 font-cyber">BUNDLE BOTS</h3>
+          <p class="text-gray-400 text-sm">Coordinated attacks that dump on retail</p>
+        </div>
+        <div class="bg-dark-800/50 cyber-border rounded-2xl p-6 text-center card-hover transition-all duration-300">
+          <div class="text-5xl mb-4 text-yellow-400"><i class="fa-solid fa-jar"></i></div>
+          <h3 class="text-lg font-bold text-yellow-400 mb-2 font-cyber">HONEYPOTS</h3>
+          <p class="text-gray-400 text-sm">You can buy but you can never sell</p>
+        </div>
+        <div class="bg-dark-800/50 cyber-border rounded-2xl p-6 text-center card-hover transition-all duration-300">
+          <div class="text-5xl mb-4 text-purple-400"><i class="fa-solid fa-rotate"></i></div>
+          <h3 class="text-lg font-bold text-purple-400 mb-2 font-cyber">SERIAL RUGGERS</h3>
+          <p class="text-gray-400 text-sm">Same scammers launching new tokens daily</p>
+        </div>
+      </div>
+
+      <div class="mt-16 text-center">
+        <p class="text-2xl text-gray-300 mb-4">
+          Other whale tokens offer <span class="text-red-400 font-bold">ZERO</span> protection.
+        </p>
+        <p class="text-4xl font-bold font-cyber">
+          WE <span class="gradient-text">BUILT</span> THE SOLUTION.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features Section -->
+  <section id="features" class="py-24 relative">
+    <div class="absolute inset-0 tech-grid opacity-20"></div>
+
+    <div class="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="text-center mb-16">
+        <h2 class="text-4xl md:text-5xl font-bold mb-4 font-cyber"><span class="gradient-text">DEFENSE</span> SYSTEMS</h2>
+        <p class="text-xl text-gray-400">Military-grade protection for your trades</p>
+      </div>
+
+      <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+        <!-- Feature 1 -->
+        <div class="bg-dark-800/30 cyber-border rounded-2xl p-8 card-hover transition-all duration-300 scan-effect">
+          <div class="w-16 h-16 bg-cyber-blue/10 border border-cyber-blue/30 rounded-xl flex items-center justify-center mb-6">
+            <i class="fa-solid fa-magnifying-glass-chart text-3xl text-cyber-blue"></i>
+          </div>
+          <h3 class="text-xl font-bold mb-3 font-cyber text-cyber-blue">HONEYPOT SCANNER</h3>
+          <p class="text-gray-400">AI analyzes smart contracts to detect hidden sell restrictions before you buy.</p>
+        </div>
+
+        <!-- Feature 2 -->
+        <div class="bg-dark-800/30 cyber-border rounded-2xl p-8 card-hover transition-all duration-300">
+          <div class="w-16 h-16 bg-cyber-blue/10 border border-cyber-blue/30 rounded-xl flex items-center justify-center mb-6">
+            <i class="fa-solid fa-cubes-stacked text-3xl text-cyber-blue"></i>
+          </div>
+          <h3 class="text-xl font-bold mb-3 font-cyber text-cyber-blue">BUNDLE DETECTION</h3>
+          <p class="text-gray-400">Identifies coordinated wallet activity and artificial buying pressure.</p>
+        </div>
+
+        <!-- Feature 3 -->
+        <div class="bg-dark-800/30 cyber-border rounded-2xl p-8 card-hover transition-all duration-300">
+          <div class="w-16 h-16 bg-cyber-blue/10 border border-cyber-blue/30 rounded-xl flex items-center justify-center mb-6">
+            <i class="fa-solid fa-user-secret text-3xl text-cyber-blue"></i>
+          </div>
+          <h3 class="text-xl font-bold mb-3 font-cyber text-cyber-blue">DEPLOYER INTEL</h3>
+          <p class="text-gray-400">Tracks wallet history to identify serial ruggers and known scammers.</p>
+        </div>
+
+        <!-- Feature 4 -->
+        <div class="bg-dark-800/30 cyber-border rounded-2xl p-8 card-hover transition-all duration-300">
+          <div class="w-16 h-16 bg-cyber-blue/10 border border-cyber-blue/30 rounded-xl flex items-center justify-center mb-6">
+            <i class="fa-solid fa-chart-pie text-3xl text-cyber-blue"></i>
+          </div>
+          <h3 class="text-xl font-bold mb-3 font-cyber text-cyber-blue">HOLDER ANALYSIS</h3>
+          <p class="text-gray-400">Shows token distribution and flags dangerous concentration levels.</p>
+        </div>
+
+        <!-- Feature 5 -->
+        <div class="bg-dark-800/30 cyber-border rounded-2xl p-8 card-hover transition-all duration-300">
+          <div class="w-16 h-16 bg-cyber-blue/10 border border-cyber-blue/30 rounded-xl flex items-center justify-center mb-6">
+            <i class="fa-solid fa-droplet text-3xl text-cyber-blue"></i>
+          </div>
+          <h3 class="text-xl font-bold mb-3 font-cyber text-cyber-blue">LIQUIDITY CHECK</h3>
+          <p class="text-gray-400">Analyzes bonding curve health and real liquidity depth.</p>
+        </div>
+
+        <!-- Feature 6 -->
+        <div class="bg-dark-800/30 cyber-border rounded-2xl p-8 card-hover transition-all duration-300">
+          <div class="w-16 h-16 bg-cyber-blue/10 border border-cyber-blue/30 rounded-xl flex items-center justify-center mb-6">
+            <i class="fa-solid fa-users text-3xl text-cyber-blue"></i>
+          </div>
+          <h3 class="text-xl font-bold mb-3 font-cyber text-cyber-blue">COMMUNITY INTEL</h3>
+          <p class="text-gray-400">See warnings and insights from other traders in real-time.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- How It Works Section -->
+  <section id="how-it-works" class="py-24 bg-dark-900 relative overflow-hidden">
+    <div class="absolute inset-0 tech-grid opacity-30"></div>
+
+    <div class="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="text-center mb-16">
+        <h2 class="text-4xl md:text-5xl font-bold mb-4 font-cyber">HOW IT <span class="gradient-text">WORKS</span></h2>
+        <p class="text-xl text-gray-400">Protection activated in 3 steps</p>
+      </div>
+
+      <div class="grid md:grid-cols-3 gap-8 mb-16">
+        <div class="text-center">
+          <div class="w-24 h-24 bg-dark-800 cyber-border rounded-2xl flex items-center justify-center mx-auto mb-6 animate-glow-pulse">
+            <span class="text-5xl font-bold font-cyber gradient-text">01</span>
+          </div>
+          <h3 class="text-xl font-bold mb-3 font-cyber">INSTALL</h3>
+          <p class="text-gray-400">Add WhaleShield to Chrome or Firefox in one click</p>
+        </div>
+
+        <div class="text-center">
+          <div class="w-24 h-24 bg-dark-800 cyber-border rounded-2xl flex items-center justify-center mx-auto mb-6 animate-glow-pulse" style="animation-delay: 0.5s;">
+            <span class="text-5xl font-bold font-cyber gradient-text">02</span>
+          </div>
+          <h3 class="text-xl font-bold mb-3 font-cyber">BROWSE</h3>
+          <p class="text-gray-400">WhaleShield auto-scans every token you view on pump.fun</p>
+        </div>
+
+        <div class="text-center">
+          <div class="w-24 h-24 bg-dark-800 cyber-border rounded-2xl flex items-center justify-center mx-auto mb-6 animate-glow-pulse" style="animation-delay: 1s;">
+            <span class="text-5xl font-bold font-cyber gradient-text">03</span>
+          </div>
+          <h3 class="text-xl font-bold mb-3 font-cyber">PROTECTED</h3>
+          <p class="text-gray-400">See instant risk scores before you make any trade</p>
+        </div>
+      </div>
+
+      <!-- Video Demo -->
+      <div class="bg-dark-800/50 cyber-border rounded-2xl p-2 max-w-4xl mx-auto cyber-glow">
+        <video autoplay muted loop playsinline class="w-full rounded-xl">
+          <source src="img/Gen-4-whale-compressed.mp4" type="video/mp4">
+        </video>
+      </div>
+    </div>
+  </section>
+
+  <!-- Token Section -->
+  <section id="token" class="py-24 relative">
+    <div class="absolute inset-0 tech-grid opacity-20"></div>
+
+    <div class="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="text-center mb-16">
+        <h2 class="text-4xl md:text-5xl font-bold mb-4 font-cyber">$<span class="gradient-text">WHALESHIELD</span></h2>
+        <p class="text-xl text-gray-400">The token unlocks the protection. The protection is the utility.</p>
+      </div>
+
+      <div class="grid lg:grid-cols-2 gap-12 items-center">
+        <!-- Left: Whale Image -->
+        <div class="flex justify-center">
+          <div class="relative">
+            <div class="absolute inset-0 bg-cyber-blue/10 rounded-full blur-3xl"></div>
+            <img src="img/whale.png" alt="WhaleShield Token" class="relative w-full max-w-md whale-image">
+          </div>
+        </div>
+
+        <!-- Right: Token Info -->
+        <div>
+          <h3 class="text-2xl font-bold mb-8 font-cyber">REAL <span class="gradient-text">UTILITY</span></h3>
+
+          <div class="space-y-6 mb-10">
+            <div class="flex items-start gap-4">
+              <div class="w-12 h-12 bg-cyber-blue/10 border border-cyber-blue/30 rounded-lg flex items-center justify-center flex-shrink-0">
+                <i class="fa-solid fa-lock-open text-xl text-cyber-blue"></i>
+              </div>
+              <div>
+                <h4 class="font-bold mb-1 font-cyber text-cyber-blue">PREMIUM ACCESS</h4>
+                <p class="text-gray-400">Hold 1,000 tokens to unlock advanced protection features</p>
+              </div>
+            </div>
+            <div class="flex items-start gap-4">
+              <div class="w-12 h-12 bg-cyber-blue/10 border border-cyber-blue/30 rounded-lg flex items-center justify-center flex-shrink-0">
+                <i class="fa-solid fa-spray-can text-xl text-cyber-blue"></i>
+              </div>
+              <div>
+                <h4 class="font-bold mb-1 font-cyber text-cyber-blue">COMMUNITY GRAFFITI</h4>
+                <p class="text-gray-400">Leave and view notes on tokens to warn the community</p>
+              </div>
+            </div>
+            <div class="flex items-start gap-4">
+              <div class="w-12 h-12 bg-cyber-blue/10 border border-cyber-blue/30 rounded-lg flex items-center justify-center flex-shrink-0">
+                <i class="fa-solid fa-check-to-slot text-xl text-cyber-blue"></i>
+              </div>
+              <div>
+                <h4 class="font-bold mb-1 font-cyber text-cyber-blue">GOVERNANCE</h4>
+                <p class="text-gray-400">Vote on flagged tokens and platform decisions</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Token Card -->
+          <div class="bg-dark-800/50 cyber-border rounded-2xl p-6">
+            <div class="grid grid-cols-2 gap-4 text-sm">
+              <div class="py-3 border-b border-cyber-blue/10">
+                <span class="text-gray-500">Network</span>
+                <p class="font-bold font-cyber">SOLANA</p>
+              </div>
+              <div class="py-3 border-b border-cyber-blue/10">
+                <span class="text-gray-500">Symbol</span>
+                <p class="font-bold font-cyber">$WHALESHIELD</p>
+              </div>
+              <div class="py-3 border-b border-cyber-blue/10">
+                <span class="text-gray-500">Premium</span>
+                <p class="font-bold font-cyber">1,000 TOKENS</p>
+              </div>
+              <div class="py-3 border-b border-cyber-blue/10">
+                <span class="text-gray-500">Contract</span>
+                <p class="font-bold text-cyber-blue">COMING SOON</p>
+              </div>
+            </div>
+            <a href="https://twitter.com/WhaleShield" target="_blank" class="block w-full gradient-bg text-dark-950 text-center py-4 rounded-xl font-bold mt-6 hover:opacity-90 transition font-cyber">
+              FOLLOW FOR LAUNCH
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Roadmap Section -->
+  <section id="roadmap" class="py-24 bg-dark-900 relative overflow-hidden">
+    <div class="absolute inset-0 tech-grid opacity-30"></div>
+
+    <div class="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="text-center mb-16">
+        <h2 class="text-4xl md:text-5xl font-bold mb-4 font-cyber">NEXT <span class="gradient-text">TARGETS</span></h2>
+        <p class="text-xl text-gray-400">We shipped. Now we're expanding.</p>
+      </div>
+
+      <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <!-- Browser Extension - DEPLOYED -->
+        <div class="bg-dark-800/50 cyber-border rounded-2xl p-6 relative overflow-hidden">
+          <div class="absolute top-4 right-4">
+            <span class="bg-green-500/20 text-green-400 text-xs font-bold px-3 py-1 rounded-full border border-green-500/30 font-cyber">
+              <i class="fa-solid fa-check mr-1"></i> DEPLOYED
+            </span>
+          </div>
+          <div class="w-16 h-16 bg-green-500/10 border border-green-500/30 rounded-xl flex items-center justify-center mb-6">
+            <i class="fa-solid fa-puzzle-piece text-3xl text-green-400"></i>
+          </div>
+          <h3 class="text-xl font-bold mb-3 font-cyber text-green-400">BROWSER EXTENSION</h3>
+          <p class="text-gray-400 text-sm">Chrome & Firefox extension with AI-powered honeypot detection for pump.fun</p>
+        </div>
+
+        <!-- iOS App -->
+        <div class="bg-dark-800/50 cyber-border rounded-2xl p-6 relative overflow-hidden">
+          <div class="absolute top-4 right-4">
+            <span class="bg-cyber-blue/20 text-cyber-blue text-xs font-bold px-3 py-1 rounded-full border border-cyber-blue/30 font-cyber">
+              <i class="fa-solid fa-code mr-1"></i> IN DEV
+            </span>
+          </div>
+          <div class="w-16 h-16 bg-cyber-blue/10 border border-cyber-blue/30 rounded-xl flex items-center justify-center mb-6">
+            <i class="fa-brands fa-apple text-3xl text-cyber-blue"></i>
+          </div>
+          <h3 class="text-xl font-bold mb-3 font-cyber text-cyber-blue">iOS APP</h3>
+          <p class="text-gray-400 text-sm">Mobile protection for on-the-go degens. Scan any token from your iPhone.</p>
+        </div>
+
+        <!-- Android App -->
+        <div class="bg-dark-800/50 cyber-border rounded-2xl p-6 relative overflow-hidden">
+          <div class="absolute top-4 right-4">
+            <span class="bg-cyber-blue/20 text-cyber-blue text-xs font-bold px-3 py-1 rounded-full border border-cyber-blue/30 font-cyber">
+              <i class="fa-solid fa-code mr-1"></i> IN DEV
+            </span>
+          </div>
+          <div class="w-16 h-16 bg-cyber-blue/10 border border-cyber-blue/30 rounded-xl flex items-center justify-center mb-6">
+            <i class="fa-brands fa-android text-3xl text-cyber-blue"></i>
+          </div>
+          <h3 class="text-xl font-bold mb-3 font-cyber text-cyber-blue">ANDROID APP</h3>
+          <p class="text-gray-400 text-sm">Full mobile coverage. Same powerful protection on Android devices.</p>
+        </div>
+
+        <!-- Safe Snipe Mode -->
+        <div class="bg-dark-800/50 cyber-border rounded-2xl p-6 relative overflow-hidden">
+          <div class="absolute top-4 right-4">
+            <span class="bg-purple-500/20 text-purple-400 text-xs font-bold px-3 py-1 rounded-full border border-purple-500/30 font-cyber">
+              <i class="fa-solid fa-flask mr-1"></i> R&D
+            </span>
+          </div>
+          <div class="w-16 h-16 bg-purple-500/10 border border-purple-500/30 rounded-xl flex items-center justify-center mb-6">
+            <i class="fa-solid fa-crosshairs text-3xl text-purple-400"></i>
+          </div>
+          <h3 class="text-xl font-bold mb-3 font-cyber text-purple-400">SAFE SNIPE MODE</h3>
+          <p class="text-gray-400 text-sm">Auto-buy tokens that pass our security checks. Snipe smart, not blind.</p>
+        </div>
+      </div>
+
+      <div class="mt-12 text-center">
+        <p class="text-gray-500 text-sm">
+          <i class="fa-solid fa-shield-halved mr-2 text-cyber-blue"></i>
+          We don't make promises. We ship products.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA Section -->
+  <section class="py-24 relative overflow-hidden">
+    <div class="absolute inset-0 tech-grid opacity-30"></div>
+
+    <!-- Animated background -->
+    <div class="absolute inset-0 overflow-hidden">
+      <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-cyber-blue/5 rounded-full blur-3xl animate-pulse-slow"></div>
+    </div>
+
+    <div class="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+      <img src="img/whale.png" alt="WhaleShield" class="w-32 h-32 mx-auto mb-8 whale-image">
+
+      <h2 class="text-4xl md:text-6xl font-bold mb-6 font-cyber">
+        READY TO <span class="gradient-text">SWIM SAFE</span>?
+      </h2>
+      <p class="text-xl text-gray-400 mb-10">
+        Join the first whale community with actual protection.
+      </p>
+      <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+        <a href="#" class="gradient-bg text-dark-950 px-10 py-5 rounded-lg font-bold text-lg hover:opacity-90 transition cyber-glow font-cyber">
+          DOWNLOAD EXTENSION
+        </a>
+        <a href="https://twitter.com/WhaleShield" target="_blank" class="bg-dark-700/50 border border-cyber-blue/30 text-white px-10 py-5 rounded-lg font-bold text-lg hover:bg-dark-600/50 transition flex items-center gap-3 font-cyber">
+          <i class="fa-brands fa-x-twitter text-2xl"></i>
+          @WHALESHIELD
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="py-12 border-t border-cyber-blue/10">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+        <div class="flex items-center gap-3">
+          <img src="img/whale.png" alt="WhaleShield" class="w-10 h-10 object-contain">
+          <span class="font-bold font-cyber">WHALESHIELD</span>
+          <span class="text-gray-500 text-sm">The First Whale With REAL Utility</span>
+        </div>
+        <div class="flex items-center gap-6">
+          <a href="https://twitter.com/WhaleShield" target="_blank" class="text-gray-400 hover:text-cyber-blue transition">
+            <i class="fa-brands fa-x-twitter text-2xl"></i>
+          </a>
+          <a href="#" class="text-gray-400 hover:text-cyber-blue transition">
+            <i class="fa-brands fa-discord text-2xl"></i>
+          </a>
+          <a href="#" class="text-gray-400 hover:text-cyber-blue transition">
+            <i class="fa-brands fa-telegram text-2xl"></i>
+          </a>
+        </div>
+      </div>
+      <div class="mt-8 text-center text-gray-600 text-sm">
+        &copy; 2026 WhaleShield. All rights reserved. Not financial advice. DYOR.
+      </div>
+    </div>
+  </footer>
+
+  <!-- Smooth scroll -->
+  <script>
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        e.preventDefault();
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+          target.scrollIntoView({ behavior: 'smooth' });
+        }
+      });
+    });
+  </script>
+</body>
+</html>
