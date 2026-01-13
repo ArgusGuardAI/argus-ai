@@ -117,7 +117,7 @@ Respond in this exact JSON format:
 
 Only return valid JSON, no other text.`;
 
-  const modelToUse = model || 'meta-llama/Llama-3.3-70B-Instruct-Turbo-Free';
+  const modelToUse = model || 'meta-llama/Llama-3.3-70B-Instruct-Turbo';
 
   try {
     console.log(`Calling Together AI with model: ${modelToUse}, headlines: ${headlines.length}`);
@@ -262,4 +262,54 @@ trendsRoutes.get('/debug', async (c) => {
     results: allHeadlines,
     totalHeadlines: allHeadlines.reduce((acc, s) => acc + s.headlines.length, 0),
   });
+});
+
+// GET /trends/test-ai - Test Together AI directly
+trendsRoutes.get('/test-ai', async (c) => {
+  const testHeadlines = [
+    "Bitcoin rallies above $93,000",
+    "Polygon strikes $250M deal",
+    "Monero hits all-time high",
+  ];
+
+  try {
+    const apiKey = c.env.TOGETHER_AI_API_KEY;
+    const hasKey = !!apiKey;
+    const keyPreview = apiKey ? `${apiKey.substring(0, 10)}...` : 'NOT SET';
+
+    if (!apiKey) {
+      return c.json({ error: 'No API key', hasKey, keyPreview });
+    }
+
+    const model = c.env.TOGETHER_AI_MODEL || 'meta-llama/Llama-3.3-70B-Instruct-Turbo';
+
+    const response = await fetch('https://api.together.xyz/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: 'user', content: 'Say "Hello WhaleShield!" in one sentence.' }],
+        max_tokens: 50,
+        temperature: 0.3,
+      }),
+    });
+
+    const status = response.status;
+    const responseText = await response.text();
+
+    return c.json({
+      hasKey,
+      keyPreview,
+      model,
+      status,
+      response: responseText.substring(0, 500),
+    });
+  } catch (error) {
+    return c.json({
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
 });
