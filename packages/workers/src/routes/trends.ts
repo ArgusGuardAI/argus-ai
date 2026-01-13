@@ -3,114 +3,218 @@ import type { Bindings } from '../index';
 
 export const trendsRoutes = new Hono<{ Bindings: Bindings }>();
 
-// RSS feeds for crypto news (using feeds that work without redirects)
-const NEWS_SOURCES = [
-  { name: 'Cointelegraph', url: 'https://cointelegraph.com/rss' },
-  { name: 'Decrypt', url: 'https://decrypt.co/feed' },
-  { name: 'Bitcoin Magazine', url: 'https://bitcoinmagazine.com/.rss/full/' },
-];
-
 // Cache key and duration
-const TRENDS_CACHE_KEY = 'trending_narratives';
-const CACHE_DURATION_HOURS = 4;
+const TRENDS_CACHE_KEY = 'meme_narratives';
+const CACHE_DURATION_HOURS = 2; // Refresh every 2 hours for meme trends
 
-interface TrendingNarrative {
+interface TrendingToken {
+  name: string;
+  symbol: string;
+  address: string;
+  priceChange24h?: number;
+  volume24h?: number;
+  marketCap?: number;
+}
+
+interface MemeNarrative {
   title: string;
   description: string;
-  sentiment: 'bullish' | 'bearish' | 'neutral';
-  relatedTokens: string[];
+  sentiment: 'hot' | 'rising' | 'cooling';
+  exampleTokens: string[];
   strength: number; // 1-10
 }
 
 interface TrendsResponse {
-  narratives: TrendingNarrative[];
+  narratives: MemeNarrative[];
   lastUpdated: number;
   nextUpdate: number;
+  source: string;
 }
 
-// Fetch RSS feed and extract headlines
-async function fetchRSSHeadlines(url: string): Promise<string[]> {
+// Fetch trending Solana tokens from DexScreener (boosted tokens)
+async function fetchDexScreenerTrending(): Promise<TrendingToken[]> {
   try {
-    const response = await fetch(url, {
-      headers: { 'User-Agent': 'WhaleShield/1.0' },
-      redirect: 'follow',
-    });
+    // Get top boosted tokens
+    const boostsResponse = await fetch(
+      'https://api.dexscreener.com/token-boosts/top/v1',
+      { headers: { 'User-Agent': 'WhaleShield/1.0' } }
+    );
 
-    if (!response.ok) {
-      console.log(`RSS fetch failed for ${url}: ${response.status}`);
+    if (!boostsResponse.ok) {
+      console.log(`DexScreener boosts API failed: ${boostsResponse.status}`);
       return [];
     }
 
-    const xml = await response.text();
+    const boosts = await boostsResponse.json() as any[];
 
-    // Simple XML parsing for titles - multiple patterns
-    const titles: string[] = [];
+    // Filter for Solana tokens only
+    const solanaBoosts = boosts.filter((b: any) => b.chainId === 'solana').slice(0, 30);
 
-    // Pattern 1: CDATA wrapped titles
-    const cdataMatches = xml.matchAll(/<title><!\[CDATA\[(.*?)\]\]><\/title>/g);
-    for (const match of cdataMatches) {
-      if (match[1]) titles.push(match[1].trim());
+    if (solanaBoosts.length === 0) {
+      console.log('No Solana tokens in boosts');
+      return [];
     }
 
-    // Pattern 2: Plain titles
-    const plainMatches = xml.matchAll(/<title>([^<]+)<\/title>/g);
-    for (const match of plainMatches) {
-      if (match[1]) titles.push(match[1].trim());
-    }
-
-    // Filter out feed titles and duplicates
-    const filtered = titles.filter(title =>
-      title &&
-      title.length > 10 &&
-      !title.includes('Cointelegraph') &&
-      !title.includes('Decrypt') &&
-      !title.includes('Bitcoin Magazine') &&
-      !title.includes('RSS') &&
-      !title.includes('Feed')
+    // Batch lookup token names/symbols (comma-separated addresses)
+    const addresses = solanaBoosts.map((b: any) => b.tokenAddress).join(',');
+    const tokensResponse = await fetch(
+      `https://api.dexscreener.com/tokens/v1/solana/${addresses}`,
+      { headers: { 'User-Agent': 'WhaleShield/1.0' } }
     );
 
-    const unique = [...new Set(filtered)];
-    console.log(`Fetched ${unique.length} headlines from ${url}`);
+    if (!tokensResponse.ok) {
+      console.log(`DexScreener tokens API failed: ${tokensResponse.status}`);
+      // Fallback: use description as name
+      return solanaBoosts.map((b: any) => ({
+        name: b.description || 'Unknown',
+        symbol: b.tokenAddress.slice(0, 6),
+        address: b.tokenAddress,
+      }));
+    }
 
-    return unique.slice(0, 15); // Get top 15 headlines per source
+    const pairs = await tokensResponse.json() as any[];
+
+    // Build map of address -> token info
+    const tokenInfoMap = new Map<string, { name: string; symbol: string }>();
+    for (const pair of pairs) {
+      if (pair.baseToken) {
+        tokenInfoMap.set(pair.baseToken.address, {
+          name: pair.baseToken.name || 'Unknown',
+          symbol: pair.baseToken.symbol || '???',
+        });
+      }
+    }
+
+    // Combine boost data with token info
+    const tokens: TrendingToken[] = solanaBoosts.map((b: any) => {
+      const info = tokenInfoMap.get(b.tokenAddress);
+      return {
+        name: info?.name || b.description || 'Unknown',
+        symbol: info?.symbol || b.tokenAddress.slice(0, 6),
+        address: b.tokenAddress,
+      };
+    });
+
+    console.log(`Fetched ${tokens.length} tokens from DexScreener`);
+    return tokens;
   } catch (error) {
-    console.error(`Error fetching RSS from ${url}:`, error);
+    console.error('DexScreener fetch error:', error);
     return [];
   }
 }
 
-// Use Together AI to analyze headlines and extract narratives
-async function analyzeNarratives(
-  headlines: string[],
+// Fetch latest token profiles from DexScreener
+async function fetchLatestProfiles(): Promise<TrendingToken[]> {
+  try {
+    const response = await fetch(
+      'https://api.dexscreener.com/token-profiles/latest/v1',
+      { headers: { 'User-Agent': 'WhaleShield/1.0' } }
+    );
+
+    if (!response.ok) {
+      console.log(`DexScreener profiles API failed: ${response.status}`);
+      return [];
+    }
+
+    const profiles = await response.json() as any[];
+    const solanaProfiles = profiles
+      .filter((p: any) => p.chainId === 'solana')
+      .slice(0, 30);
+
+    if (solanaProfiles.length === 0) return [];
+
+    // Batch lookup token names/symbols
+    const addresses = solanaProfiles.map((p: any) => p.tokenAddress).join(',');
+    const tokensResponse = await fetch(
+      `https://api.dexscreener.com/tokens/v1/solana/${addresses}`,
+      { headers: { 'User-Agent': 'WhaleShield/1.0' } }
+    );
+
+    if (!tokensResponse.ok) {
+      return solanaProfiles.map((p: any) => ({
+        name: p.description || 'Unknown',
+        symbol: p.tokenAddress.slice(0, 6),
+        address: p.tokenAddress,
+      }));
+    }
+
+    const pairs = await tokensResponse.json() as any[];
+    const tokenInfoMap = new Map<string, { name: string; symbol: string }>();
+    for (const pair of pairs) {
+      if (pair.baseToken) {
+        tokenInfoMap.set(pair.baseToken.address, {
+          name: pair.baseToken.name || 'Unknown',
+          symbol: pair.baseToken.symbol || '???',
+        });
+      }
+    }
+
+    const tokens: TrendingToken[] = solanaProfiles.map((p: any) => {
+      const info = tokenInfoMap.get(p.tokenAddress);
+      return {
+        name: info?.name || p.description || 'Unknown',
+        symbol: info?.symbol || p.tokenAddress.slice(0, 6),
+        address: p.tokenAddress,
+      };
+    });
+
+    console.log(`Fetched ${tokens.length} tokens from DexScreener profiles`);
+    return tokens;
+  } catch (error) {
+    console.error('DexScreener profiles fetch error:', error);
+    return [];
+  }
+}
+
+// Use Together AI to analyze token names and identify meme narratives
+async function analyzeMemeNarratives(
+  tokens: TrendingToken[],
   apiKey: string,
   model?: string
-): Promise<TrendingNarrative[]> {
+): Promise<MemeNarrative[]> {
   if (!apiKey) {
     console.error('No Together AI API key provided');
     return [];
   }
 
-  const prompt = `You are a crypto market analyst. Analyze these recent crypto news headlines and identify the TOP 5 trending narratives in the crypto market right now.
+  // Build token list for analysis
+  const tokenList = tokens
+    .slice(0, 50)
+    .map((t, i) => `${i + 1}. ${t.name} ($${t.symbol})`)
+    .join('\n');
 
-HEADLINES:
-${headlines.map((h, i) => `${i + 1}. ${h}`).join('\n')}
+  const prompt = `You are a meme coin analyst specializing in Solana memecoins on pump.fun.
+
+Analyze these trending Solana meme tokens and identify the TOP 5 narrative themes/categories that are currently popular:
+
+TRENDING TOKENS:
+${tokenList}
+
+Look for patterns like:
+- Animal memes (dogs, cats, frogs, etc.)
+- AI/Tech themed tokens
+- Political/news-related memes
+- Celebrity/influencer tokens
+- Food/object memes
+- Anime/gaming references
+- Abstract/meta memes
 
 For each narrative, provide:
-1. A short title (2-4 words)
-2. A brief description (1-2 sentences)
-3. Sentiment (bullish, bearish, or neutral)
-4. Related tokens/projects mentioned (if any)
-5. Strength score 1-10 (how dominant this narrative is)
+1. A catchy title (2-4 words)
+2. A brief description of why it's trending
+3. Sentiment: "hot" (exploding now), "rising" (gaining momentum), or "cooling" (past peak)
+4. Example token symbols from the list
+5. Strength score 1-10
 
 Respond in this exact JSON format:
 {
   "narratives": [
     {
-      "title": "AI Tokens Surge",
-      "description": "AI-related cryptocurrencies are seeing massive gains as tech giants announce new AI initiatives.",
-      "sentiment": "bullish",
-      "relatedTokens": ["FET", "AGIX", "RNDR"],
-      "strength": 8
+      "title": "AI Agent Mania",
+      "description": "AI and agent-themed tokens are dominating as the AI narrative spreads to memecoins.",
+      "sentiment": "hot",
+      "exampleTokens": ["AIXBT", "GOAT", "AI16Z"],
+      "strength": 9
     }
   ]
 }
@@ -120,7 +224,7 @@ Only return valid JSON, no other text.`;
   const modelToUse = model || 'meta-llama/Llama-3.3-70B-Instruct-Turbo';
 
   try {
-    console.log(`Calling Together AI with model: ${modelToUse}, headlines: ${headlines.length}`);
+    console.log(`Analyzing ${tokens.length} tokens for meme narratives`);
 
     const response = await fetch('https://api.together.xyz/v1/chat/completions', {
       method: 'POST',
@@ -132,40 +236,36 @@ Only return valid JSON, no other text.`;
         model: modelToUse,
         messages: [{ role: 'user', content: prompt }],
         max_tokens: 1500,
-        temperature: 0.3,
+        temperature: 0.4,
       }),
     });
-
-    console.log(`Together AI response status: ${response.status}`);
 
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`Together AI error: ${response.status} - ${errorText}`);
-      throw new Error(`Together AI error: ${response.status}`);
+      return [];
     }
 
     const data = await response.json() as any;
     const content = data.choices?.[0]?.message?.content || '';
 
-    console.log(`Together AI response content length: ${content.length}`);
-
     // Parse JSON from response
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
-      console.error('No JSON found in Together AI response:', content.substring(0, 200));
-      throw new Error('No JSON found in response');
+      console.error('No JSON found in AI response');
+      return [];
     }
 
     const parsed = JSON.parse(jsonMatch[0]);
-    console.log(`Parsed ${parsed.narratives?.length || 0} narratives`);
+    console.log(`Identified ${parsed.narratives?.length || 0} meme narratives`);
     return parsed.narratives || [];
   } catch (error) {
-    console.error('Error analyzing narratives:', error);
+    console.error('Error analyzing meme narratives:', error);
     return [];
   }
 }
 
-// GET /trends - Get current trending narratives
+// GET /trends - Get current trending meme narratives
 trendsRoutes.get('/', async (c) => {
   try {
     // Check cache first
@@ -180,29 +280,33 @@ trendsRoutes.get('/', async (c) => {
       }
     }
 
-    // Fetch headlines from all sources
-    const allHeadlines: string[] = [];
+    // Fetch tokens from DexScreener sources in parallel
+    const [boostTokens, profileTokens] = await Promise.all([
+      fetchDexScreenerTrending(),
+      fetchLatestProfiles(),
+    ]);
 
-    for (const source of NEWS_SOURCES) {
-      const headlines = await fetchRSSHeadlines(source.url);
-      allHeadlines.push(...headlines);
-    }
+    // Combine and deduplicate tokens (boosts first, then profiles)
+    const allTokens = [...boostTokens, ...profileTokens];
+    const uniqueTokens = Array.from(
+      new Map(allTokens.map(t => [t.address, t])).values()
+    );
 
-    if (allHeadlines.length === 0) {
+    console.log(`Total unique tokens: ${uniqueTokens.length}`);
+
+    if (uniqueTokens.length === 0) {
       return c.json({
-        error: 'Unable to fetch news headlines',
+        error: 'Unable to fetch trending tokens',
         narratives: [],
         lastUpdated: Date.now(),
         nextUpdate: Date.now() + (30 * 60 * 1000), // Retry in 30 min
+        source: 'none',
       }, 503);
     }
 
-    // Shuffle and limit headlines
-    const shuffled = allHeadlines.sort(() => Math.random() - 0.5).slice(0, 30);
-
     // Analyze with Together AI
-    const narratives = await analyzeNarratives(
-      shuffled,
+    const narratives = await analyzeMemeNarratives(
+      uniqueTokens,
       c.env.TOGETHER_AI_API_KEY,
       c.env.TOGETHER_AI_MODEL
     );
@@ -216,9 +320,10 @@ trendsRoutes.get('/', async (c) => {
       narratives: topNarratives,
       lastUpdated: Date.now(),
       nextUpdate: Date.now() + (CACHE_DURATION_HOURS * 60 * 60 * 1000),
+      source: 'DexScreener',
     };
 
-    // Only cache if we have narratives (don't cache failures)
+    // Only cache if we have narratives
     if (topNarratives.length > 0) {
       await c.env.SCAN_CACHE.put(
         TRENDS_CACHE_KEY,
@@ -234,13 +339,10 @@ trendsRoutes.get('/', async (c) => {
   }
 });
 
-// POST /trends/refresh - Force refresh trends (admin use)
+// POST /trends/refresh - Force refresh trends
 trendsRoutes.post('/refresh', async (c) => {
   try {
-    // Delete cache to force refresh
     await c.env.SCAN_CACHE.delete(TRENDS_CACHE_KEY);
-
-    // Redirect to GET to fetch fresh data
     return c.redirect('/trends');
   } catch (error) {
     console.error('Refresh error:', error);
@@ -248,68 +350,16 @@ trendsRoutes.post('/refresh', async (c) => {
   }
 });
 
-// GET /trends/debug - Debug endpoint to see raw headlines
+// GET /trends/debug - Debug endpoint to see raw token data
 trendsRoutes.get('/debug', async (c) => {
-  const allHeadlines: { source: string; headlines: string[] }[] = [];
-
-  for (const source of NEWS_SOURCES) {
-    const headlines = await fetchRSSHeadlines(source.url);
-    allHeadlines.push({ source: source.name, headlines });
-  }
+  const [boostTokens, profileTokens] = await Promise.all([
+    fetchDexScreenerTrending(),
+    fetchLatestProfiles(),
+  ]);
 
   return c.json({
-    sources: NEWS_SOURCES,
-    results: allHeadlines,
-    totalHeadlines: allHeadlines.reduce((acc, s) => acc + s.headlines.length, 0),
+    boosts: { count: boostTokens.length, tokens: boostTokens.slice(0, 10) },
+    profiles: { count: profileTokens.length, tokens: profileTokens.slice(0, 10) },
+    total: boostTokens.length + profileTokens.length,
   });
-});
-
-// GET /trends/test-ai - Test Together AI directly
-trendsRoutes.get('/test-ai', async (c) => {
-  const testHeadlines = [
-    "Bitcoin rallies above $93,000",
-    "Polygon strikes $250M deal",
-    "Monero hits all-time high",
-  ];
-
-  try {
-    const apiKey = c.env.TOGETHER_AI_API_KEY;
-    const hasKey = !!apiKey;
-    const keyPreview = apiKey ? `${apiKey.substring(0, 10)}...` : 'NOT SET';
-
-    if (!apiKey) {
-      return c.json({ error: 'No API key', hasKey, keyPreview });
-    }
-
-    const model = c.env.TOGETHER_AI_MODEL || 'meta-llama/Llama-3.3-70B-Instruct-Turbo';
-
-    const response = await fetch('https://api.together.xyz/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model,
-        messages: [{ role: 'user', content: 'Say "Hello WhaleShield!" in one sentence.' }],
-        max_tokens: 50,
-        temperature: 0.3,
-      }),
-    });
-
-    const status = response.status;
-    const responseText = await response.text();
-
-    return c.json({
-      hasKey,
-      keyPreview,
-      model,
-      status,
-      response: responseText.substring(0, 500),
-    });
-  } catch (error) {
-    return c.json({
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-  }
 });

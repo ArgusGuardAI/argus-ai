@@ -1,11 +1,101 @@
 import { Hono } from 'hono';
 import type { Bindings } from '../index';
-import { HoneypotAnalysisRequest, HoneypotResult } from '@whaleshield/shared';
+import { HoneypotAnalysisRequest, HoneypotResult, HoneypotFlag, HoneypotRiskLevel } from '@whaleshield/shared';
 import { analyzeForHoneypot } from '../services/together-ai';
 import { createSupabaseClient, cacheScanResult } from '../services/supabase';
 import { fetchTokenData, buildOnChainContext } from '../services/solana-data';
-import { fetchDexScreenerData, buildMarketContext } from '../services/dexscreener';
+import { fetchDexScreenerData, buildMarketContext, DexScreenerData } from '../services/dexscreener';
 import { fetchPumpFunData, buildPumpFunContext, isPumpFunToken } from '../services/pumpfun';
+
+/**
+ * Apply hardcoded minimum score rules for critical red flags
+ * Only applies to DEX tokens (not pump.fun bonding curve tokens)
+ */
+function applyHardcodedRules(
+  result: HoneypotResult,
+  dexData: DexScreenerData | null,
+  isPumpFun: boolean
+): HoneypotResult {
+  // Don't apply liquidity rules to pump.fun tokens (they use bonding curves)
+  if (isPumpFun) {
+    return result;
+  }
+
+  // No DexScreener data available - can't apply rules
+  if (!dexData) {
+    return result;
+  }
+
+  let adjustedScore = result.riskScore;
+  let adjustedLevel = result.riskLevel;
+  const additionalFlags: HoneypotFlag[] = [];
+
+  const liquidityUsd = dexData.liquidityUsd || 0;
+  const ageInDays = dexData.ageInDays || 0;
+
+  // Rule 1: Zero or near-zero liquidity = minimum DANGEROUS (85)
+  if (liquidityUsd < 100) {
+    if (adjustedScore < 90) {
+      adjustedScore = 90;
+      additionalFlags.push({
+        type: 'LIQUIDITY',
+        severity: 'CRITICAL',
+        message: `CRITICAL: Liquidity is $${liquidityUsd.toFixed(2)} - token can be rugged instantly`,
+      });
+    }
+  }
+  // Rule 2: Very low liquidity (<$1000) = minimum SUSPICIOUS (75)
+  else if (liquidityUsd < 1000) {
+    if (adjustedScore < 80) {
+      adjustedScore = 80;
+      additionalFlags.push({
+        type: 'LIQUIDITY',
+        severity: 'HIGH',
+        message: `Very low liquidity ($${liquidityUsd.toFixed(2)}) - high rug pull risk`,
+      });
+    }
+  }
+  // Rule 3: Low liquidity (<$10,000) with new token = minimum 70
+  else if (liquidityUsd < 10000 && ageInDays < 3) {
+    if (adjustedScore < 70) {
+      adjustedScore = 70;
+      additionalFlags.push({
+        type: 'LIQUIDITY',
+        severity: 'MEDIUM',
+        message: `Low liquidity ($${liquidityUsd.toFixed(2)}) on new token (${ageInDays} days old)`,
+      });
+    }
+  }
+
+  // Rule 4: Brand new token (<1 day) with any liquidity issues = minimum 75
+  if (ageInDays < 1 && liquidityUsd < 50000) {
+    if (adjustedScore < 75) {
+      adjustedScore = 75;
+    }
+  }
+
+  // Determine risk level based on adjusted score
+  if (adjustedScore >= 90) {
+    adjustedLevel = 'SCAM';
+  } else if (adjustedScore >= 75) {
+    adjustedLevel = 'DANGEROUS';
+  } else if (adjustedScore >= 50) {
+    adjustedLevel = 'SUSPICIOUS';
+  } else {
+    adjustedLevel = 'SAFE';
+  }
+
+  // Merge additional flags (avoid duplicates)
+  const existingFlagMessages = new Set(result.flags.map(f => f.message));
+  const newFlags = additionalFlags.filter(f => !existingFlagMessages.has(f.message));
+
+  return {
+    ...result,
+    riskScore: adjustedScore,
+    riskLevel: adjustedLevel,
+    flags: [...newFlags, ...result.flags], // New critical flags first
+  };
+}
 
 const CACHE_TTL_SECONDS = 3600; // 1 hour
 
@@ -62,6 +152,7 @@ analyzeRoutes.post('/', async (c) => {
 
     // Build combined context for AI
     let combinedContext = '';
+    let dexScreenerData: DexScreenerData | null = null;
 
     // Check if this is a pump.fun token
     const isPumpFun = isPumpFunToken(body.tokenAddress);
@@ -126,8 +217,9 @@ analyzeRoutes.post('/', async (c) => {
         fetchDexScreenerData(body.tokenAddress),
       ]);
 
-      // Add DexScreener market data first
+      // Store DexScreener data for hardcoded rules later
       if (dexScreenerResult.status === 'fulfilled' && dexScreenerResult.value) {
+        dexScreenerData = dexScreenerResult.value;
         combinedContext += buildMarketContext(dexScreenerResult.value);
       }
 
@@ -140,7 +232,7 @@ analyzeRoutes.post('/', async (c) => {
     }
 
     // Perform analysis with combined context
-    const result = await analyzeForHoneypot(
+    let result = await analyzeForHoneypot(
       {
         tokenAddress: body.tokenAddress,
         onChainContext: combinedContext,
@@ -150,6 +242,9 @@ analyzeRoutes.post('/', async (c) => {
         model: c.env.TOGETHER_AI_MODEL,
       }
     );
+
+    // Apply hardcoded rules for DEX tokens (not pump.fun)
+    result = applyHardcodedRules(result, dexScreenerData, isPumpFun);
 
     // Cache in KV
     await c.env.SCAN_CACHE.put(cacheKey, JSON.stringify(result), {

@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Trending Narratives - WhaleShield</title>
-  <meta name="description" content="Real-time trending crypto narratives powered by AI. Stay ahead of the market with WhaleShield.">
+  <title>Trending Meme Narratives - WhaleShield</title>
+  <meta name="description" content="Real-time trending meme coin narratives on Solana. See what's hot on pump.fun with WhaleShield.">
 
   <!-- Open Graph -->
   <meta property="og:title" content="Trending Crypto Narratives - WhaleShield">
@@ -95,9 +95,9 @@
       transform: translateY(-4px);
     }
 
-    .sentiment-bullish { color: #00ff88; }
-    .sentiment-bearish { color: #ff4444; }
-    .sentiment-neutral { color: #ffcc00; }
+    .sentiment-hot { color: #ff4444; }
+    .sentiment-rising { color: #00ff88; }
+    .sentiment-cooling { color: #ffcc00; }
 
     .strength-bar {
       background: linear-gradient(90deg, #00d4ff, #00ff88);
@@ -157,9 +157,9 @@
       <!-- Header -->
       <div class="text-center mb-12">
         <h1 class="text-4xl md:text-5xl font-bold mb-4 font-cyber">
-          <span class="gradient-text">TRENDING</span> NARRATIVES
+          <span class="gradient-text">MEME</span> NARRATIVES
         </h1>
-        <p class="text-xl text-gray-400">AI-powered analysis of what's moving Crypto Twitter right now</p>
+        <p class="text-xl text-gray-400">What's trending on Solana right now</p>
         <div id="last-updated" class="mt-4 text-sm text-gray-500"></div>
       </div>
 
@@ -283,12 +283,15 @@
 
       narratives.forEach((narrative, index) => {
         const sentimentIcon = {
-          bullish: 'fa-arrow-trend-up',
-          bearish: 'fa-arrow-trend-down',
-          neutral: 'fa-minus'
-        }[narrative.sentiment] || 'fa-minus';
+          hot: 'fa-fire',
+          rising: 'fa-arrow-trend-up',
+          cooling: 'fa-temperature-low'
+        }[narrative.sentiment] || 'fa-fire';
 
         const sentimentClass = `sentiment-${narrative.sentiment}`;
+
+        // Use exampleTokens for meme narratives
+        const tokens = narrative.exampleTokens || narrative.relatedTokens || [];
 
         const card = document.createElement('div');
         card.className = 'narrative-card cyber-border rounded-2xl p-6 bg-dark-800/50';
@@ -302,17 +305,17 @@
             </div>
             <div class="flex items-center gap-2 ${sentimentClass}">
               <i class="fa-solid ${sentimentIcon}"></i>
-              <span class="text-sm font-medium capitalize">${narrative.sentiment}</span>
+              <span class="text-sm font-medium uppercase">${narrative.sentiment}</span>
             </div>
           </div>
 
           <p class="text-gray-300 mb-4">${narrative.description}</p>
 
           <div class="flex flex-wrap items-center gap-4">
-            ${narrative.relatedTokens && narrative.relatedTokens.length > 0 ? `
-              <div class="flex items-center gap-2">
-                <span class="text-gray-500 text-sm">Related:</span>
-                ${narrative.relatedTokens.map(token => `
+            ${tokens.length > 0 ? `
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-gray-500 text-sm">Examples:</span>
+                ${tokens.map(token => `
                   <span class="bg-cyber-blue/10 text-cyber-blue px-2 py-1 rounded text-sm font-medium">$${token}</span>
                 `).join('')}
               </div>

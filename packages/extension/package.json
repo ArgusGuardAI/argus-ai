@@ -2,7 +2,7 @@
   "name": "@whaleshield/extension",
   "displayName": "WhaleShield",
   "version": "1.0.0",
-  "description": "AI-Powered Security Layer for Pump.fun and Crypto Twitter",
+  "description": "AI-Powered Security Layer for Pump.fun, DexScreener, and Crypto Twitter",
   "private": true,
   "scripts": {
     "dev": "plasmo dev",
