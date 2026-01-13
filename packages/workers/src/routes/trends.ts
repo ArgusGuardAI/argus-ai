@@ -3,11 +3,11 @@ import type { Bindings } from '../index';
 
 export const trendsRoutes = new Hono<{ Bindings: Bindings }>();
 
-// RSS feeds for crypto news
+// RSS feeds for crypto news (using feeds that work without redirects)
 const NEWS_SOURCES = [
-  { name: 'CoinDesk', url: 'https://www.coindesk.com/arc/outboundfeeds/rss/' },
   { name: 'Cointelegraph', url: 'https://cointelegraph.com/rss' },
-  { name: 'The Block', url: 'https://www.theblock.co/rss.xml' },
+  { name: 'Decrypt', url: 'https://decrypt.co/feed' },
+  { name: 'Bitcoin Magazine', url: 'https://bitcoinmagazine.com/.rss/full/' },
 ];
 
 // Cache key and duration
@@ -33,24 +33,46 @@ async function fetchRSSHeadlines(url: string): Promise<string[]> {
   try {
     const response = await fetch(url, {
       headers: { 'User-Agent': 'WhaleShield/1.0' },
+      redirect: 'follow',
     });
 
-    if (!response.ok) return [];
+    if (!response.ok) {
+      console.log(`RSS fetch failed for ${url}: ${response.status}`);
+      return [];
+    }
 
     const xml = await response.text();
 
-    // Simple XML parsing for titles
+    // Simple XML parsing for titles - multiple patterns
     const titles: string[] = [];
-    const titleMatches = xml.matchAll(/<title><!\[CDATA\[(.*?)\]\]><\/title>|<title>(.*?)<\/title>/g);
 
-    for (const match of titleMatches) {
-      const title = match[1] || match[2];
-      if (title && !title.includes('CoinDesk') && !title.includes('Cointelegraph') && !title.includes('The Block')) {
-        titles.push(title.trim());
-      }
+    // Pattern 1: CDATA wrapped titles
+    const cdataMatches = xml.matchAll(/<title><!\[CDATA\[(.*?)\]\]><\/title>/g);
+    for (const match of cdataMatches) {
+      if (match[1]) titles.push(match[1].trim());
     }
 
-    return titles.slice(0, 15); // Get top 15 headlines per source
+    // Pattern 2: Plain titles
+    const plainMatches = xml.matchAll(/<title>([^<]+)<\/title>/g);
+    for (const match of plainMatches) {
+      if (match[1]) titles.push(match[1].trim());
+    }
+
+    // Filter out feed titles and duplicates
+    const filtered = titles.filter(title =>
+      title &&
+      title.length > 10 &&
+      !title.includes('Cointelegraph') &&
+      !title.includes('Decrypt') &&
+      !title.includes('Bitcoin Magazine') &&
+      !title.includes('RSS') &&
+      !title.includes('Feed')
+    );
+
+    const unique = [...new Set(filtered)];
+    console.log(`Fetched ${unique.length} headlines from ${url}`);
+
+    return unique.slice(0, 15); // Get top 15 headlines per source
   } catch (error) {
     console.error(`Error fetching RSS from ${url}:`, error);
     return [];
