@@ -115,18 +115,18 @@ subscriptionRoutes.post('/webhook', async (c) => {
         const walletAddress = session.metadata?.walletAddress;
 
         if (walletAddress && session.subscription) {
-          // Get subscription details
-          const subscription = await stripe.subscriptions.retrieve(
+          // Get subscription details - use any to handle Stripe SDK type changes
+          const subscriptionData = await stripe.subscriptions.retrieve(
             session.subscription as string
-          );
+          ) as any;
 
           await supabase.from('subscribers').upsert({
             wallet_address: walletAddress,
             stripe_customer_id: session.customer as string,
             stripe_subscription_id: session.subscription as string,
             status: 'active',
-            current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
-            current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+            current_period_start: new Date(subscriptionData.current_period_start * 1000).toISOString(),
+            current_period_end: new Date(subscriptionData.current_period_end * 1000).toISOString(),
             created_at: new Date().toISOString(),
           });
 
@@ -136,7 +136,7 @@ subscriptionRoutes.post('/webhook', async (c) => {
       }
 
       case 'customer.subscription.updated': {
-        const subscription = event.data.object as Stripe.Subscription;
+        const subscription = event.data.object as any;
         const customer = await stripe.customers.retrieve(subscription.customer as string);
 
         if ('metadata' in customer && customer.metadata?.walletAddress) {
@@ -157,7 +157,7 @@ subscriptionRoutes.post('/webhook', async (c) => {
       }
 
       case 'customer.subscription.deleted': {
-        const subscription = event.data.object as Stripe.Subscription;
+        const subscription = event.data.object as any;
         const customer = await stripe.customers.retrieve(subscription.customer as string);
 
         if ('metadata' in customer && customer.metadata?.walletAddress) {
@@ -174,12 +174,12 @@ subscriptionRoutes.post('/webhook', async (c) => {
       }
 
       case 'invoice.payment_failed': {
-        const invoice = event.data.object as Stripe.Invoice;
+        const invoice = event.data.object as any;
         if (invoice.subscription) {
-          const subscription = await stripe.subscriptions.retrieve(
+          const subscriptionData = await stripe.subscriptions.retrieve(
             invoice.subscription as string
-          );
-          const customer = await stripe.customers.retrieve(subscription.customer as string);
+          ) as any;
+          const customer = await stripe.customers.retrieve(subscriptionData.customer as string);
 
           if ('metadata' in customer && customer.metadata?.walletAddress) {
             const walletAddress = customer.metadata.walletAddress;
