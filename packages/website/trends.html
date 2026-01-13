@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trending Narratives - WhaleShield</title>
+  <meta name="description" content="Real-time trending crypto narratives powered by AI. Stay ahead of the market with WhaleShield.">
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="Trending Crypto Narratives - WhaleShield">
+  <meta property="og:description" content="Real-time trending crypto narratives powered by AI">
+  <meta property="og:image" content="https://whaleshield.io/img/whale.png">
+  <meta property="og:url" content="https://whaleshield.io/trends">
+  <meta name="twitter:card" content="summary_large_image">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="apple-touch-icon" href="favicon.svg">
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            cyber: {
+              blue: '#00d4ff',
+              purple: '#7b2cbf',
+              pink: '#ff006e',
+            },
+            dark: {
+              950: '#050508',
+              900: '#0a0a0f',
+              800: '#0f0f18',
+              700: '#151520',
+              600: '#1a1a28',
+            }
+          },
+          animation: {
+            'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            'glow-pulse': 'glow-pulse 2s ease-in-out infinite',
+          },
+          keyframes: {
+            'glow-pulse': {
+              '0%, 100%': { boxShadow: '0 0 20px rgba(0, 212, 255, 0.3)' },
+              '50%': { boxShadow: '0 0 40px rgba(0, 212, 255, 0.6)' },
+            },
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700;800&display=swap');
+
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+
+    .font-cyber {
+      font-family: 'Orbitron', sans-serif;
+    }
+
+    .gradient-text {
+      background: linear-gradient(135deg, #00d4ff 0%, #00a8e8 50%, #0088cc 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .cyber-border {
+      border: 1px solid rgba(0, 212, 255, 0.3);
+      box-shadow: 0 0 20px rgba(0, 212, 255, 0.1), inset 0 0 20px rgba(0, 212, 255, 0.05);
+    }
+
+    .tech-grid {
+      background-image:
+        linear-gradient(rgba(0, 212, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 212, 255, 0.03) 1px, transparent 1px);
+      background-size: 50px 50px;
+    }
+
+    .narrative-card {
+      transition: all 0.3s ease;
+    }
+
+    .narrative-card:hover {
+      border-color: rgba(0, 212, 255, 0.5);
+      box-shadow: 0 0 40px rgba(0, 212, 255, 0.2);
+      transform: translateY(-4px);
+    }
+
+    .sentiment-bullish { color: #00ff88; }
+    .sentiment-bearish { color: #ff4444; }
+    .sentiment-neutral { color: #ffcc00; }
+
+    .strength-bar {
+      background: linear-gradient(90deg, #00d4ff, #00ff88);
+    }
+
+    /* Loading skeleton */
+    .skeleton {
+      background: linear-gradient(90deg, #1a1a28 25%, #252535 50%, #1a1a28 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+    }
+
+    @keyframes shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    /* Custom scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0a0a0f;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #00d4ff;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+
+<body class="bg-dark-950 text-white min-h-screen">
+  <!-- Navigation -->
+  <nav class="fixed top-0 left-0 right-0 z-50 bg-dark-950/90 backdrop-blur-xl border-b border-cyan-500/10">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-20">
+        <a href="/" class="flex items-center gap-3">
+          <img src="img/whale.png" alt="WhaleShield" class="w-12 h-12 object-contain">
+          <span class="text-xl font-bold font-cyber tracking-wider">WHALESHIELD</span>
+        </a>
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/" class="text-gray-400 hover:text-cyber-blue transition font-medium">Home</a>
+          <a href="/trends.html" class="text-cyber-blue font-medium">Trends</a>
+          <a href="https://x.com/whaleshield1" target="_blank" class="gradient-bg text-dark-950 px-6 py-2.5 rounded-lg font-bold hover:opacity-90 transition font-cyber text-sm">
+            FOLLOW US
+          </a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="pt-32 pb-20 relative">
+    <div class="absolute inset-0 tech-grid opacity-20"></div>
+
+    <div class="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+      <!-- Header -->
+      <div class="text-center mb-12">
+        <h1 class="text-4xl md:text-5xl font-bold mb-4 font-cyber">
+          <span class="gradient-text">TRENDING</span> NARRATIVES
+        </h1>
+        <p class="text-xl text-gray-400">AI-powered analysis of what's moving Crypto Twitter right now</p>
+        <div id="last-updated" class="mt-4 text-sm text-gray-500"></div>
+      </div>
+
+      <!-- Narratives Container -->
+      <div id="narratives-container">
+        <!-- Loading State -->
+        <div id="loading-state" class="space-y-6">
+          <div class="cyber-border rounded-2xl p-6 bg-dark-800/50">
+            <div class="skeleton h-8 w-48 rounded mb-4"></div>
+            <div class="skeleton h-4 w-full rounded mb-2"></div>
+            <div class="skeleton h-4 w-3/4 rounded"></div>
+          </div>
+          <div class="cyber-border rounded-2xl p-6 bg-dark-800/50">
+            <div class="skeleton h-8 w-48 rounded mb-4"></div>
+            <div class="skeleton h-4 w-full rounded mb-2"></div>
+            <div class="skeleton h-4 w-3/4 rounded"></div>
+          </div>
+          <div class="cyber-border rounded-2xl p-6 bg-dark-800/50">
+            <div class="skeleton h-8 w-48 rounded mb-4"></div>
+            <div class="skeleton h-4 w-full rounded mb-2"></div>
+            <div class="skeleton h-4 w-3/4 rounded"></div>
+          </div>
+        </div>
+
+        <!-- Narratives List -->
+        <div id="narratives-list" class="space-y-6 hidden"></div>
+
+        <!-- Error State -->
+        <div id="error-state" class="hidden text-center py-12">
+          <i class="fa-solid fa-exclamation-triangle text-5xl text-yellow-500 mb-4"></i>
+          <h3 class="text-xl font-bold mb-2">Unable to load trends</h3>
+          <p class="text-gray-400 mb-6">Please try again later</p>
+          <button onclick="fetchTrends()" class="gradient-bg text-dark-950 px-6 py-3 rounded-lg font-bold hover:opacity-90 transition font-cyber">
+            TRY AGAIN
+          </button>
+        </div>
+      </div>
+
+      <!-- Info Box -->
+      <div class="mt-12 cyber-border rounded-2xl p-6 bg-dark-800/30">
+        <div class="flex items-start gap-4">
+          <div class="w-12 h-12 rounded-xl bg-cyber-blue/10 flex items-center justify-center flex-shrink-0">
+            <i class="fa-solid fa-brain text-cyber-blue text-xl"></i>
+          </div>
+          <div>
+            <h3 class="font-bold text-lg mb-2">How it works</h3>
+            <p class="text-gray-400 text-sm">
+              Our AI analyzes hundreds of crypto news headlines every few hours to identify the dominant narratives driving the market.
+              This helps you stay informed about what's trending without doom-scrolling Twitter all day.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="py-12 border-t border-cyber-blue/10">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+        <div class="flex items-center gap-3">
+          <img src="img/whale.png" alt="WhaleShield" class="w-10 h-10 object-contain">
+          <span class="font-bold font-cyber">WHALESHIELD</span>
+          <span class="text-gray-500 text-sm">The First Whale With REAL Utility</span>
+        </div>
+        <div class="flex items-center gap-6">
+          <a href="https://x.com/i/communities/2010875099214463263" target="_blank" class="text-gray-400 hover:text-cyber-blue transition">
+            <i class="fa-brands fa-x-twitter text-2xl"></i>
+          </a>
+        </div>
+      </div>
+      <div class="mt-8 text-center text-gray-600 text-sm">
+        &copy; 2026 WhaleShield. All rights reserved. Not financial advice. DYOR.
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    const API_URL = 'https://whaleshield-api.togetherai-practice.workers.dev';
+
+    async function fetchTrends() {
+      const loadingState = document.getElementById('loading-state');
+      const narrativesList = document.getElementById('narratives-list');
+      const errorState = document.getElementById('error-state');
+      const lastUpdated = document.getElementById('last-updated');
+
+      // Show loading
+      loadingState.classList.remove('hidden');
+      narrativesList.classList.add('hidden');
+      errorState.classList.add('hidden');
+
+      try {
+        const response = await fetch(`${API_URL}/trends`);
+        const data = await response.json();
+
+        if (data.error || !data.narratives || data.narratives.length === 0) {
+          throw new Error(data.error || 'No narratives found');
+        }
+
+        // Render narratives
+        renderNarratives(data.narratives);
+
+        // Update timestamp
+        const updated = new Date(data.lastUpdated);
+        lastUpdated.innerHTML = `<i class="fa-solid fa-clock mr-2"></i>Last updated: ${updated.toLocaleString()}`;
+
+        // Show narratives
+        loadingState.classList.add('hidden');
+        narrativesList.classList.remove('hidden');
+
+      } catch (error) {
+        console.error('Error fetching trends:', error);
+        loadingState.classList.add('hidden');
+        errorState.classList.remove('hidden');
+      }
+    }
+
+    function renderNarratives(narratives) {
+      const container = document.getElementById('narratives-list');
+      container.innerHTML = '';
+
+      narratives.forEach((narrative, index) => {
+        const sentimentIcon = {
+          bullish: 'fa-arrow-trend-up',
+          bearish: 'fa-arrow-trend-down',
+          neutral: 'fa-minus'
+        }[narrative.sentiment] || 'fa-minus';
+
+        const sentimentClass = `sentiment-${narrative.sentiment}`;
+
+        const card = document.createElement('div');
+        card.className = 'narrative-card cyber-border rounded-2xl p-6 bg-dark-800/50';
+        card.innerHTML = `
+          <div class="flex items-start justify-between gap-4 mb-4">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-cyber-blue/10 flex items-center justify-center font-cyber text-cyber-blue font-bold">
+                ${index + 1}
+              </div>
+              <h3 class="text-xl font-bold font-cyber">${narrative.title}</h3>
+            </div>
+            <div class="flex items-center gap-2 ${sentimentClass}">
+              <i class="fa-solid ${sentimentIcon}"></i>
+              <span class="text-sm font-medium capitalize">${narrative.sentiment}</span>
+            </div>
+          </div>
+
+          <p class="text-gray-300 mb-4">${narrative.description}</p>
+
+          <div class="flex flex-wrap items-center gap-4">
+            ${narrative.relatedTokens && narrative.relatedTokens.length > 0 ? `
+              <div class="flex items-center gap-2">
+                <span class="text-gray-500 text-sm">Related:</span>
+                ${narrative.relatedTokens.map(token => `
+                  <span class="bg-cyber-blue/10 text-cyber-blue px-2 py-1 rounded text-sm font-medium">$${token}</span>
+                `).join('')}
+              </div>
+            ` : ''}
+
+            <div class="flex items-center gap-2 ml-auto">
+              <span class="text-gray-500 text-sm">Strength:</span>
+              <div class="w-24 h-2 bg-dark-700 rounded-full overflow-hidden">
+                <div class="strength-bar h-full rounded-full" style="width: ${narrative.strength * 10}%"></div>
+              </div>
+              <span class="text-cyber-blue font-bold text-sm">${narrative.strength}/10</span>
+            </div>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    // Fetch trends on page load
+    fetchTrends();
+
+    // Auto-refresh every 5 minutes
+    setInterval(fetchTrends, 5 * 60 * 1000);
+  </script>
+</body>
+</html>

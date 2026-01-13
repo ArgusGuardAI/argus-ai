@@ -4,6 +4,7 @@ import { analyzeRoutes } from './routes/analyze';
 import { graffitiRoutes } from './routes/graffiti';
 import { walletHistoryRoutes } from './routes/wallet-history';
 import { subscriptionRoutes } from './routes/subscription';
+import { trendsRoutes } from './routes/trends';
 
 export type Bindings = {
   SCAN_CACHE: KVNamespace;
@@ -30,6 +31,9 @@ app.use(
       if (origin?.startsWith('moz-extension://')) return origin;
       // Allow localhost for development
       if (origin?.startsWith('http://localhost')) return origin;
+      // Allow whaleshield.io website
+      if (origin?.includes('whaleshield.io')) return origin;
+      if (origin?.includes('whaleshield.pages.dev')) return origin;
       // Allow requests with no origin (e.g., direct API calls)
       if (!origin) return '*';
       // Default: allow all for public API
@@ -150,6 +154,7 @@ app.route('/analyze', analyzeRoutes);
 app.route('/graffiti', graffitiRoutes);
 app.route('/wallet-history', walletHistoryRoutes);
 app.route('/subscribe', subscriptionRoutes);
+app.route('/trends', trendsRoutes);
 
 // 404 handler
 app.notFound((c) => {
