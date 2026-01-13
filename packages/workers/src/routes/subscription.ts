@@ -5,8 +5,8 @@ import { createSupabaseClient } from '../services/supabase';
 
 export const subscriptionRoutes = new Hono<{ Bindings: Bindings }>();
 
-// Price ID for the $9.99/month subscription (set this in Stripe Dashboard)
-const SUBSCRIPTION_PRICE = 999; // $9.99 in cents
+// Price ID for the $19.99/month subscription (set this in Stripe Dashboard)
+const SUBSCRIPTION_PRICE = 1999; // $19.99 in cents
 
 // Create a Stripe Checkout session
 subscriptionRoutes.post('/create-checkout', async (c) => {

@@ -245,7 +245,7 @@ function Popup() {
                       cursor: isSubscribing ? 'not-allowed' : 'pointer',
                     }}
                   >
-                    {isSubscribing ? 'LOADING...' : 'SUBSCRIBE $9.99/MO'}
+                    {isSubscribing ? 'LOADING...' : 'SUBSCRIBE $19.99/MO'}
                   </button>
                   <div className="flex items-center gap-2 justify-center">
                     <span className="text-[9px] text-gray-600">or</span>
