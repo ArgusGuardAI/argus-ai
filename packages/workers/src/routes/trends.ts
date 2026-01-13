@@ -85,6 +85,11 @@ async function analyzeNarratives(
   apiKey: string,
   model?: string
 ): Promise<TrendingNarrative[]> {
+  if (!apiKey) {
+    console.error('No Together AI API key provided');
+    return [];
+  }
+
   const prompt = `You are a crypto market analyst. Analyze these recent crypto news headlines and identify the TOP 5 trending narratives in the crypto market right now.
 
 HEADLINES:
@@ -112,7 +117,11 @@ Respond in this exact JSON format:
 
 Only return valid JSON, no other text.`;
 
+  const modelToUse = model || 'meta-llama/Llama-3.3-70B-Instruct-Turbo-Free';
+
   try {
+    console.log(`Calling Together AI with model: ${modelToUse}, headlines: ${headlines.length}`);
+
     const response = await fetch('https://api.together.xyz/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -120,27 +129,35 @@ Only return valid JSON, no other text.`;
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: model || 'meta-llama/Llama-3.3-70B-Instruct-Turbo-Free',
+        model: modelToUse,
         messages: [{ role: 'user', content: prompt }],
         max_tokens: 1500,
         temperature: 0.3,
       }),
     });
 
+    console.log(`Together AI response status: ${response.status}`);
+
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`Together AI error: ${response.status} - ${errorText}`);
       throw new Error(`Together AI error: ${response.status}`);
     }
 
     const data = await response.json() as any;
     const content = data.choices?.[0]?.message?.content || '';
 
+    console.log(`Together AI response content length: ${content.length}`);
+
     // Parse JSON from response
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
+      console.error('No JSON found in Together AI response:', content.substring(0, 200));
       throw new Error('No JSON found in response');
     }
 
     const parsed = JSON.parse(jsonMatch[0]);
+    console.log(`Parsed ${parsed.narratives?.length || 0} narratives`);
     return parsed.narratives || [];
   } catch (error) {
     console.error('Error analyzing narratives:', error);
@@ -157,8 +174,8 @@ trendsRoutes.get('/', async (c) => {
     if (cached) {
       const cachedData = JSON.parse(cached) as TrendsResponse;
 
-      // Return cached if still valid
-      if (Date.now() < cachedData.nextUpdate) {
+      // Return cached if still valid AND has narratives
+      if (Date.now() < cachedData.nextUpdate && cachedData.narratives.length > 0) {
         return c.json(cachedData);
       }
     }
@@ -193,18 +210,22 @@ trendsRoutes.get('/', async (c) => {
     // Sort by strength
     narratives.sort((a, b) => b.strength - a.strength);
 
+    const topNarratives = narratives.slice(0, 5);
+
     const response: TrendsResponse = {
-      narratives: narratives.slice(0, 5), // Top 5
+      narratives: topNarratives,
       lastUpdated: Date.now(),
       nextUpdate: Date.now() + (CACHE_DURATION_HOURS * 60 * 60 * 1000),
     };
 
-    // Cache the results
-    await c.env.SCAN_CACHE.put(
-      TRENDS_CACHE_KEY,
-      JSON.stringify(response),
-      { expirationTtl: CACHE_DURATION_HOURS * 60 * 60 }
-    );
+    // Only cache if we have narratives (don't cache failures)
+    if (topNarratives.length > 0) {
+      await c.env.SCAN_CACHE.put(
+        TRENDS_CACHE_KEY,
+        JSON.stringify(response),
+        { expirationTtl: CACHE_DURATION_HOURS * 60 * 60 }
+      );
+    }
 
     return c.json(response);
   } catch (error) {
@@ -225,4 +246,20 @@ trendsRoutes.post('/refresh', async (c) => {
     console.error('Refresh error:', error);
     return c.json({ error: 'Failed to refresh trends' }, 500);
   }
+});
+
+// GET /trends/debug - Debug endpoint to see raw headlines
+trendsRoutes.get('/debug', async (c) => {
+  const allHeadlines: { source: string; headlines: string[] }[] = [];
+
+  for (const source of NEWS_SOURCES) {
+    const headlines = await fetchRSSHeadlines(source.url);
+    allHeadlines.push({ source: source.name, headlines });
+  }
+
+  return c.json({
+    sources: NEWS_SOURCES,
+    results: allHeadlines,
+    totalHeadlines: allHeadlines.reduce((acc, s) => acc + s.headlines.length, 0),
+  });
 });
