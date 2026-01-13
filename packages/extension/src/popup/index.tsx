@@ -1,10 +1,44 @@
+import { useState } from 'react';
 import { useWhaleshieldWallet } from '~/hooks/useWhaleshieldWallet';
 import { WHALESHIELD_TOKEN } from '@whaleshield/shared';
+import { createCheckoutSession, createPortalSession } from '~/lib/api';
 import '~/styles/globals.css';
 
 function Popup() {
   const wallet = useWhaleshieldWallet();
   const isTestMode = WHALESHIELD_TOKEN.mint === 'TBD_AFTER_LAUNCH';
+  const [isSubscribing, setIsSubscribing] = useState(false);
+  const [isManaging, setIsManaging] = useState(false);
+
+  const handleSubscribe = async () => {
+    if (!wallet.address) return;
+    setIsSubscribing(true);
+    try {
+      const session = await createCheckoutSession(wallet.address);
+      if (session?.checkoutUrl) {
+        window.open(session.checkoutUrl, '_blank');
+      }
+    } catch (error) {
+      console.error('Failed to create checkout:', error);
+    } finally {
+      setIsSubscribing(false);
+    }
+  };
+
+  const handleManageSubscription = async () => {
+    if (!wallet.address) return;
+    setIsManaging(true);
+    try {
+      const session = await createPortalSession(wallet.address);
+      if (session?.portalUrl) {
+        window.open(session.portalUrl, '_blank');
+      }
+    } catch (error) {
+      console.error('Failed to open portal:', error);
+    } finally {
+      setIsManaging(false);
+    }
+  };
 
   return (
     <div
@@ -165,26 +199,72 @@ function Popup() {
                     {wallet.isPremium || isTestMode ? 'SHIELD ACTIVE' : 'SHIELD LOCKED'}
                   </p>
                   <p className="text-[10px] text-gray-500">
-                    {isTestMode ? 'Test Mode' : `${wallet.whaleshieldBalance.toLocaleString()} / ${WHALESHIELD_TOKEN.requiredBalance.toLocaleString()} tokens`}
+                    {isTestMode
+                      ? 'Test Mode'
+                      : wallet.isSubscribed
+                      ? 'Premium Subscriber'
+                      : wallet.hasTokens
+                      ? 'Token Holder'
+                      : `${wallet.whaleshieldBalance.toLocaleString()} / ${WHALESHIELD_TOKEN.requiredBalance.toLocaleString()} tokens`}
                   </p>
                 </div>
               </div>
 
-              {!wallet.isPremium && !isTestMode && (
-                <a
-                  href="https://pump.fun"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block w-full text-center py-2 rounded-lg text-[10px] font-bold transition-all"
+              {/* Subscription Management Button (if subscribed) */}
+              {wallet.isSubscribed && !isTestMode && (
+                <button
+                  onClick={handleManageSubscription}
+                  disabled={isManaging}
+                  className="w-full text-center py-2 rounded-lg text-[10px] font-bold transition-all"
                   style={{
                     fontFamily: "'Orbitron', monospace",
-                    background: 'rgba(0, 212, 255, 0.1)',
-                    border: '1px solid rgba(0, 212, 255, 0.3)',
-                    color: '#00d4ff',
+                    background: 'rgba(0, 255, 136, 0.1)',
+                    border: '1px solid rgba(0, 255, 136, 0.3)',
+                    color: '#00ff88',
+                    cursor: isManaging ? 'not-allowed' : 'pointer',
                   }}
                 >
-                  GET $WHALESHIELD →
-                </a>
+                  {isManaging ? 'LOADING...' : 'MANAGE SUBSCRIPTION'}
+                </button>
+              )}
+
+              {/* Unlock Options (if not premium) */}
+              {!wallet.isPremium && !isTestMode && (
+                <div className="space-y-2">
+                  <button
+                    onClick={handleSubscribe}
+                    disabled={isSubscribing}
+                    className="w-full text-center py-2.5 rounded-lg text-[10px] font-bold transition-all"
+                    style={{
+                      fontFamily: "'Orbitron', monospace",
+                      background: isSubscribing
+                        ? 'rgba(255, 255, 255, 0.05)'
+                        : 'linear-gradient(135deg, #00d4ff 0%, #0099cc 100%)',
+                      color: isSubscribing ? '#6b7280' : '#000',
+                      boxShadow: isSubscribing ? 'none' : '0 0 20px rgba(0, 212, 255, 0.2)',
+                      cursor: isSubscribing ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    {isSubscribing ? 'LOADING...' : 'SUBSCRIBE $9.99/MO'}
+                  </button>
+                  <div className="flex items-center gap-2 justify-center">
+                    <span className="text-[9px] text-gray-600">or</span>
+                  </div>
+                  <a
+                    href="https://pump.fun"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block w-full text-center py-2 rounded-lg text-[10px] font-bold transition-all"
+                    style={{
+                      fontFamily: "'Orbitron', monospace",
+                      background: 'rgba(0, 212, 255, 0.1)',
+                      border: '1px solid rgba(0, 212, 255, 0.3)',
+                      color: '#00d4ff',
+                    }}
+                  >
+                    HOLD 1K $WHALESHIELD →
+                  </a>
+                </div>
               )}
             </div>
 

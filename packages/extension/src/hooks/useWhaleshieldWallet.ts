@@ -6,6 +6,7 @@ import {
   clearStoredWallet,
   setPremiumStatus,
 } from '~/lib/storage';
+import { getSubscriptionStatus } from '~/lib/api';
 
 export interface WhaleshieldWallet {
   address: string | null;
@@ -14,6 +15,8 @@ export interface WhaleshieldWallet {
   balance: number | null;
   whaleshieldBalance: number;
   isPremium: boolean;
+  isSubscribed: boolean;
+  hasTokens: boolean;
   connect: () => Promise<void>;
   disconnect: () => Promise<void>;
   refreshBalances: () => Promise<void>;
@@ -58,6 +61,8 @@ export function useWhaleshieldWallet(): WhaleshieldWallet {
   const [balance, setBalance] = useState<number | null>(null);
   const [whaleshieldBalance, setWhaleshieldBalance] = useState(0);
   const [isPremium, setIsPremium] = useState(false);
+  const [isSubscribed, setIsSubscribed] = useState(false);
+  const [hasTokens, setHasTokens] = useState(false);
   const [bridgeReady, setBridgeReady] = useState(false);
 
   // Wait for wallet bridge to be ready
@@ -92,18 +97,30 @@ export function useWhaleshieldWallet(): WhaleshieldWallet {
     const isTestMode = WHALESHIELD_TOKEN.mint === 'TBD_AFTER_LAUNCH';
     if (isTestMode) {
       setWhaleshieldBalance(0);
+      setHasTokens(false);
+      setIsSubscribed(false);
       setIsPremium(true);
       await setPremiumStatus(true);
       return;
     }
 
-    // TODO: Implement actual balance fetching via API
-    // For production, we'd call an API endpoint that checks the balance
     try {
-      // Simplified: assume not premium unless we implement proper balance checking
-      setWhaleshieldBalance(0);
-      setIsPremium(false);
-      await setPremiumStatus(false);
+      // Check subscription status
+      const subscription = await getSubscriptionStatus(address);
+      const subscribed = subscription.subscribed;
+      setIsSubscribed(subscribed);
+
+      // TODO: Implement actual token balance fetching via API
+      // For production, we'd call an API endpoint that checks the token balance
+      const tokenBalance = 0; // Replace with actual balance check
+      setWhaleshieldBalance(tokenBalance);
+      const hasEnoughTokens = tokenBalance >= WHALESHIELD_TOKEN.requiredBalance;
+      setHasTokens(hasEnoughTokens);
+
+      // Premium if they have tokens OR have active subscription
+      const premium = hasEnoughTokens || subscribed;
+      setIsPremium(premium);
+      await setPremiumStatus(premium);
     } catch (error) {
       console.error('Failed to refresh balances:', error);
     }
@@ -149,6 +166,8 @@ export function useWhaleshieldWallet(): WhaleshieldWallet {
     setBalance(null);
     setWhaleshieldBalance(0);
     setIsPremium(false);
+    setIsSubscribed(false);
+    setHasTokens(false);
 
     await clearStoredWallet();
     await setPremiumStatus(false);
@@ -216,6 +235,8 @@ export function useWhaleshieldWallet(): WhaleshieldWallet {
     balance,
     whaleshieldBalance,
     isPremium,
+    isSubscribed,
+    hasTokens,
     connect,
     disconnect,
     refreshBalances,

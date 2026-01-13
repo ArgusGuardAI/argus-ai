@@ -12,6 +12,7 @@
     "@whaleshield/shared": "workspace:*",
     "bs58": "^6.0.0",
     "hono": "^4.0.0",
+    "stripe": "^20.1.2",
     "tweetnacl": "^1.0.3"
   },
   "devDependencies": {

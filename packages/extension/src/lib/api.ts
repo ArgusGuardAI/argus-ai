@@ -3,6 +3,9 @@ import type {
   GraffitiNote,
   GraffitiListResponse,
   WalletHistoryResponse,
+  SubscriptionStatus,
+  CheckoutSession,
+  PortalSession,
 } from '@whaleshield/shared';
 
 const API_BASE =
@@ -282,6 +285,72 @@ export async function getWalletHistory(address: string): Promise<WalletHistoryRe
     return response.json();
   } catch (error) {
     console.error('Get wallet history failed:', error);
+    return null;
+  }
+}
+
+// ============================================
+// Subscription
+// ============================================
+
+export async function getSubscriptionStatus(walletAddress: string): Promise<SubscriptionStatus> {
+  try {
+    const response = await fetch(`${API_BASE}/subscribe/status/${walletAddress}`);
+
+    if (!response.ok) {
+      return { subscribed: false, status: null };
+    }
+
+    return response.json();
+  } catch (error) {
+    console.error('Get subscription status failed:', error);
+    return { subscribed: false, status: null };
+  }
+}
+
+export async function createCheckoutSession(
+  walletAddress: string,
+  successUrl?: string,
+  cancelUrl?: string
+): Promise<CheckoutSession | null> {
+  try {
+    const response = await fetch(`${API_BASE}/subscribe/create-checkout`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ walletAddress, successUrl, cancelUrl }),
+    });
+
+    if (!response.ok) {
+      console.error('Create checkout error:', response.status);
+      return null;
+    }
+
+    return response.json();
+  } catch (error) {
+    console.error('Create checkout failed:', error);
+    return null;
+  }
+}
+
+export async function createPortalSession(
+  walletAddress: string,
+  returnUrl?: string
+): Promise<PortalSession | null> {
+  try {
+    const response = await fetch(`${API_BASE}/subscribe/portal`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ walletAddress, returnUrl }),
+    });
+
+    if (!response.ok) {
+      console.error('Create portal error:', response.status);
+      return null;
+    }
+
+    return response.json();
+  } catch (error) {
+    console.error('Create portal failed:', error);
     return null;
   }
 }

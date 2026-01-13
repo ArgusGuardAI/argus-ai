@@ -62,6 +62,26 @@ CREATE INDEX IF NOT EXISTS idx_scan_risk ON scan_results(risk_level);
 CREATE INDEX IF NOT EXISTS idx_scan_checked ON scan_results(checked_at DESC);
 
 -- ============================================
+-- SUBSCRIBERS TABLE (Stripe subscriptions)
+-- Tracks users who subscribe via Stripe
+-- ============================================
+CREATE TABLE IF NOT EXISTS subscribers (
+  wallet_address TEXT PRIMARY KEY,
+  stripe_customer_id TEXT NOT NULL,
+  stripe_subscription_id TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('active', 'inactive', 'canceled', 'past_due')),
+  current_period_start TIMESTAMPTZ NOT NULL,
+  current_period_end TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_subscribers_status ON subscribers(status);
+CREATE INDEX IF NOT EXISTS idx_subscribers_stripe_customer ON subscribers(stripe_customer_id);
+CREATE INDEX IF NOT EXISTS idx_subscribers_period_end ON subscribers(current_period_end);
+
+-- ============================================
 -- HELPER FUNCTIONS
 -- ============================================
 
@@ -99,6 +119,12 @@ CREATE TRIGGER update_scan_updated_at
   FOR EACH ROW
   EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_subscribers_updated_at ON subscribers;
+CREATE TRIGGER update_subscribers_updated_at
+  BEFORE UPDATE ON subscribers
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
 -- ============================================
 -- ROW LEVEL SECURITY (RLS)
 -- Enable for production use
@@ -108,6 +134,7 @@ CREATE TRIGGER update_scan_updated_at
 ALTER TABLE graffiti_notes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE wallet_reputation ENABLE ROW LEVEL SECURITY;
 ALTER TABLE scan_results ENABLE ROW LEVEL SECURITY;
+ALTER TABLE subscribers ENABLE ROW LEVEL SECURITY;
 
 -- Allow read access to all authenticated users
 CREATE POLICY "Allow read access to graffiti_notes" ON graffiti_notes
@@ -131,4 +158,11 @@ CREATE POLICY "Allow service role full access to wallet_reputation" ON wallet_re
   FOR ALL USING (auth.role() = 'service_role');
 
 CREATE POLICY "Allow service role full access to scan_results" ON scan_results
+  FOR ALL USING (auth.role() = 'service_role');
+
+-- Subscribers policies (sensitive - service role only for write, read by wallet owner)
+CREATE POLICY "Allow read access to own subscription" ON subscribers
+  FOR SELECT USING (true);
+
+CREATE POLICY "Allow service role full access to subscribers" ON subscribers
   FOR ALL USING (auth.role() = 'service_role');

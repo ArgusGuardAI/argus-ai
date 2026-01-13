@@ -3,6 +3,7 @@ import { cors } from 'hono/cors';
 import { analyzeRoutes } from './routes/analyze';
 import { graffitiRoutes } from './routes/graffiti';
 import { walletHistoryRoutes } from './routes/wallet-history';
+import { subscriptionRoutes } from './routes/subscription';
 
 export type Bindings = {
   SCAN_CACHE: KVNamespace;
@@ -12,6 +13,8 @@ export type Bindings = {
   SUPABASE_ANON_KEY: string;
   HELIUS_API_KEY?: string;
   WHALESHIELD_MINT?: string; // Token mint address for token gating (optional until launch)
+  STRIPE_SECRET_KEY: string;
+  STRIPE_WEBHOOK_SECRET: string;
   ENVIRONMENT: string;
 };
 
@@ -92,6 +95,7 @@ app.get('/privacy', (c) => {
       <li><strong>Token Addresses:</strong> When you visit a token page, we send the token's contract address to our API for analysis. This is necessary to check for honeypots and scams.</li>
       <li><strong>Wallet Address (Token Gating):</strong> We check if your connected wallet holds the required $WHALESHIELD tokens. This check is performed locally and via RPC - we do not store your wallet address on our servers.</li>
       <li><strong>Community Notes:</strong> If you submit a community note, we store the note content, your wallet address (as the author), and the associated token address. This is publicly visible to other users.</li>
+      <li><strong>Subscription (Optional):</strong> If you subscribe via Stripe, we store your wallet address linked to your Stripe customer ID to verify your subscription status. Payment processing is handled entirely by Stripe.</li>
     </ul>
     <h2>4. How We Use Information</h2>
     <p>The information we process is used solely to:</p>
@@ -112,6 +116,7 @@ app.get('/privacy', (c) => {
       <li><strong>Solana RPC:</strong> To verify wallet balances and token holdings</li>
       <li><strong>Together AI:</strong> For AI-powered contract analysis (only token contract data is sent, no personal information)</li>
       <li><strong>Cloudflare:</strong> For API hosting and security</li>
+      <li><strong>Stripe:</strong> For payment processing (only if you choose to subscribe). Stripe handles all payment data according to their privacy policy.</li>
     </ul>
     <p>These services have their own privacy policies and do not receive any of your personal information from us.</p>
     <h2>7. Your Rights</h2>
@@ -144,6 +149,7 @@ app.get('/privacy', (c) => {
 app.route('/analyze', analyzeRoutes);
 app.route('/graffiti', graffitiRoutes);
 app.route('/wallet-history', walletHistoryRoutes);
+app.route('/subscribe', subscriptionRoutes);
 
 // 404 handler
 app.notFound((c) => {
