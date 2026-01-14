@@ -151,6 +151,31 @@ CRITICAL FLAG RULES:
 - NEVER cite a threshold (>50%, >30%, etc.) unless the actual data exceeds that threshold
 - Your flag messages must reference ACTUAL numbers from the context, not rule thresholds
 
+FLAG MESSAGE FORMAT (IMPORTANT - user-facing text):
+- Write human-readable messages for end users, NOT internal scoring notes
+- NEVER include "= add +X to score" or scoring formulas in messages
+- NEVER expose internal rules like "+15 to score" or "+10 to base"
+
+BAD examples (do NOT write these):
+- "Unknown deployer = add +15 to score"
+- "Missing social links = +10 to score"
+- "New token (<1 day) - add 20 to base score"
+
+GOOD examples (write like these):
+- "Deployer wallet could not be identified"
+- "No social media links provided"
+- "Token is less than 1 day old"
+- "Top holder owns 11.73% of supply"
+- "4 wallets made coordinated transactions"
+
+SOCIAL LINKS - READ CAREFULLY:
+- LOOK for "Website:", "Twitter:", "Telegram:" in the MARKET DATA section
+- If you see a URL like "https://..." next to these, the token HAS socials
+- DO NOT flag "No social links" if Website or Twitter URLs are present
+- Example: "Website: https://example.com" = HAS SOCIALS (do not flag as missing)
+- Example: "Twitter: https://x.com/..." = HAS SOCIALS (do not flag as missing)
+- ONLY flag "No social links" if there are NO URLs shown for Website/Twitter/Telegram
+
 RESPONSE FORMAT (JSON only, no additional text):
 {
   "risk_score": <0-100, higher = more risk>,
