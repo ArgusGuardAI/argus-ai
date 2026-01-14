@@ -592,10 +592,13 @@ export function buildOnChainContext(data: TokenOnChainData): string {
     context += '\n';
   }
 
-  // Trading patterns
-  context += `TRADING (24H):\n`;
-  context += `- Buys: ${data.buyCount24h} (${data.uniqueBuyers24h} unique)\n`;
-  context += `- Sells: ${data.sellCount24h} (${data.uniqueSellers24h} unique)\n`;
+  // Trading patterns - only show if we have actual buy/sell data
+  // (DexScreener provides more accurate trading data)
+  if (data.buyCount24h > 0 || data.sellCount24h > 0) {
+    context += `TRADING (24H from on-chain):\n`;
+    context += `- Buys: ${data.buyCount24h} (${data.uniqueBuyers24h} unique)\n`;
+    context += `- Sells: ${data.sellCount24h} (${data.uniqueSellers24h} unique)\n`;
+  }
 
   return context;
 }

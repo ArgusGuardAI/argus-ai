@@ -217,13 +217,33 @@ function applyHardcodedRules(
   // RULE 6: MARKET CAP CAPS (established tokens)
   // ============================================
   // Large established tokens should have score capped
-  if (marketCapUsd >= 100_000_000 && ageInDays >= 30) {
-    if (adjustedScore > 40 && creator?.ruggedTokens === 0) {
-      adjustedScore = Math.min(adjustedScore, 40);
+  // Only skip the cap if we KNOW the creator has rugs
+  const hasKnownRugs = creator && creator.ruggedTokens > 0;
+
+  if (marketCapUsd >= 100_000_000 && ageInDays >= 30 && !hasKnownRugs) {
+    // $100M+ market cap, 30+ days old - very established
+    if (adjustedScore > 35) {
+      adjustedScore = 35;
+      additionalFlags.push({
+        type: 'CONTRACT',
+        severity: 'LOW',
+        message: `Established token ($${(marketCapUsd / 1_000_000).toFixed(1)}M MC, ${ageInDays} days) - score capped`,
+      });
     }
-  } else if (marketCapUsd >= 10_000_000 && ageInDays >= 14) {
-    if (adjustedScore > 55 && creator?.ruggedTokens === 0) {
-      adjustedScore = Math.min(adjustedScore, 55);
+  } else if (marketCapUsd >= 50_000_000 && ageInDays >= 14 && !hasKnownRugs) {
+    // $50M+ market cap, 14+ days old
+    if (adjustedScore > 45) {
+      adjustedScore = 45;
+      additionalFlags.push({
+        type: 'CONTRACT',
+        severity: 'LOW',
+        message: `Established token ($${(marketCapUsd / 1_000_000).toFixed(1)}M MC, ${ageInDays} days) - score capped`,
+      });
+    }
+  } else if (marketCapUsd >= 10_000_000 && ageInDays >= 7 && !hasKnownRugs) {
+    // $10M+ market cap, 7+ days old
+    if (adjustedScore > 55) {
+      adjustedScore = 55;
     }
   }
 
