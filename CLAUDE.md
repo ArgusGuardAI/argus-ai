@@ -1,100 +1,263 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Development guidance for AI assistants working on the WhaleShield codebase.
+
+---
 
 ## Project Overview
 
-WhaleShield is an AI-powered browser extension that provides a security overlay for Pump.fun and Crypto Twitter. It uses Together AI to analyze Solana smart contracts for honeypots and scams, combined with a community "Graffiti" annotation system. Access requires holding 1,000 $WHALESHIELD tokens.
+**WhaleShield** is an AI-powered browser extension that provides security analysis for Solana tokens on Pump.fun and DexScreener. It detects honeypots, rug pulls, and scam indicators using Together AI for analysis and Helius for on-chain data.
 
-## Build & Run Commands
+### Core Value Proposition
+- Instant risk scoring (0-100) for any Solana token
+- Community "Graffiti" notes visible to token holders
+- Creator wallet history tracking
+- Bundle detection for coordinated attacks
 
-```bash
-# Install dependencies
-pnpm install
-
-# Run extension in development mode
-pnpm dev
-
-# Build extension for production
-pnpm build
-
-# Run Cloudflare Workers locally
-pnpm dev:workers
-
-# Deploy Workers to Cloudflare
-pnpm deploy:workers
-```
+---
 
 ## Architecture
 
-**Project Structure:**
 ```
 packages/
-├── extension/       # @whaleshield/extension - Plasmo browser extension
-├── workers/         # @whaleshield/workers - Cloudflare Workers API
-└── shared/          # @whaleshield/shared - Types and constants
+├── extension/       # Plasmo browser extension (React)
+│   ├── src/contents/   # Content scripts for Pump.fun, DexScreener
+│   ├── src/popup/      # Extension popup UI
+│   └── src/background/ # Service worker
+├── workers/         # Cloudflare Workers API (Hono)
+│   ├── src/routes/     # API endpoints
+│   ├── src/services/   # External API integrations
+│   └── src/prompts/    # AI system prompts
+└── shared/          # Shared types and constants
+    └── src/types/      # TypeScript interfaces
 ```
 
-**Extension (`packages/extension/`):**
-- `src/contents/` - Content scripts for Pump.fun and Twitter DOM injection
-- `src/background/` - Service worker for wallet connection and RPC calls
-- `src/components/` - React components for overlays (Paint, Graffiti notes)
-- `src/popup/` - Extension popup UI (wallet connect, status)
+---
 
-**Cloudflare Workers (`packages/workers/`):**
-- `src/routes/analyze.ts` - Contract analysis endpoint (calls Together AI)
-- `src/routes/graffiti.ts` - CRUD for community annotations
-- `src/routes/wallet-history.ts` - Developer wallet reputation lookup
-- `src/lib/cache.ts` - Cloudflare KV caching logic
-
-**Shared (`packages/shared/`):**
-- `src/types/` - TypeScript interfaces for API responses
-- `src/constants/` - Token mint address, thresholds
-
-## The Triple-Layer Shield
-
-1. **AI Sentinel** - Together AI analyzes contracts for hidden sell taxes (honeypots)
-2. **Graffiti Layer** - Encrypted community notes on tokens (stored in Supabase)
-3. **Identity Layer** - Wallet history showing developer's previous rugs
-
-## Data Flow
-
-1. User visits Pump.fun token page
-2. Extension checks wallet for 1,000 $WHALESHIELD balance via RPC
-3. If verified, extension fetches Graffiti notes from Supabase
-4. Extension sends contract address to Cloudflare Worker
-5. Worker checks KV cache; if miss, calls Together AI for analysis
-6. Extension paints UI (Green = safe, Red = honeypot) and overlays notes
-
-## Key Environment Variables
+## Commands
 
 ```bash
-# Extension (in .env or extension storage)
-WHALESHIELD_MINT=<token-mint-address>
-MIN_BALANCE=1000
+# Development
+pnpm install              # Install dependencies
+pnpm dev:workers          # Start Workers locally
+pnpm dev:extension        # Start extension dev server
+pnpm dev                  # Start all packages
 
-# Cloudflare Workers (in wrangler.toml or secrets)
-TOGETHER_AI_API_KEY=your-key
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_ANON_KEY=your-anon-key
-
-# Cloudflare KV namespace binding
-KV_CACHE=whaleshield-cache
+# Build & Deploy
+pnpm build                # Build all packages
+pnpm deploy:workers       # Deploy to Cloudflare
 ```
+
+---
 
 ## Key Files
 
+### Workers Package (`packages/workers/`)
+
 | File | Purpose |
 |------|---------|
-| `packages/shared/src/types/analysis.ts` | HoneypotResult, GraffitiNote interfaces |
-| `packages/workers/src/routes/analyze.ts` | Core AI honeypot detection logic |
-| `packages/workers/src/prompts/system-prompt.txt` | Together AI system prompt |
-| `packages/extension/src/contents/pumpfun.tsx` | Pump.fun DOM overlay injection |
-| `packages/extension/src/components/PaintOverlay.tsx` | Visual Red/Green paint component |
-| `packages/extension/src/background/balance.ts` | Token balance verification |
+| `src/routes/analyze.ts` | Main analysis endpoint, orchestrates all data fetching and AI analysis |
+| `src/services/together-ai.ts` | Together AI integration, response parsing, retry logic |
+| `src/services/helius.ts` | Helius DAS API for token metadata, creator analysis, bundle detection |
+| `src/services/dexscreener.ts` | Market data: price, volume, liquidity, age, socials |
+| `src/services/pumpfun.ts` | Pump.fun bonding curve data, creator info |
+| `src/services/solana-data.ts` | On-chain holder analysis via Solana RPC |
+| `src/prompts/honeypot-prompt.ts` | AI system prompt with scoring rules |
 
-## Database (Supabase)
+### Analysis Pipeline (analyze.ts)
 
-- `graffiti_notes` table - Encrypted community annotations
-- `wallet_reputation` table - Cached developer history
-- `scan_results` table - Backup of AI analysis results
+```
+1. Receive token address
+2. Check KV cache (return if hit)
+3. Fetch data in parallel:
+   - DexScreener (market data)
+   - Pump.fun (bonding curve)
+   - Helius (metadata, authorities)
+4. Analyze creator wallet history
+5. Detect bundle patterns
+6. Build context string
+7. Call Together AI
+8. Apply hardcoded rules (caps, minimums)
+9. Cache result (KV + Supabase)
+```
+
+---
+
+## Risk Analysis System
+
+### Risk Levels
+| Level | Score | Color | Meaning |
+|-------|-------|-------|---------|
+| SAFE | 0-49 | Green | Low risk |
+| SUSPICIOUS | 50-69 | Yellow | Caution |
+| DANGEROUS | 70-89 | Orange | High risk |
+| SCAM | 90-100 | Red | Critical |
+
+### Flag Types
+```typescript
+type FlagType =
+  | 'LIQUIDITY'   // LP locks, liquidity depth
+  | 'OWNERSHIP'   // Mint/freeze authority
+  | 'CONTRACT'    // Bonding curve, program issues
+  | 'SOCIAL'      // Website, Twitter, Telegram
+  | 'DEPLOYER'    // Wallet age, history, rug count
+  | 'BUNDLE'      // Coordinated transactions
+  | 'HOLDERS'     // Concentration risk
+  | 'TRADING';    // Buy/sell patterns
+
+type Severity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+```
+
+### Scoring Rules
+
+**Base Score Factors:**
+- Token age <1 day: +20
+- Unknown deployer: +15
+- Missing socials: +10
+- Single wallet >50%: +25
+- Bundle detected: +10-20
+
+**Score Caps (established tokens):**
+- $100M+ MC, 30+ days: max 35
+- $50M+ MC, 14+ days: max 45
+- $10M+ MC, 7+ days: max 55
+
+---
+
+## Environment Variables
+
+### Workers (.dev.vars)
+```env
+TOGETHER_AI_API_KEY=     # Required
+TOGETHER_AI_MODEL=       # Default: meta-llama/Llama-3.3-70B-Instruct-Turbo
+SUPABASE_URL=            # Required
+SUPABASE_ANON_KEY=       # Required
+HELIUS_API_KEY=          # Required for full analysis
+```
+
+### Setting Production Secrets
+```bash
+wrangler secret put TOGETHER_AI_API_KEY
+wrangler secret put SUPABASE_URL
+wrangler secret put SUPABASE_ANON_KEY
+wrangler secret put HELIUS_API_KEY
+```
+
+---
+
+## AI Prompt Engineering
+
+Located in `src/prompts/honeypot-prompt.ts`:
+
+### Anti-Hallucination Rules
+- Only cite data explicitly in context
+- Say "UNKNOWN" for missing data
+- Never invent percentages or statistics
+
+### User-Facing Messages
+- No internal scoring formulas
+- Human-readable flag messages
+- Good: "Deployer wallet could not be identified"
+- Bad: "Unknown deployer = +15 to score"
+
+### Social Link Verification
+- Check for "Website:", "Twitter:", "Telegram:" with URLs
+- Only flag missing socials if NO URLs present
+
+---
+
+## Data Sources
+
+| Source | Data Provided |
+|--------|---------------|
+| **DexScreener** | Market cap, liquidity, volume, age, socials |
+| **Helius DAS** | Token metadata, authorities, supply |
+| **Helius Transactions** | Creator history, bundle detection |
+| **Solana RPC** | Holder distribution, concentration |
+| **Pump.fun** | Bonding curve, creator address |
+
+---
+
+## Common Issues & Fixes
+
+### "Analysis Failed" Response
+- Check Together AI API key validity
+- Verify model ID exists (try `meta-llama/Llama-3.3-70B-Instruct-Turbo`)
+- Check `together-ai.ts` parsing logic
+
+### Missing/Zero Holder Data
+- Requires HELIUS_API_KEY for accurate data
+- Without Helius, falls back to basic RPC (less accurate)
+
+### AI Hallucination
+- Check `honeypot-prompt.ts` for missing rules
+- Verify context string contains cited data
+- Add explicit "DO NOT" instructions if needed
+
+### False "No Social Links" Flag
+- AI may ignore socials in context
+- Check SOCIAL LINKS section in prompt
+- Verify DexScreener is returning social URLs
+
+---
+
+## Testing
+
+```bash
+# Test analysis endpoint
+curl -X POST http://localhost:8787/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"tokenAddress": "TOKEN_ADDRESS", "forceRefresh": true}'
+
+# Check health
+curl http://localhost:8787/health
+```
+
+### Test Tokens
+- **BONK** (established): `DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263`
+- **ARC** (pump.fun graduated): `61V8vBaqAGMpgDQi4JcAwo1dmBGHsyhzodcPqnEVpump`
+
+---
+
+## Database Schema (Supabase)
+
+```sql
+CREATE TABLE graffiti_notes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  token_address TEXT NOT NULL,
+  author_wallet TEXT NOT NULL,
+  content TEXT NOT NULL,
+  note_type TEXT CHECK (note_type IN ('WARNING', 'INFO', 'POSITIVE')),
+  upvotes INTEGER DEFAULT 0,
+  downvotes INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE scan_results (
+  token_address TEXT PRIMARY KEY,
+  risk_score INTEGER,
+  risk_level TEXT,
+  flags JSONB,
+  summary TEXT,
+  checked_at TIMESTAMPTZ
+);
+```
+
+---
+
+## Code Style
+
+- TypeScript strict mode
+- Hono for Workers routing
+- React + Tailwind for extension UI
+- pnpm workspaces monorepo
+- No emojis in code unless user requests
+
+---
+
+## Security
+
+- Never commit `.dev.vars` or API keys
+- Use `wrangler secret` for production
+- Validate token addresses (base58, correct length)
+- Rate limit endpoints in production

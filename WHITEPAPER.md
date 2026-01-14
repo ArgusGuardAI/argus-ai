@@ -1,9 +1,7 @@
-
-
 # WhaleShield: The Graffiti Protocol
 
-**Version:** 1.0  
-**Date:** January 2026  
+**Version:** 2.0
+**Date:** January 2026
 **Status:** Live on Solana
 
 ---
@@ -12,37 +10,41 @@
 
 The Solana memecoin ecosystem—driven largely by platforms like Pump.fun—represents the fastest, most volatile financial market in history. However, this speed comes with a catastrophic cost: **The Information Vacuum.**
 
-Retail investors are navigating a minefield of sophisticated smart contract scams, "honeypots," and anonymous serial rug-pullers. Traditional due diligence tools (block explorers, code auditors) are too slow and complex for the high-velocity trading environment of 2026.
+Retail investors navigate a minefield of sophisticated smart contract scams, "honeypots," and anonymous serial rug-pullers. Traditional due diligence tools (block explorers, code auditors) are too slow and complex for the high-velocity trading environment of 2026.
 
-L
+**WhaleShield** fills this vacuum by providing instant, AI-powered contract analysis combined with community-driven intelligence—all delivered as a browser overlay before you click "Buy."
 
 ---
 
 ## Table of Contents
 
-1.  [Introduction](#1-introduction)
-2.  [The Threat Landscape](#2-the-threat-landscape)
-3.  [The Solution: The Triple-Layer Shield](#3-the-solution-the-triple-layer-shield)
-4.  [The "Hold-to-Use" Gate](#4-the-hold-to-use-gate)
-5.  [Technical Architecture](#5-technical-architecture)
-6.  [Tokenomics](#6-tokenomics)
-7.  [Roadmap](#7-roadmap)
-8.  [Conclusion](#8-conclusion)
+1. [Introduction](#1-introduction)
+2. [The Threat Landscape](#2-the-threat-landscape)
+3. [The Solution: The Triple-Layer Shield](#3-the-solution-the-triple-layer-shield)
+4. [Risk Analysis Engine](#4-risk-analysis-engine)
+5. [The "Hold-to-Use" Gate](#5-the-hold-to-use-gate)
+6. [Technical Architecture](#6-technical-architecture)
+7. [Tokenomics](#7-tokenomics)
+8. [Roadmap](#8-roadmap)
+9. [Conclusion](#9-conclusion)
 
 ---
 
 ## 1. Introduction
 
 ### 1.1 The State of the Mempool
+
 In 2026, the memecoin market is no longer a niche; it is the primary onboarding mechanism for retail liquidity. Platforms like Pump.fun allow for the deployment of thousands of tokens daily.
 
 **The Problem:**
-*   **Information Asymmetry:** Professional traders have bot networks to scan contract bytecode. Retail users rely on "vibes" and Twitter hype.
-*   **Velocity vs. Accuracy:** By the time a scam is exposed on Twitter, the liquidity has already been drained.
-*   **The "Rag" Cycle:** Malicious actors deploy, drain, and redeploy with impunity. There is no "reputation cost" in anonymous memecoins.
+- **Information Asymmetry:** Professional traders have bot networks to scan contract bytecode. Retail users rely on "vibes" and Twitter hype.
+- **Velocity vs. Accuracy:** By the time a scam is exposed on Twitter, the liquidity has already been drained.
+- **The "Rug" Cycle:** Malicious actors deploy, drain, and redeploy with impunity. There is no "reputation cost" in anonymous memecoins.
 
 ### 1.2 The WhaleShield Thesis
+
 We posit that **Context is Currency.**
+
 WhaleShield does not block access; it *enriches* access. By overlaying "Graffiti" (social proof) and "AI Insight" (contract analysis) directly onto the UI of Pump.fun and Twitter, we restore the trust layer missing from Web3.
 
 ---
@@ -50,18 +52,36 @@ WhaleShield does not block access; it *enriches* access. By overlaying "Graffiti
 ## 2. The Threat Landscape
 
 ### 2.1 The Honeypot (The Silent Killer)
+
 The most devastating scam in the memecoin ecosystem is the **Honeypot**.
-*   **The Mechanism:** A user purchases a token. The price rises. When the user attempts to sell, the smart contract returns an error: "Slippage Tolerance Exceeded."
-*   **The Reality:** The contract code contains a hidden `modifyTax` function or a hardcoded `100%` tax on sell orders. The user can buy, but they cannot sell. They are trapped.
 
-### 2.2 The Serial Ragger
+- **The Mechanism:** A user purchases a token. The price rises. When the user attempts to sell, the smart contract returns an error or applies a 100% tax.
+- **The Reality:** The contract contains hidden `modifyTax` functions or hardcoded sell restrictions. The user can buy, but cannot sell. They are trapped.
+
+### 2.2 The Serial Rugger
+
 Anonymous developers launch multiple tokens under different tickers.
-*   **The Pattern:** Developer A deploys `COIN_1`, rugs the liquidity.
-*   **The Rebirth:** Developer A immediately deploys `COIN_2` using the same wallet address.
-*   **The Blind Spot:** Standard block explorers do not link these two events visually. A user buys `COIN_2` unaware that the dev has rugged 5 times previously.
 
-### 2.3 The "Shill" Echo
-Influencers on X (Twitter) promote tokens they do not hold, or tokens they were paid to promote. Retail users cannot instantly verify if an influencer is financially aligned with the token they are shilling.
+- **The Pattern:** Developer A deploys `COIN_1`, rugs the liquidity.
+- **The Rebirth:** Developer A immediately deploys `COIN_2` using the same wallet address.
+- **The Blind Spot:** Standard block explorers do not link these events visually.
+
+### 2.3 The Bundle Attack
+
+Coordinated wallet networks artificially inflate token metrics:
+
+- Multiple wallets buy simultaneously in the same block
+- Creates false appearance of organic demand
+- Wallets often funded from the same source
+- Difficult to detect without transaction analysis
+
+### 2.4 Holder Concentration Risk
+
+Even "legitimate" tokens can be dangerous:
+
+- Single wallet holding >50% of supply can crash the price
+- Top 10 holders controlling >80% signals coordination
+- LP/bonding curve holdings must be distinguished from whale wallets
 
 ---
 
@@ -70,128 +90,219 @@ Influencers on X (Twitter) promote tokens they do not hold, or tokens they were 
 WhaleShield mitigates these threats through three simultaneous layers of defense.
 
 ### 3.1 Layer 1: The AI Sentinel (The Guard)
-Powered by **Together AI**, this layer provides real-time contract analysis without page reloads.
 
-*   **The "Paint" Mechanism:** Before a user interacts with a "Buy" button on Pump.fun, the WhaleShield extension intercepts the request.
-*   **Simulation:** The AI simulates a "Sell" transaction against the contract in a sandboxed environment.
-*   **Visual Feedback:**
-    *   🟢 **Green Paint:** "Sell Tax: 0%. Safe to trade."
-    *   🔴 **Red Paint:** The "Buy" button is visually covered by a warning block: *"SELL TAX: 100%. HONEYPOT DETECTED."*
-*   **Speed:** Analysis occurs in <50ms via Groq inference.
+Powered by **Together AI** with **Helius** on-chain data, this layer provides real-time contract analysis.
+
+**Data Sources:**
+- **DexScreener:** Market cap, liquidity, volume, age, social links
+- **Helius DAS API:** Token metadata, authorities, transaction history
+- **On-chain RPC:** Holder distribution, supply concentration
+
+**Visual Feedback:**
+- **SAFE (0-49):** Green paint - Low risk, likely legitimate
+- **SUSPICIOUS (50-69):** Yellow paint - Proceed with caution
+- **DANGEROUS (70-89):** Orange paint - High risk indicators
+- **SCAM (90-100):** Red paint - Critical red flags detected
 
 ### 3.2 Layer 2: The Graffiti Layer (Social Proof)
+
 A "Crew-Based" annotation system that sits on top of the browser DOM.
 
-*   **The "Crew":** Users form trusted networks. If User A trusts User B (a known whale/dev), User A inherits User B's visibility settings.
-*   **The Annotations:**
-    *   **Whale Notes:** High-net-worth individuals can leave notes on Pump.fun cards: *"Dev is legit. Known from OG discord."*
-    *   **The Scam Flag:** If 51% of the Crew flags a token as a rug, the Pump.fun card is auto-painted red.
-    *   **Context:** "This token has a tax. This dev rugged $COIN_1."
-*   **Privacy:** Notes are encrypted. Only holders of the **$WHALESHIELD** token can decrypt the Graffiti layer.
+- **Whale Notes:** High-net-worth individuals leave notes on tokens
+- **Scam Flags:** Community-driven warnings with vote weighting
+- **Context:** Historical information about developers and tokens
+- **Privacy:** Notes encrypted, only $WHALESHIELD holders can decrypt
 
 ### 3.3 Layer 3: The Identity Layer (History)
-A visual graph connecting wallets to their history.
 
-*   **The Link:** WhaleShield draws a dotted line between the Developer Wallet on the current coin and their previous deployments.
-*   **The Insight:** If the user clicks the link, WhaleShield retrieves a summary of previous deployments: *"Developer has rugged 4 times. Total stolen: 500 SOL."*
+Visual tracking of developer wallet history:
+
+- **Rug Detection:** Automatic flagging of wallets with dead tokens
+- **Serial Deployer Alert:** Warnings for wallets with 10+ token deployments
+- **Wallet Age:** Brand new wallets flagged as higher risk
+- **Cross-Reference:** Links between related wallets and projects
 
 ---
 
-## 4. The "Hold-to-Use" Gate
+## 4. Risk Analysis Engine
+
+### 4.1 Risk Categories
+
+| Category | What It Analyzes |
+|----------|------------------|
+| **LIQUIDITY** | LP locks, liquidity depth, rug pull vectors |
+| **OWNERSHIP** | Mint authority, freeze authority, admin functions |
+| **CONTRACT** | Bonding curve status, program verification |
+| **SOCIAL** | Website, Twitter, Telegram presence |
+| **DEPLOYER** | Wallet age, deployment history, rug count |
+| **BUNDLE** | Coordinated transactions, same-slot buys |
+| **HOLDERS** | Concentration risk, whale distribution |
+| **TRADING** | Buy/sell ratio, wash trading indicators |
+
+### 4.2 Severity Levels
+
+| Level | Indicator | Meaning |
+|-------|-----------|---------|
+| **LOW** | Minor | Informational, not concerning |
+| **MEDIUM** | Notable | Worth monitoring |
+| **HIGH** | Significant | Material risk factor |
+| **CRITICAL** | Major | Immediate red flag |
+
+### 4.3 Scoring Algorithm
+
+**Base Score Factors:**
+- Token age (<1 day = +20 base)
+- Unknown deployer (+15)
+- Missing social links (+10)
+- Holder concentration (>50% single wallet = +25)
+- Bundle detection (+10-20)
+
+**Score Caps (Established Tokens):**
+- $100M+ market cap, 30+ days: Max score 35
+- $50M+ market cap, 14+ days: Max score 45
+- $10M+ market cap, 7+ days: Max score 55
+
+### 4.4 Anti-Hallucination Safeguards
+
+The AI engine includes strict guardrails:
+- Only cites data explicitly present in context
+- Reports "UNKNOWN" for missing data instead of inventing
+- User-friendly messages (no internal scoring exposed)
+- Validated against actual on-chain data
+
+---
+
+## 5. The "Hold-to-Use" Gate
 
 WhaleShield is free to download, but protected by a **Web3 Access Key**.
 
-### 4.1 The Barrier
-To unlock the **Triple-Layer Shield**, the user must hold a minimum of **1,000 $WHALESHIELD** in their connected wallet.
+### 5.1 The Barrier
 
-*   **No Staking:** There is no locking period, no gas fees for staking, and no smart contract vaults.
-*   **Balance Verification:** The extension performs a client-side RPC check (read-only) to the Solana blockchain.
-    *   `GetTokenBalance(wallet_address, WHALESHIELD_MINT)`
-*   **Presto Activation:**
-    *   If `Balance >= 1,000`: The Shield activates instantly.
-    *   If `Balance < 1,000`: The Shield remains inactive (Gray mode).
+To unlock the **Triple-Layer Shield**, users must hold **1,000 $WHALESHIELD** tokens.
 
-### 4.2 The Economic Mechanism
-This "Hold-to-Use" model serves two purposes:
-1.  **Security:** It prevents bot farms and scammers from abusing the annotation system (Graffiti) by forcing a financial barrier to entry.
-2.  **Utility-Backed Price:** The $WHALESHIELD token derives its value from the safety it provides. To trade safely, one must hold the token.
+- **No Staking:** No locking period, no gas fees, no smart contract vaults
+- **Balance Verification:** Client-side RPC check (read-only)
+- **Instant Activation:** Balance >= 1,000 = Shield activates
+- **Instant Deactivation:** Balance < 1,000 = Gray mode
+
+### 5.2 The Economic Mechanism
+
+1. **Security:** Prevents bot farms and scammers from abusing the Graffiti system
+2. **Utility-Backed Price:** Token value derived from safety it provides
 
 ---
 
-## 5. Technical Architecture
+## 6. Technical Architecture
 
-WhaleShield utilizes a **Serverless, Client-First** architecture to minimize costs and maximize latency.
-
-### 5.1 The Stack
+### 6.1 The Stack
 
 | Component | Technology | Purpose |
-| :--- | :--- | :--- |
-| **Frontend** | **Plasmo (React)** | Overlay Engine & DOM Manipulation. |
-| **Authentication** | **Public RPC (Helius)** | Read-only balance verification ($0 cost). |
-| **Backend** | **Cloudflare Workers** | Serverless API routing & Tokenomics logic. |
-| **Database** | **Supabase (Postgres)** | Stores encrypted "Graffiti" notes. |
-| **AI Inference** | **Together AI** | Real-time contract simulation. |
-| **Cache** | **Cloudflare KV** | Stores recent honeypot scans to reduce AI costs. |
+|-----------|------------|---------|
+| **Extension** | Plasmo (React) | DOM overlay, content scripts |
+| **API** | Cloudflare Workers (Hono) | Serverless routing, caching |
+| **AI Engine** | Together AI (Llama/Gemma) | Contract analysis, risk scoring |
+| **On-Chain Data** | Helius DAS API | Token metadata, transactions |
+| **Market Data** | DexScreener API | Price, volume, liquidity |
+| **Database** | Supabase (Postgres) | Graffiti notes, reputation |
+| **Cache** | Cloudflare KV | Scan results (1-hour TTL) |
 
-### 5.2 The Data Flow
-1.  **User Action:** User visits Pump.fun/coin.
-2.  **Extension:** Detects URL. Checks Wallet for `1,000 $WHALESHIELD`.
-3.  **Graffiti Fetch:** Extension queries Supabase for Crew Notes on this Coin ID.
-4.  **AI Scan:** If Cache is empty, Cloudflare Worker sends Contract Address to Groq. Groq simulates sell. Result saved to Cache.
-5.  **Render:** Extension paints the UI (Green/Red) and overlays the Graffiti notes.
+### 6.2 Data Flow
 
-### 5.3 Cost Optimization
-*   **RPC Calls:** We utilize free-tier Helius RPCs. Since we are Read-Only, we are not rate-limited aggressively.
-*   **AI Costs:** We minimize Together AI token usage via aggressive caching (KV). A coin is only scanned once per hour, serving cached results to 10,000 users thereafter.
+```
+User visits Pump.fun
+       │
+       ▼
+Extension detects token address
+       │
+       ▼
+Check wallet for 1,000 $WHALESHIELD
+       │
+       ▼
+┌──────┴──────┐
+│   Parallel  │
+└──────┬──────┘
+       │
+  ┌────┼────┐
+  ▼    ▼    ▼
+Graffiti  KV   Fresh
+ Notes  Cache  Analysis
+  │      │       │
+  └──────┼───────┘
+         ▼
+   Render Overlay
+   (Paint + Notes)
+```
 
----
+### 6.3 Analysis Pipeline
 
-## 6. Tokenomics
-
-The **$WHALESHIELD** token is the fuel of the ecosystem.
-
-*   **Ticker:** `WHALESHIELD` (Exact match to Product Name for clarity).
-*   **Chain:** Solana (SPL).
-*   **Launchpad:** Pump.fun.
-*   **Total Supply:** 1,000,000,000.
-
-### 6.1 Distribution
-*   **Community:** 80% (Released via Pump.fun Bonding Curve).
-*   **Dev Team:** 10% (Vested 12 months).
-*   **Liquidity/Marketing:** 10%.
-
-### 6.2 Utility
-The token has **zero** intrinsic value other than **Access.**
-*   **Requirement:** 1,000 Tokens ($WHALESHIELD) required to unlock WhaleShield features.
-*   **Self-Correcting:** If a user dumps their tokens below 1,000, they lose their "Scam Paint" and "Whale Notes." The UX degradation incentivizes holding.
-
----
-
-## 7. Roadmap
-
-### Phase 1: The Pump.fun Shield (Q4 2026)
-*   Launch of $WHALESHIELD on Pump.fun.
-*   Release of Chrome/Brave/Arc Extension.
-*   **Core Features:** AI Honeypot Detection + Basic Graffiti Notes.
-
-### Phase 2: The Twitter Layer (Q1 2027)
-*   Expansion to X (Twitter).
-*   **Features:** "Proof of Trade" (Verifying influencer wallets via Etherscan API) and Thread TL;DRs.
-*   **Integration:** Whale Graffiti on tweet threads.
-
-### Phase 3: The Mobile Bridge (Q2 2027)
-*   Launch of "Nexus Link" (Deep Links).
-*   Mobile users can view WhaleShield profiles and Scam Paint via a web-view wrapper, bypassing App Store limitations.
+1. **Phase 1:** Fetch DexScreener + Pump.fun data (parallel)
+2. **Phase 2:** Fetch Helius metadata + holder data (parallel)
+3. **Phase 3:** Analyze creator wallet history
+4. **Phase 4:** Detect bundle patterns in transactions
+5. **Phase 5:** Build context string for AI
+6. **Phase 6:** AI analysis with Together AI
+7. **Phase 7:** Apply hardcoded rules (caps, minimums)
+8. **Phase 8:** Cache result in KV + Supabase
 
 ---
 
-## 8. Conclusion
+## 7. Tokenomics
 
-The Solana ecosystem is a financial engine room, but it is currently dark. Investors are fumbling in the dark, praying not to touch the live wire.
+### 7.1 Token Details
 
-**WhaleShield** turns on the lights.
+- **Name:** WHALESHIELD
+- **Chain:** Solana (SPL)
+- **Launchpad:** Pump.fun
+- **Total Supply:** 1,000,000,000
 
-By democratizing access to AI-grade security and high-signal social consensus, we do not just protect capital; we restore trust to the memecoin economy.
+### 7.2 Distribution
+
+- **Community:** 80% (Pump.fun bonding curve)
+- **Development:** 10% (12-month vest)
+- **Liquidity/Marketing:** 10%
+
+### 7.3 Utility
+
+The token has **one purpose: Access.**
+
+- **Requirement:** 1,000 tokens to unlock features
+- **Self-Correcting:** Selling below threshold = loss of access
+- **No Inflation:** Fixed supply, no minting capability
+
+---
+
+## 8. Roadmap
+
+### Phase 1: The Pump.fun Shield (Q1 2026) - COMPLETE
+- Launch $WHALESHIELD on Pump.fun
+- Chrome/Brave/Arc extension release
+- AI honeypot detection + Basic Graffiti
+
+### Phase 2: Enhanced Analysis (Q1 2026) - CURRENT
+- Helius integration for on-chain data
+- Bundle detection algorithm
+- Creator wallet history tracking
+- Anti-hallucination AI improvements
+
+### Phase 3: The Twitter Layer (Q2 2026)
+- X (Twitter) content script
+- Influencer wallet verification
+- Thread-level risk annotations
+
+### Phase 4: Mobile Bridge (Q3 2026)
+- Deep link support for mobile
+- Web-view wrapper for iOS/Android
+- Push notifications for watched tokens
+
+---
+
+## 9. Conclusion
+
+The Solana ecosystem is a financial engine room, but it operates in the dark. Investors fumble through, hoping not to touch the live wire.
+
+**WhaleShield turns on the lights.**
+
+By combining AI-powered analysis with community intelligence, we don't just protect capital—we restore trust to the memecoin economy.
 
 **$WHALESHIELD is not a token. It is the key to the safe room.**
 
@@ -199,6 +310,6 @@ By democratizing access to AI-grade security and high-signal social consensus, w
 
 ## Disclaimer
 
-*WhaleShield is a software tool designed for educational and informational purposes only. It does not guarantee safety, and users should always perform their own due diligence (DYOR). WhaleShield is not responsible for any financial losses incurred while trading memecoins. The $WHALESHIELD token is a utility token with no implied promise of profit or financial return.*
+*WhaleShield is a software tool designed for educational and informational purposes only. It does not guarantee safety, and users should always perform their own due diligence (DYOR). WhaleShield is not responsible for any financial losses incurred while trading. The $WHALESHIELD token is a utility token with no implied promise of profit or financial return.*
 
-**© 2026 WhaleShield Protocol.**
+**Copyright 2026 WhaleShield Protocol.**
