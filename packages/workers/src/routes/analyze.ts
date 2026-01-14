@@ -10,15 +10,18 @@ import {
   fetchHeliusTokenMetadata,
   analyzeCreatorWallet,
   analyzeTokenTransactions,
+  analyzeDevSelling,
   buildHeliusContext,
   findTokenCreator,
   CreatorAnalysis,
+  DevSellingAnalysis,
 } from '../services/helius';
 
 interface AnalysisData {
   dexScreener: DexScreenerData | null;
   pumpFun: PumpFunTokenData | null;
   creator: CreatorAnalysis | null;
+  devSelling: DevSellingAnalysis | null;
   isPumpFun: boolean;
   ageInDays: number;
   marketCapUsd: number;
@@ -323,6 +326,58 @@ function applyHardcodedRules(
   }
 
   // ============================================
+  // RULE 9: DEV SELLING DETECTION (CRITICAL)
+  // ============================================
+  // If the creator/dev sells their tokens, it's a MASSIVE red flag
+  const { devSelling } = data;
+
+  if (devSelling && devSelling.hasSold) {
+    const { percentSold, severity, message } = devSelling;
+
+    if (severity === 'CRITICAL') {
+      // Dev dumped 90%+ - almost certainly a rug
+      if (adjustedScore < 90) {
+        adjustedScore = 90;
+      }
+      additionalFlags.push({
+        type: 'DEPLOYER',
+        severity: 'CRITICAL',
+        message: `🚨 ${message}`,
+      });
+    } else if (severity === 'HIGH') {
+      // Dev sold 70%+ - very concerning
+      if (adjustedScore < 80) {
+        adjustedScore = 80;
+      }
+      additionalFlags.push({
+        type: 'DEPLOYER',
+        severity: 'CRITICAL',
+        message: `⚠️ ${message}`,
+      });
+    } else if (severity === 'MEDIUM') {
+      // Dev sold 50%+ - concerning
+      if (adjustedScore < 70) {
+        adjustedScore = 70;
+      }
+      additionalFlags.push({
+        type: 'DEPLOYER',
+        severity: 'HIGH',
+        message,
+      });
+    } else if (severity === 'LOW' && percentSold >= 20) {
+      // Dev sold 20%+ - worth noting
+      if (adjustedScore < 60) {
+        adjustedScore = 60;
+      }
+      additionalFlags.push({
+        type: 'DEPLOYER',
+        severity: 'MEDIUM',
+        message,
+      });
+    }
+  }
+
+  // ============================================
   // DETERMINE FINAL RISK LEVEL
   // ============================================
   if (adjustedScore >= 90) {
@@ -406,6 +461,7 @@ analyzeRoutes.post('/', async (c) => {
       dexScreener: null,
       pumpFun: null,
       creator: null,
+      devSelling: null,
       isPumpFun: isPumpFunToken(body.tokenAddress),
       ageInDays: 0,
       marketCapUsd: 0,
@@ -490,6 +546,20 @@ analyzeRoutes.post('/', async (c) => {
       if (creatorAnalysis) {
         analysisData.creator = creatorAnalysis;
       }
+
+      // Analyze if the dev has sold their tokens - CRITICAL CHECK
+      const devSellingAnalysis = await analyzeDevSelling(
+        creatorAddress,
+        body.tokenAddress,
+        heliusApiKey
+      ).catch(err => {
+        console.warn('Dev selling analysis failed:', err);
+        return null;
+      });
+
+      if (devSellingAnalysis) {
+        analysisData.devSelling = devSellingAnalysis;
+      }
     }
 
     // ============================================
@@ -553,6 +623,23 @@ analyzeRoutes.post('/', async (c) => {
 
     // Add Helius data (metadata, creator analysis, tx analysis)
     combinedContext += buildHeliusContext(heliusMetadata, analysisData.creator, txAnalysis);
+
+    // Add dev selling analysis - CRITICAL
+    if (analysisData.devSelling && analysisData.devSelling.hasSold) {
+      combinedContext += `\n\n🚨 DEV SELLING ANALYSIS:\n`;
+      combinedContext += `- Dev Has Sold: YES\n`;
+      combinedContext += `- Percent Sold: ${analysisData.devSelling.percentSold.toFixed(1)}%\n`;
+      combinedContext += `- Total Sales: ${analysisData.devSelling.sellCount}\n`;
+      combinedContext += `- Severity: ${analysisData.devSelling.severity}\n`;
+      combinedContext += `- Status: ${analysisData.devSelling.message}\n`;
+      if (analysisData.devSelling.severity === 'CRITICAL' || analysisData.devSelling.severity === 'HIGH') {
+        combinedContext += `\n⚠️ MAJOR RED FLAG: Developer is dumping tokens!\n`;
+      }
+    } else if (analysisData.devSelling) {
+      combinedContext += `\n\nDEV SELLING ANALYSIS:\n`;
+      combinedContext += `- Dev Has Sold: NO ✓\n`;
+      combinedContext += `- Status: Creator still holding\n`;
+    }
 
     // Add on-chain holder data
     if (holderData) {
@@ -634,6 +721,14 @@ analyzeRoutes.post('/', async (c) => {
         walletAge: analysisData.creator.walletAge,
         tokensCreated: analysisData.creator.tokensCreated,
         ruggedTokens: analysisData.creator.ruggedTokens,
+      } : null,
+      // Dev Selling Analysis
+      devSelling: analysisData.devSelling ? {
+        hasSold: analysisData.devSelling.hasSold,
+        percentSold: analysisData.devSelling.percentSold,
+        sellCount: analysisData.devSelling.sellCount,
+        severity: analysisData.devSelling.severity,
+        message: analysisData.devSelling.message,
       } : null,
       // Social Links
       socials: {

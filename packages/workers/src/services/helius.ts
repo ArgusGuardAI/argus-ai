@@ -12,15 +12,348 @@ const HELIUS_API_BASE = 'https://api.helius.xyz/v0';
 const HELIUS_RPC_BASE = 'https://mainnet.helius-rpc.com';
 
 /**
- * Find the original creator/deployer of a token by looking at its first transaction
- * This is a fallback when pump.fun API is unavailable
+ * Find the original creator/deployer of a token
+ * For pump.fun tokens: Uses DexScreener to get creation timestamp, then finds the exact slot
+ * For other tokens: Falls back to signature-based search
  */
 export async function findTokenCreator(
   tokenAddress: string,
   apiKey: string
 ): Promise<string | null> {
   try {
-    // Method 1: Get token signatures and find the earliest one
+    console.log(`[Helius] Finding creator for token ${tokenAddress.slice(0, 8)}...`);
+
+    // Check if this is a pump.fun token (address ends in 'pump')
+    const isPumpFun = tokenAddress.toLowerCase().endsWith('pump');
+
+    if (isPumpFun) {
+      // For pump.fun tokens, use the reliable slot-based method
+      const creator = await findPumpFunCreator(tokenAddress, apiKey);
+      if (creator) return creator;
+    }
+
+    // Fallback: signature-based search (works for tokens with < 1000 txs)
+    return await findCreatorBySignatures(tokenAddress, apiKey);
+  } catch (error) {
+    console.error('[Helius] Error finding token creator:', error);
+    return null;
+  }
+}
+
+/**
+ * Find pump.fun token creator by locating the exact creation slot
+ * Uses binary search to quickly find the slot matching the creation timestamp
+ */
+async function findPumpFunCreator(
+  tokenAddress: string,
+  apiKey: string
+): Promise<string | null> {
+  try {
+    console.log(`[Helius] Finding pump.fun creator for ${tokenAddress.slice(0, 8)}...`);
+
+    // Step 1: Get creation timestamp from DexScreener
+    const dexResponse = await fetch(
+      `https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`
+    );
+
+    if (!dexResponse.ok) {
+      console.warn(`[Helius] DexScreener request failed: ${dexResponse.status}`);
+      return null;
+    }
+
+    const dexData = await dexResponse.json() as {
+      pairs?: Array<{
+        dexId: string;
+        pairCreatedAt?: number;
+      }>;
+    };
+
+    // Find the pumpfun pair (original creation)
+    const pumpfunPair = dexData.pairs?.find(p => p.dexId === 'pumpfun');
+    if (!pumpfunPair?.pairCreatedAt) {
+      console.warn(`[Helius] No pump.fun pair found in DexScreener`);
+      return null;
+    }
+
+    const creationTimestamp = Math.floor(pumpfunPair.pairCreatedAt / 1000);
+    console.log(`[Helius] Pump.fun creation timestamp: ${creationTimestamp}`);
+
+    // Step 2: Binary search to find the slot with matching timestamp
+    const targetSlot = await binarySearchSlotByTime(creationTimestamp, apiKey);
+    if (!targetSlot) {
+      console.warn(`[Helius] Could not find slot for timestamp`);
+      return null;
+    }
+
+    console.log(`[Helius] Found slot ${targetSlot} for timestamp ${creationTimestamp}`);
+
+    // Step 3: Search this slot and nearby for the CREATE transaction
+    for (let offset = -5; offset <= 5; offset++) {
+      const creator = await findCreateTxInSlot(tokenAddress, targetSlot + offset, apiKey);
+      if (creator) {
+        console.log(`[Helius] Found pump.fun creator at slot ${targetSlot + offset}: ${creator}`);
+        return creator;
+      }
+    }
+
+    console.warn(`[Helius] Could not find CREATE transaction in slots around ${targetSlot}`);
+    return null;
+  } catch (error) {
+    console.error('[Helius] Error finding pump.fun creator:', error);
+    return null;
+  }
+}
+
+/**
+ * Binary search to find a slot with a specific timestamp
+ * Much faster than linear search - finds slot in ~15 iterations
+ */
+async function binarySearchSlotByTime(
+  targetTimestamp: number,
+  apiKey: string
+): Promise<number | null> {
+  try {
+    // Get current slot as upper bound
+    const currentSlotResponse = await fetch(
+      `${HELIUS_RPC_BASE}/?api-key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 'get-slot',
+          method: 'getSlot',
+          params: [],
+        }),
+      }
+    );
+
+    const currentSlotData = await currentSlotResponse.json() as { result?: number };
+    const currentSlot = currentSlotData.result;
+    if (!currentSlot) return null;
+
+    // Estimate search range - slot ~2.5/sec, but add buffer
+    const timeDiff = Math.floor(Date.now() / 1000) - targetTimestamp;
+    const estimatedSlotDiff = Math.floor(timeDiff * 2.5);
+
+    // Binary search within range
+    let low = currentSlot - estimatedSlotDiff - 10000; // Add buffer
+    let high = currentSlot - estimatedSlotDiff + 10000;
+    let bestSlot = null;
+    let bestDiff = Infinity;
+
+    // Helper to get block time
+    const getBlockTime = async (slot: number): Promise<number | null> => {
+      const resp = await fetch(
+        `${HELIUS_RPC_BASE}/?api-key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: `time-${slot}`,
+            method: 'getBlockTime',
+            params: [slot],
+          }),
+        }
+      );
+      const data = await resp.json() as { result?: number };
+      return data.result || null;
+    };
+
+    // Binary search (~15 iterations max)
+    for (let i = 0; i < 20 && low <= high; i++) {
+      const mid = Math.floor((low + high) / 2);
+      const midTime = await getBlockTime(mid);
+
+      if (!midTime) {
+        // Slot doesn't exist, narrow from above
+        high = mid - 1;
+        continue;
+      }
+
+      const diff = midTime - targetTimestamp;
+
+      // Track best match
+      if (Math.abs(diff) < bestDiff) {
+        bestDiff = Math.abs(diff);
+        bestSlot = mid;
+      }
+
+      // If we're within 5 seconds, good enough
+      if (Math.abs(diff) <= 5) {
+        return mid;
+      }
+
+      if (diff < 0) {
+        // midTime is before target, search later slots
+        low = mid + 1;
+      } else {
+        // midTime is after target, search earlier slots
+        high = mid - 1;
+      }
+    }
+
+    return bestSlot;
+  } catch (error) {
+    console.error('[Helius] Binary search error:', error);
+    return null;
+  }
+}
+
+/**
+ * Convert a Unix timestamp to a Solana slot number (simple estimation)
+ */
+async function timestampToSlot(
+  targetTimestamp: number,
+  apiKey: string
+): Promise<number | null> {
+  try {
+    // Get a recent slot as reference point
+    const recentSlotResponse = await fetch(
+      `${HELIUS_RPC_BASE}/?api-key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 'get-slot',
+          method: 'getSlot',
+          params: [],
+        }),
+      }
+    );
+
+    const recentSlotData = await recentSlotResponse.json() as { result?: number };
+    const recentSlot = recentSlotData.result;
+    if (!recentSlot) return null;
+
+    // Get timestamp for recent slot
+    const recentTimeResponse = await fetch(
+      `${HELIUS_RPC_BASE}/?api-key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 'get-time',
+          method: 'getBlockTime',
+          params: [recentSlot],
+        }),
+      }
+    );
+
+    const recentTimeData = await recentTimeResponse.json() as { result?: number };
+    const recentTimestamp = recentTimeData.result;
+    if (!recentTimestamp) return null;
+
+    // Calculate estimated slot (~2.5 slots per second)
+    const timeDiff = recentTimestamp - targetTimestamp;
+    const slotDiff = Math.floor(timeDiff * 2.5);
+    const estimatedSlot = recentSlot - slotDiff;
+
+    console.log(`[Helius] Estimated slot: ${estimatedSlot} (reference: ${recentSlot}, diff: ${slotDiff})`);
+    return estimatedSlot;
+  } catch (error) {
+    console.error('[Helius] Error converting timestamp to slot:', error);
+    return null;
+  }
+}
+
+/**
+ * Find CREATE transaction for a token in a specific slot
+ */
+async function findCreateTxInSlot(
+  tokenAddress: string,
+  slot: number,
+  apiKey: string
+): Promise<string | null> {
+  try {
+    // Get block with full transaction details
+    const blockResponse = await fetch(
+      `${HELIUS_RPC_BASE}/?api-key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 'get-block',
+          method: 'getBlock',
+          params: [slot, {
+            encoding: 'jsonParsed',
+            transactionDetails: 'full',
+            maxSupportedTransactionVersion: 0,
+          }],
+        }),
+      }
+    );
+
+    const blockData = await blockResponse.json() as {
+      result?: {
+        transactions?: Array<{
+          transaction: {
+            signatures: string[];
+            message: {
+              accountKeys: Array<{ pubkey: string }>;
+            };
+          };
+        }>;
+      };
+    };
+
+    const transactions = blockData.result?.transactions;
+    if (!transactions) return null;
+
+    // Find transactions involving our token
+    const tokenTxs = transactions.filter(tx =>
+      tx.transaction.message.accountKeys.some(key => key.pubkey === tokenAddress)
+    );
+
+    if (tokenTxs.length === 0) return null;
+
+    // Get signatures and parse them with Helius to find the CREATE tx
+    const signatures = tokenTxs.slice(0, 10).map(tx => tx.transaction.signatures[0]);
+
+    const parseResponse = await fetch(
+      `${HELIUS_API_BASE}/transactions/?api-key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transactions: signatures }),
+      }
+    );
+
+    const parsedTxs = await parseResponse.json() as Array<{
+      feePayer: string;
+      type: string;
+      source?: string;
+    }>;
+
+    // Find the CREATE transaction from PUMP_FUN - ONLY return if we find the actual creation
+    const createTx = parsedTxs.find(tx =>
+      tx.type === 'CREATE' && tx.source === 'PUMP_FUN'
+    );
+
+    if (createTx) {
+      return createTx.feePayer;
+    }
+
+    // No CREATE transaction found in this slot - return null to keep searching
+    return null;
+  } catch (error) {
+    console.error(`[Helius] Error searching slot ${slot}:`, error);
+    return null;
+  }
+}
+
+/**
+ * Fallback: Find creator by searching signatures (works for low-volume tokens)
+ */
+async function findCreatorBySignatures(
+  tokenAddress: string,
+  apiKey: string
+): Promise<string | null> {
+  try {
     const signaturesResponse = await fetch(
       `${HELIUS_RPC_BASE}/?api-key=${apiKey}`,
       {
@@ -30,96 +363,43 @@ export async function findTokenCreator(
           jsonrpc: '2.0',
           id: 'get-signatures',
           method: 'getSignaturesForAddress',
-          params: [
-            tokenAddress,
-            { limit: 1000 } // Get as many as possible to find the first
-          ],
+          params: [tokenAddress, { limit: 1000 }],
         }),
       }
     );
 
-    if (!signaturesResponse.ok) {
-      console.warn(`Failed to get signatures: ${signaturesResponse.status}`);
-      return null;
-    }
-
     const signaturesData = await signaturesResponse.json() as {
-      result?: Array<{
-        signature: string;
-        slot: number;
-        blockTime?: number;
-      }>;
+      result?: Array<{ signature: string; slot: number }>;
     };
 
     const signatures = signaturesData.result;
-    if (!signatures || signatures.length === 0) {
-      console.warn('No signatures found for token');
+    if (!signatures || signatures.length === 0) return null;
+
+    // If we got 1000 signatures, we can't reliably find the first
+    if (signatures.length >= 1000) {
+      console.warn(`[Helius] Token has 1000+ txs - cannot reliably find creator via signatures`);
       return null;
     }
 
-    // Get the earliest signature (last in the array since they're returned newest-first)
-    const earliestSignature = signatures[signatures.length - 1].signature;
-    console.log(`[Helius] Found earliest tx: ${earliestSignature}`);
+    // Find earliest signature
+    const earliest = signatures.reduce((min, curr) =>
+      curr.slot < min.slot ? curr : min
+    );
 
-    // Method 2: Parse the earliest transaction to find the creator
+    // Parse the transaction
     const txResponse = await fetch(
       `${HELIUS_API_BASE}/transactions/?api-key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          transactions: [earliestSignature],
-        }),
+        body: JSON.stringify({ transactions: [earliest.signature] }),
       }
     );
 
-    if (!txResponse.ok) {
-      console.warn(`Failed to parse transaction: ${txResponse.status}`);
-      return null;
-    }
-
-    const txData = await txResponse.json() as Array<{
-      signature: string;
-      feePayer: string;
-      type: string;
-      source?: string;
-      description?: string;
-      tokenTransfers?: Array<{
-        mint: string;
-        fromUserAccount: string;
-        toUserAccount: string;
-      }>;
-      accountData?: Array<{
-        account: string;
-        nativeBalanceChange: number;
-        tokenBalanceChanges?: Array<{
-          mint: string;
-          rawTokenAmount: {
-            tokenAmount: string;
-          };
-          userAccount: string;
-        }>;
-      }>;
-    }>;
-
-    if (!txData || txData.length === 0) {
-      console.warn('Could not parse earliest transaction');
-      return null;
-    }
-
-    const earliestTx = txData[0];
-
-    // The fee payer of the first transaction is typically the creator
-    const creator = earliestTx.feePayer;
-
-    if (creator) {
-      console.log(`[Helius] Found token creator: ${creator}`);
-      return creator;
-    }
-
-    return null;
+    const txData = await txResponse.json() as Array<{ feePayer: string }>;
+    return txData[0]?.feePayer || null;
   } catch (error) {
-    console.error('Error finding token creator:', error);
+    console.error('[Helius] Error in signature-based search:', error);
     return null;
   }
 }
@@ -201,6 +481,30 @@ export interface LargeTransaction {
   amountUsd: number;
   wallet: string;
   timestamp: number;
+}
+
+export interface DevSellingAnalysis {
+  creatorAddress: string;
+  tokenAddress: string;
+
+  // Did dev sell?
+  hasSold: boolean;
+
+  // How much did they sell?
+  totalSold: number; // raw token amount
+  percentSold: number; // % of their original holdings
+
+  // Timing
+  firstSellTimestamp?: number;
+  lastSellTimestamp?: number;
+  sellCount: number;
+
+  // Current holdings
+  currentBalance: number;
+
+  // Risk assessment
+  severity: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  message: string;
 }
 
 /**
@@ -613,6 +917,204 @@ export async function analyzeTokenTransactions(
 
   } catch (error) {
     console.error('Transaction analysis error:', error);
+  }
+
+  return analysis;
+}
+
+/**
+ * Analyze if the creator/dev has sold their tokens
+ * This is a CRITICAL indicator - if the dev dumps, it's almost certainly a rug
+ */
+export async function analyzeDevSelling(
+  creatorAddress: string,
+  tokenAddress: string,
+  apiKey: string
+): Promise<DevSellingAnalysis> {
+  const analysis: DevSellingAnalysis = {
+    creatorAddress,
+    tokenAddress,
+    hasSold: false,
+    totalSold: 0,
+    percentSold: 0,
+    sellCount: 0,
+    currentBalance: 0,
+    severity: 'NONE',
+    message: 'No dev selling detected',
+  };
+
+  try {
+    // Step 1: Get creator's transaction history for this specific token
+    const response = await fetch(
+      `${HELIUS_API_BASE}/addresses/${creatorAddress}/transactions?api-key=${apiKey}&type=SWAP&limit=100`
+    );
+
+    if (!response.ok) {
+      console.warn(`[DevSelling] Failed to fetch creator transactions: ${response.status}`);
+      return analysis;
+    }
+
+    const transactions = await response.json() as Array<{
+      signature: string;
+      timestamp: number;
+      type: string;
+      feePayer: string;
+      description?: string;
+      source?: string;
+      tokenTransfers?: Array<{
+        mint: string;
+        fromUserAccount: string;
+        toUserAccount: string;
+        tokenAmount: number;
+      }>;
+      nativeTransfers?: Array<{
+        fromUserAccount: string;
+        toUserAccount: string;
+        amount: number;
+      }>;
+    }>;
+
+    // Step 2: Find all ACTUAL SELLS (not just transfers) of this token by the creator
+    // A real sell means: creator sent tokens AND received SOL/value in return
+    let totalReceived = 0; // How much they originally got (mints + buys)
+    let totalSoldAmount = 0;
+    let sellTimestamps: number[] = [];
+
+    // Known DEX/swap keywords in transaction descriptions
+    const sellKeywords = ['sold', 'swapped', 'swap'];
+    const dexSources = ['RAYDIUM', 'JUPITER', 'ORCA', 'PUMP_FUN', 'METEORA'];
+
+    for (const tx of transactions) {
+      if (!tx.tokenTransfers) continue;
+
+      const desc = (tx.description || '').toLowerCase();
+      const source = (tx.source || '').toUpperCase();
+
+      // Check if this is actually a DEX swap transaction
+      const isSellDescription = sellKeywords.some(kw => desc.includes(kw));
+      const isDexSource = dexSources.some(dex => source.includes(dex));
+      const isSwapType = tx.type === 'SWAP';
+
+      // Check if creator received SOL in this transaction (indicates real sale)
+      const creatorReceivedSol = tx.nativeTransfers?.some(
+        nt => nt.toUserAccount === creatorAddress && nt.amount > 0
+      ) || false;
+
+      for (const transfer of tx.tokenTransfers) {
+        // Only look at transfers of THIS token
+        if (transfer.mint !== tokenAddress) continue;
+
+        // Creator RECEIVING tokens (original allocation or buys)
+        if (transfer.toUserAccount === creatorAddress) {
+          totalReceived += transfer.tokenAmount;
+        }
+
+        // Creator SELLING tokens - must be a REAL DEX SELL, not just a transfer
+        // Criteria: Creator sent tokens AND (received SOL OR it's a known DEX swap)
+        if (transfer.fromUserAccount === creatorAddress) {
+          const isRealSell = creatorReceivedSol || isSellDescription || isDexSource || isSwapType;
+
+          if (isRealSell) {
+            totalSoldAmount += transfer.tokenAmount;
+            sellTimestamps.push(tx.timestamp);
+            analysis.sellCount++;
+            console.log(`[DevSelling] Found real sell: ${transfer.tokenAmount} tokens, source=${source}, desc=${desc.slice(0, 50)}`);
+          } else {
+            console.log(`[DevSelling] Skipped transfer (not a DEX sell): ${transfer.tokenAmount} tokens`);
+          }
+        }
+      }
+    }
+
+    // Step 3: Get current token balance
+    try {
+      const balanceResponse = await fetch(
+        `${HELIUS_RPC_BASE}/?api-key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 'get-token-accounts',
+            method: 'getTokenAccountsByOwner',
+            params: [
+              creatorAddress,
+              { mint: tokenAddress },
+              { encoding: 'jsonParsed' }
+            ],
+          }),
+        }
+      );
+
+      if (balanceResponse.ok) {
+        const balanceData = await balanceResponse.json() as {
+          result?: {
+            value?: Array<{
+              account: {
+                data: {
+                  parsed: {
+                    info: {
+                      tokenAmount: {
+                        uiAmount: number;
+                      };
+                    };
+                  };
+                };
+              };
+            }>;
+          };
+        };
+
+        const tokenAccounts = balanceData.result?.value || [];
+        for (const account of tokenAccounts) {
+          analysis.currentBalance += account.account.data.parsed.info.tokenAmount.uiAmount || 0;
+        }
+      }
+    } catch (err) {
+      console.warn('[DevSelling] Failed to get current balance:', err);
+    }
+
+    // Step 4: Calculate selling metrics
+    if (totalSoldAmount > 0) {
+      analysis.hasSold = true;
+      analysis.totalSold = totalSoldAmount;
+
+      // Calculate percent sold
+      // Original holdings = what they received OR current + sold (whichever is higher)
+      const originalHoldings = Math.max(totalReceived, analysis.currentBalance + totalSoldAmount);
+      if (originalHoldings > 0) {
+        analysis.percentSold = (totalSoldAmount / originalHoldings) * 100;
+      }
+
+      // Timestamps
+      if (sellTimestamps.length > 0) {
+        analysis.firstSellTimestamp = Math.min(...sellTimestamps);
+        analysis.lastSellTimestamp = Math.max(...sellTimestamps);
+      }
+
+      // Determine severity based on percent sold
+      if (analysis.percentSold >= 90) {
+        analysis.severity = 'CRITICAL';
+        analysis.message = `DEV DUMPED: Creator sold ${analysis.percentSold.toFixed(0)}% of tokens (${analysis.sellCount} sales)`;
+      } else if (analysis.percentSold >= 70) {
+        analysis.severity = 'HIGH';
+        analysis.message = `DEV SELLING HEAVILY: Creator sold ${analysis.percentSold.toFixed(0)}% of tokens`;
+      } else if (analysis.percentSold >= 50) {
+        analysis.severity = 'MEDIUM';
+        analysis.message = `Dev sold ${analysis.percentSold.toFixed(0)}% of holdings`;
+      } else if (analysis.percentSold >= 20) {
+        analysis.severity = 'LOW';
+        analysis.message = `Dev sold ${analysis.percentSold.toFixed(0)}% - taking some profit`;
+      } else {
+        analysis.severity = 'NONE';
+        analysis.message = `Minor dev selling (${analysis.percentSold.toFixed(0)}%)`;
+      }
+    }
+
+    console.log(`[DevSelling] Creator ${creatorAddress.slice(0, 8)}: sold ${analysis.percentSold.toFixed(1)}% (${analysis.sellCount} txs)`);
+
+  } catch (error) {
+    console.error('[DevSelling] Analysis error:', error);
   }
 
   return analysis;
