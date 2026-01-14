@@ -5,79 +5,234 @@ import { analyzeForHoneypot } from '../services/together-ai';
 import { createSupabaseClient, cacheScanResult } from '../services/supabase';
 import { fetchTokenData, buildOnChainContext } from '../services/solana-data';
 import { fetchDexScreenerData, buildMarketContext, DexScreenerData } from '../services/dexscreener';
-import { fetchPumpFunData, buildPumpFunContext, isPumpFunToken } from '../services/pumpfun';
+import { fetchPumpFunData, buildPumpFunContext, isPumpFunToken, PumpFunTokenData } from '../services/pumpfun';
+import {
+  fetchHeliusTokenMetadata,
+  analyzeCreatorWallet,
+  analyzeTokenTransactions,
+  buildHeliusContext,
+  CreatorAnalysis,
+} from '../services/helius';
+
+interface AnalysisData {
+  dexScreener: DexScreenerData | null;
+  pumpFun: PumpFunTokenData | null;
+  creator: CreatorAnalysis | null;
+  isPumpFun: boolean;
+  ageInDays: number;
+  marketCapUsd: number;
+  liquidityUsd: number;
+  hasUnknownDeployer: boolean;
+  hasMintAuthority: boolean;
+  hasFreezeAuthority: boolean;
+}
 
 /**
  * Apply hardcoded minimum score rules for critical red flags
- * Only applies to DEX tokens (not pump.fun bonding curve tokens)
+ * These rules OVERRIDE the AI score when specific conditions are met
  */
 function applyHardcodedRules(
   result: HoneypotResult,
-  dexData: DexScreenerData | null,
-  isPumpFun: boolean
+  data: AnalysisData
 ): HoneypotResult {
-  // Don't apply liquidity rules to pump.fun tokens (they use bonding curves)
-  if (isPumpFun) {
-    return result;
-  }
-
-  // No DexScreener data available - can't apply rules
-  if (!dexData) {
-    return result;
-  }
-
   let adjustedScore = result.riskScore;
   let adjustedLevel = result.riskLevel;
   const additionalFlags: HoneypotFlag[] = [];
 
-  const liquidityUsd = dexData.liquidityUsd || 0;
-  const ageInDays = dexData.ageInDays || 0;
+  const { dexScreener, pumpFun, creator, isPumpFun, ageInDays, liquidityUsd, marketCapUsd } = data;
 
-  // Rule 1: Zero or near-zero liquidity = minimum DANGEROUS (85)
-  if (liquidityUsd < 100) {
-    if (adjustedScore < 90) {
-      adjustedScore = 90;
-      additionalFlags.push({
-        type: 'LIQUIDITY',
-        severity: 'CRITICAL',
-        message: `CRITICAL: Liquidity is $${liquidityUsd.toFixed(2)} - token can be rugged instantly`,
-      });
+  // ============================================
+  // RULE 1: CREATOR/DEPLOYER RISK (CRITICAL)
+  // ============================================
+  if (creator) {
+    // Previous rugs = immediate high risk
+    if (creator.ruggedTokens > 0) {
+      const penalty = Math.min(creator.ruggedTokens * 20, 50);
+      if (adjustedScore < 70 + penalty / 2) {
+        adjustedScore = Math.min(95, 70 + penalty / 2);
+        additionalFlags.push({
+          type: 'DEPLOYER',
+          severity: 'CRITICAL',
+          message: `CRITICAL: Creator has ${creator.ruggedTokens} previous dead/rugged tokens`,
+        });
+      }
+    }
+
+    // Brand new wallet = higher risk baseline
+    if (creator.walletAge === 0) {
+      if (adjustedScore < 65) {
+        adjustedScore = 65;
+        additionalFlags.push({
+          type: 'DEPLOYER',
+          severity: 'HIGH',
+          message: 'Creator wallet is brand new (0 days old)',
+        });
+      }
+    } else if (creator.walletAge < 7) {
+      if (adjustedScore < 55) {
+        adjustedScore = 55;
+        additionalFlags.push({
+          type: 'DEPLOYER',
+          severity: 'MEDIUM',
+          message: `Creator wallet is very new (${creator.walletAge} days old)`,
+        });
+      }
+    }
+
+    // Serial token creator
+    if (creator.tokensCreated > 10) {
+      if (adjustedScore < 60) {
+        adjustedScore = 60;
+        additionalFlags.push({
+          type: 'DEPLOYER',
+          severity: 'HIGH',
+          message: `Serial token creator: ${creator.tokensCreated} tokens deployed`,
+        });
+      }
     }
   }
-  // Rule 2: Very low liquidity (<$1000) = minimum SUSPICIOUS (75)
-  else if (liquidityUsd < 1000) {
-    if (adjustedScore < 80) {
-      adjustedScore = 80;
+
+  // Unknown deployer = risk flag
+  if (data.hasUnknownDeployer) {
+    if (adjustedScore < 55) {
+      adjustedScore = 55;
       additionalFlags.push({
-        type: 'LIQUIDITY',
-        severity: 'HIGH',
-        message: `Very low liquidity ($${liquidityUsd.toFixed(2)}) - high rug pull risk`,
-      });
-    }
-  }
-  // Rule 3: Low liquidity (<$10,000) with new token = minimum 70
-  else if (liquidityUsd < 10000 && ageInDays < 3) {
-    if (adjustedScore < 70) {
-      adjustedScore = 70;
-      additionalFlags.push({
-        type: 'LIQUIDITY',
+        type: 'DEPLOYER',
         severity: 'MEDIUM',
-        message: `Low liquidity ($${liquidityUsd.toFixed(2)}) on new token (${ageInDays} days old)`,
+        message: 'Deployer/creator information unavailable',
       });
     }
   }
 
-  // Rule 4: Brand new token (<1 day) with any liquidity issues = minimum 75
-  if (ageInDays < 1 && liquidityUsd < 50000) {
-    if (adjustedScore < 75) {
-      adjustedScore = 75;
+  // ============================================
+  // RULE 2: TOKEN AGE RISK
+  // ============================================
+  if (ageInDays < 1) {
+    // Brand new token - minimum score based on other factors
+    const baseMinScore = isPumpFun ? 50 : 60;
+    if (adjustedScore < baseMinScore) {
+      adjustedScore = baseMinScore;
+      additionalFlags.push({
+        type: 'CONTRACT',
+        severity: 'MEDIUM',
+        message: `Very new token (<1 day old) - exercise caution`,
+      });
     }
   }
 
-  // Determine risk level based on adjusted score
+  // ============================================
+  // RULE 3: LIQUIDITY RULES (NON-PUMP.FUN)
+  // ============================================
+  if (!isPumpFun && dexScreener) {
+    // Zero or near-zero liquidity = SCAM
+    if (liquidityUsd < 100) {
+      if (adjustedScore < 90) {
+        adjustedScore = 90;
+        additionalFlags.push({
+          type: 'LIQUIDITY',
+          severity: 'CRITICAL',
+          message: `CRITICAL: Liquidity is $${liquidityUsd.toFixed(2)} - token can be rugged instantly`,
+        });
+      }
+    }
+    // Very low liquidity = DANGEROUS
+    else if (liquidityUsd < 1000) {
+      if (adjustedScore < 80) {
+        adjustedScore = 80;
+        additionalFlags.push({
+          type: 'LIQUIDITY',
+          severity: 'HIGH',
+          message: `Very low liquidity ($${liquidityUsd.toFixed(2)}) - high rug pull risk`,
+        });
+      }
+    }
+    // Low liquidity on new token = SUSPICIOUS
+    else if (liquidityUsd < 10000 && ageInDays < 3) {
+      if (adjustedScore < 70) {
+        adjustedScore = 70;
+        additionalFlags.push({
+          type: 'LIQUIDITY',
+          severity: 'MEDIUM',
+          message: `Low liquidity ($${liquidityUsd.toFixed(2)}) on new token (${ageInDays} days old)`,
+        });
+      }
+    }
+  }
+
+  // ============================================
+  // RULE 4: PUMP.FUN SPECIFIC RULES
+  // ============================================
+  if (isPumpFun && pumpFun) {
+    // Low bonding curve reserves
+    if (pumpFun.realSolReserves < 1) {
+      if (adjustedScore < 70) {
+        adjustedScore = 70;
+        additionalFlags.push({
+          type: 'LIQUIDITY',
+          severity: 'HIGH',
+          message: `Very low bonding curve reserves (${pumpFun.realSolReserves.toFixed(2)} SOL)`,
+        });
+      }
+    }
+
+    // No socials on pump.fun = higher risk
+    if (!pumpFun.twitter && !pumpFun.telegram && !pumpFun.website) {
+      if (adjustedScore < 55 && ageInDays < 1) {
+        adjustedScore = 55;
+        additionalFlags.push({
+          type: 'SOCIAL',
+          severity: 'MEDIUM',
+          message: 'No social links provided on pump.fun',
+        });
+      }
+    }
+  }
+
+  // ============================================
+  // RULE 5: AUTHORITY RISKS
+  // ============================================
+  if (data.hasMintAuthority) {
+    if (adjustedScore < 50) {
+      adjustedScore = 50;
+    }
+    additionalFlags.push({
+      type: 'OWNERSHIP',
+      severity: 'MEDIUM',
+      message: 'Mint authority not revoked - more tokens can be created',
+    });
+  }
+
+  if (data.hasFreezeAuthority) {
+    if (adjustedScore < 55) {
+      adjustedScore = 55;
+    }
+    additionalFlags.push({
+      type: 'OWNERSHIP',
+      severity: 'HIGH',
+      message: 'Freeze authority exists - accounts can be frozen',
+    });
+  }
+
+  // ============================================
+  // RULE 6: MARKET CAP CAPS (established tokens)
+  // ============================================
+  // Large established tokens should have score capped
+  if (marketCapUsd >= 100_000_000 && ageInDays >= 30) {
+    if (adjustedScore > 40 && creator?.ruggedTokens === 0) {
+      adjustedScore = Math.min(adjustedScore, 40);
+    }
+  } else if (marketCapUsd >= 10_000_000 && ageInDays >= 14) {
+    if (adjustedScore > 55 && creator?.ruggedTokens === 0) {
+      adjustedScore = Math.min(adjustedScore, 55);
+    }
+  }
+
+  // ============================================
+  // DETERMINE FINAL RISK LEVEL
+  // ============================================
   if (adjustedScore >= 90) {
     adjustedLevel = 'SCAM';
-  } else if (adjustedScore >= 75) {
+  } else if (adjustedScore >= 70) {
     adjustedLevel = 'DANGEROUS';
   } else if (adjustedScore >= 50) {
     adjustedLevel = 'SUSPICIOUS';
@@ -106,7 +261,6 @@ const SOL_PRICE_CACHE_TTL = 60000; // 1 minute
 async function getSolPrice(): Promise<number> {
   const now = Date.now();
 
-  // Return cached price if fresh
   if (solPriceCache && now - solPriceCache.timestamp < SOL_PRICE_CACHE_TTL) {
     return solPriceCache.price;
   }
@@ -116,7 +270,7 @@ async function getSolPrice(): Promise<number> {
       'https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd'
     );
     const data = await response.json() as { solana?: { usd?: number } };
-    const price = data.solana?.usd || 150; // Fallback to $150
+    const price = data.solana?.usd || 150;
 
     solPriceCache = { price, timestamp: now };
     return price;
@@ -150,88 +304,163 @@ analyzeRoutes.post('/', async (c) => {
       }
     }
 
+    console.log(`[Analyze] Starting comprehensive analysis for ${body.tokenAddress}`);
+
+    // Initialize analysis data
+    const analysisData: AnalysisData = {
+      dexScreener: null,
+      pumpFun: null,
+      creator: null,
+      isPumpFun: isPumpFunToken(body.tokenAddress),
+      ageInDays: 0,
+      marketCapUsd: 0,
+      liquidityUsd: 0,
+      hasUnknownDeployer: true,
+      hasMintAuthority: false,
+      hasFreezeAuthority: false,
+    };
+
     // Build combined context for AI
     let combinedContext = '';
-    let dexScreenerData: DexScreenerData | null = null;
 
-    // Check if this is a pump.fun token
-    const isPumpFun = isPumpFunToken(body.tokenAddress);
+    // ============================================
+    // PHASE 1: Fetch all data sources in parallel
+    // ============================================
+    const heliusApiKey = c.env.HELIUS_API_KEY || '';
 
-    if (isPumpFun) {
-      console.log('Detected pump.fun token, fetching pump.fun data...');
+    const [
+      solPrice,
+      dexScreenerResult,
+      pumpFunResult,
+      heliusMetadata,
+    ] = await Promise.all([
+      getSolPrice(),
+      fetchDexScreenerData(body.tokenAddress),
+      analysisData.isPumpFun ? fetchPumpFunData(body.tokenAddress) : Promise.resolve(null),
+      heliusApiKey ? fetchHeliusTokenMetadata(body.tokenAddress, heliusApiKey) : Promise.resolve(null),
+    ]);
 
-      // Fetch pump.fun data, SOL price, and DexScreener in parallel first
-      // We need the bonding curve address BEFORE fetching holder data to mark it as LP
-      const [pumpFunResult, solPrice, dexScreenerResult] = await Promise.all([
-        fetchPumpFunData(body.tokenAddress),
-        getSolPrice(),
-        fetchDexScreenerData(body.tokenAddress),
-      ]);
+    // Store DexScreener data
+    if (dexScreenerResult) {
+      analysisData.dexScreener = dexScreenerResult;
+      analysisData.ageInDays = dexScreenerResult.ageInDays || 0;
+      analysisData.marketCapUsd = dexScreenerResult.marketCap || 0;
+      analysisData.liquidityUsd = dexScreenerResult.liquidityUsd || 0;
+    }
 
-      // Add pump.fun specific data first (most accurate for pump.fun tokens)
-      if (pumpFunResult) {
-        combinedContext += buildPumpFunContext(pumpFunResult, solPrice);
+    // Store pump.fun data
+    if (pumpFunResult) {
+      analysisData.pumpFun = pumpFunResult;
+      analysisData.ageInDays = pumpFunResult.ageInDays;
+      analysisData.marketCapUsd = pumpFunResult.marketCapSol * solPrice;
+      analysisData.hasUnknownDeployer = false; // We have the creator
+    }
 
-        // Now fetch holder data WITH bonding curve marked as LP
-        // This is done after we get pump.fun data so we know the bonding curve address
-        const holderData = await fetchTokenData(
-          body.tokenAddress,
-          c.env.HELIUS_API_KEY,
-          [pumpFunResult.bondingCurveAddress] // Mark bonding curve as LP
-        ).catch(() => null);
+    // Check authorities from Helius metadata
+    if (heliusMetadata) {
+      analysisData.hasMintAuthority = !!heliusMetadata.mintAuthority;
+      analysisData.hasFreezeAuthority = !!heliusMetadata.freezeAuthority;
+    }
 
-        if (holderData) {
-          combinedContext += '\n' + buildOnChainContext(holderData);
-        }
-      } else {
-        // Pump.fun API failed - add context note for AI
-        combinedContext += `\nPUMP.FUN TOKEN NOTICE:\n`;
-        combinedContext += `- This is a PUMP.FUN token (address ends in 'pump')\n`;
-        combinedContext += `- Pump.fun tokens use a BONDING CURVE for liquidity, NOT traditional LP pools\n`;
-        combinedContext += `- "No liquidity lock" warnings are NOT applicable - bonding curves work differently\n`;
-        combinedContext += `- Pump.fun API data unavailable - using DexScreener data below\n\n`;
+    // ============================================
+    // PHASE 2: Creator/Deployer Analysis
+    // ============================================
+    const creatorAddress = pumpFunResult?.creator || heliusMetadata?.mintAuthority;
 
-        // IMPORTANT: Without confirmed bonding curve address from pump.fun API,
-        // we should NOT assume the top holder is the bonding curve.
-        // DexScreener pairAddress is NOT reliable for this purpose.
-        // Better to have false positives (warning about safe tokens) than miss rugs.
-        const holderData = await fetchTokenData(
-          body.tokenAddress,
-          c.env.HELIUS_API_KEY
-          // No knownLpAddresses - be conservative when pump.fun API fails
-        ).catch(() => null);
+    if (creatorAddress && creatorAddress !== 'unknown' && heliusApiKey) {
+      console.log(`[Analyze] Analyzing creator wallet: ${creatorAddress}`);
+      analysisData.hasUnknownDeployer = false;
 
-        if (holderData) {
-          combinedContext += '\n' + buildOnChainContext(holderData);
-        }
-      }
+      const creatorAnalysis = await analyzeCreatorWallet(
+        creatorAddress,
+        heliusApiKey
+      ).catch(err => {
+        console.warn('Creator analysis failed:', err);
+        return null;
+      });
 
-      // Add DexScreener data for additional context (price, volume)
-      if (dexScreenerResult) {
-        combinedContext += '\n' + buildMarketContext(dexScreenerResult);
-      }
-    } else {
-      // Not a pump.fun token - use standard data sources
-      const [onChainResult, dexScreenerResult] = await Promise.allSettled([
-        fetchTokenData(body.tokenAddress, c.env.HELIUS_API_KEY),
-        fetchDexScreenerData(body.tokenAddress),
-      ]);
-
-      // Store DexScreener data for hardcoded rules later
-      if (dexScreenerResult.status === 'fulfilled' && dexScreenerResult.value) {
-        dexScreenerData = dexScreenerResult.value;
-        combinedContext += buildMarketContext(dexScreenerResult.value);
-      }
-
-      // Add on-chain data
-      if (onChainResult.status === 'fulfilled') {
-        combinedContext += '\n' + buildOnChainContext(onChainResult.value);
-      } else {
-        console.warn('Failed to fetch on-chain data:', onChainResult.reason);
+      if (creatorAnalysis) {
+        analysisData.creator = creatorAnalysis;
       }
     }
 
-    // Perform analysis with combined context
+    // ============================================
+    // PHASE 3: Transaction Analysis (for bundle detection)
+    // ============================================
+    const txAnalysis = heliusApiKey
+      ? await analyzeTokenTransactions(
+          body.tokenAddress,
+          heliusApiKey
+        ).catch(err => {
+          console.warn('Transaction analysis failed:', err);
+          return null;
+        })
+      : null;
+
+    // ============================================
+    // PHASE 4: Fetch holder data
+    // ============================================
+    let holderData = null;
+    const knownLpAddresses = pumpFunResult?.bondingCurveAddress
+      ? [pumpFunResult.bondingCurveAddress]
+      : [];
+
+    holderData = await fetchTokenData(
+      body.tokenAddress,
+      heliusApiKey || undefined,
+      knownLpAddresses
+    ).catch(() => null);
+
+    // ============================================
+    // PHASE 5: Build context string for AI
+    // ============================================
+
+    // Add data source header
+    combinedContext += `COMPREHENSIVE TOKEN ANALYSIS\n`;
+    combinedContext += `============================\n`;
+    combinedContext += `Token: ${body.tokenAddress}\n`;
+    combinedContext += `Type: ${analysisData.isPumpFun ? 'PUMP.FUN (bonding curve)' : 'Standard DEX token'}\n\n`;
+
+    // Add pump.fun specific context
+    if (analysisData.isPumpFun && pumpFunResult) {
+      combinedContext += buildPumpFunContext(pumpFunResult, solPrice);
+    } else if (analysisData.isPumpFun) {
+      combinedContext += `\nPUMP.FUN TOKEN NOTICE:\n`;
+      combinedContext += `- This is a PUMP.FUN token (address ends in 'pump')\n`;
+      combinedContext += `- Pump.fun API data unavailable\n`;
+      combinedContext += `- ⚠️ Unable to verify bonding curve status\n\n`;
+    }
+
+    // Add DexScreener market data
+    if (dexScreenerResult) {
+      combinedContext += buildMarketContext(dexScreenerResult);
+    }
+
+    // Add Helius data (metadata, creator analysis, tx analysis)
+    combinedContext += buildHeliusContext(heliusMetadata, analysisData.creator, txAnalysis);
+
+    // Add on-chain holder data
+    if (holderData) {
+      combinedContext += '\n' + buildOnChainContext(holderData);
+    }
+
+    // Add data completeness notice
+    combinedContext += `\n\nDATA COMPLETENESS:\n`;
+    combinedContext += `- DexScreener: ${dexScreenerResult ? 'YES' : 'NO'}\n`;
+    combinedContext += `- Pump.fun API: ${pumpFunResult ? 'YES' : 'NO'}\n`;
+    combinedContext += `- Helius Metadata: ${heliusMetadata ? 'YES' : 'NO'}\n`;
+    combinedContext += `- Creator Analysis: ${analysisData.creator ? 'YES' : 'NO'}\n`;
+    combinedContext += `- Holder Data: ${holderData ? 'YES' : 'NO'}\n`;
+
+    if (analysisData.hasUnknownDeployer) {
+      combinedContext += `\n⚠️ WARNING: Creator/deployer could not be identified - INCREASE RISK SCORE\n`;
+    }
+
+    console.log(`[Analyze] Context built (${combinedContext.length} chars), calling AI...`);
+
+    // ============================================
+    // PHASE 6: AI Analysis
+    // ============================================
     let result = await analyzeForHoneypot(
       {
         tokenAddress: body.tokenAddress,
@@ -243,8 +472,12 @@ analyzeRoutes.post('/', async (c) => {
       }
     );
 
-    // Apply hardcoded rules for DEX tokens (not pump.fun)
-    result = applyHardcodedRules(result, dexScreenerData, isPumpFun);
+    // ============================================
+    // PHASE 7: Apply hardcoded rules
+    // ============================================
+    result = applyHardcodedRules(result, analysisData);
+
+    console.log(`[Analyze] Final score: ${result.riskScore} (${result.riskLevel})`);
 
     // Cache in KV
     await c.env.SCAN_CACHE.put(cacheKey, JSON.stringify(result), {
