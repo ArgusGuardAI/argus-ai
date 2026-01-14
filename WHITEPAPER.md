@@ -200,7 +200,7 @@ To unlock the **Triple-Layer Shield**, users must hold **1,000 $WHALESHIELD** to
 |-----------|------------|---------|
 | **Extension** | Plasmo (React) | DOM overlay, content scripts |
 | **API** | Cloudflare Workers (Hono) | Serverless routing, caching |
-| **AI Engine** | Together AI (Llama/Gemma) | Contract analysis, risk scoring |
+| **AI Engine** | Together AI (Llama 3.3 70B) | Contract analysis, risk scoring |
 | **On-Chain Data** | Helius DAS API | Token metadata, transactions |
 | **Market Data** | DexScreener API | Price, volume, liquidity |
 | **Database** | Supabase (Postgres) | Graffiti notes, reputation |

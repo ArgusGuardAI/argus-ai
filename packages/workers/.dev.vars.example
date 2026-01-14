@@ -1,11 +1,20 @@
 # Cloudflare Workers Environment Variables
 # Copy this file to .dev.vars for local development
 
-# Together AI API Key
+# Together AI API Key (Required)
 # Get yours at: https://api.together.xyz/
 TOGETHER_AI_API_KEY=your-together-ai-api-key
 
-# Supabase Configuration
+# Together AI Model (Optional - defaults to Llama 3.3 70B)
+# Recommended: meta-llama/Llama-3.3-70B-Instruct-Turbo
+# TOGETHER_AI_MODEL=meta-llama/Llama-3.3-70B-Instruct-Turbo
+
+# Supabase Configuration (Required)
 # Get these from your Supabase project settings
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_ANON_KEY=your-supabase-anon-key
+
+# Helius API Key (Required for full analysis)
+# Get yours at: https://dev.helius.xyz/
+# Without this, holder data and creator analysis will be incomplete
+HELIUS_API_KEY=your-helius-api-key
