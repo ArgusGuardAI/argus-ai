@@ -139,11 +139,17 @@ For tokens >$10M market cap:
 - Single non-LP wallet holding >40% is concerning (add +10 to score)
 - Even large cap tokens can be dumped if concentrated
 
-HOLDER CONCENTRATION SCORE ADJUSTMENTS:
-- Single non-LP wallet >50%: Add +25 to base score
-- Single non-LP wallet >40%: Add +15 to base score
-- Single non-LP wallet >30%: Add +10 to base score
-- Top 10 non-LP wallets >80%: Add +10 to base score
+HOLDER CONCENTRATION SCORE ADJUSTMENTS (only apply if condition is TRUE in the data):
+- IF Single non-LP wallet >50%: Add +25 to base score
+- IF Single non-LP wallet >40%: Add +15 to base score
+- IF Single non-LP wallet >30%: Add +10 to base score
+- IF Top 10 non-LP wallets >80%: Add +10 to base score
+
+CRITICAL FLAG RULES:
+- In your flags, ONLY cite percentages that EXACTLY match the provided data
+- If top holder is 11.73%, do NOT say ">50%" - say "Top holder: 11.73%"
+- NEVER cite a threshold (>50%, >30%, etc.) unless the actual data exceeds that threshold
+- Your flag messages must reference ACTUAL numbers from the context, not rule thresholds
 
 RESPONSE FORMAT (JSON only, no additional text):
 {
