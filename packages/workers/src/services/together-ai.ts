@@ -180,6 +180,30 @@ function extractJsonFromResponse(rawResponse: string): string | null {
   return null;
 }
 
+/**
+ * Normalize risk level from AI response to valid enum value
+ * AI sometimes returns "LOW RISK" instead of "SAFE"
+ */
+function normalizeRiskLevel(level: string): string {
+  const normalized = level.toUpperCase().trim();
+
+  // Map variations to valid enum values
+  if (normalized === 'LOW RISK' || normalized === 'LOW' || normalized === 'SAFE') {
+    return 'SAFE';
+  }
+  if (normalized === 'MEDIUM RISK' || normalized === 'MEDIUM' || normalized === 'SUSPICIOUS') {
+    return 'SUSPICIOUS';
+  }
+  if (normalized === 'HIGH RISK' || normalized === 'HIGH' || normalized === 'DANGEROUS') {
+    return 'DANGEROUS';
+  }
+  if (normalized === 'CRITICAL' || normalized === 'SCAM') {
+    return 'SCAM';
+  }
+
+  return normalized;
+}
+
 function validateAIResponse(parsed: unknown): parsed is HoneypotAIResponse {
   if (!parsed || typeof parsed !== 'object') {
     return false;
@@ -203,10 +227,20 @@ function validateAIResponse(parsed: unknown): parsed is HoneypotAIResponse {
     return false;
   }
 
-  const validRiskLevels = ['SAFE', 'SUSPICIOUS', 'DANGEROUS', 'SCAM'];
-  if (typeof obj.risk_level !== 'string' || !validRiskLevels.includes(obj.risk_level)) {
+  // Normalize and validate risk level
+  if (typeof obj.risk_level !== 'string') {
     return false;
   }
+
+  const normalizedLevel = normalizeRiskLevel(obj.risk_level);
+  const validRiskLevels = ['SAFE', 'SUSPICIOUS', 'DANGEROUS', 'SCAM'];
+  if (!validRiskLevels.includes(normalizedLevel)) {
+    console.warn(`Invalid risk level after normalization: ${obj.risk_level} -> ${normalizedLevel}`);
+    return false;
+  }
+
+  // Update the object with normalized value
+  obj.risk_level = normalizedLevel;
 
   return true;
 }
