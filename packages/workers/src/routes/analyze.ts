@@ -494,8 +494,15 @@ analyzeRoutes.post('/', async (c) => {
     } else if (analysisData.isPumpFun) {
       combinedContext += `\nPUMP.FUN TOKEN NOTICE:\n`;
       combinedContext += `- This is a PUMP.FUN token (address ends in 'pump')\n`;
-      combinedContext += `- Pump.fun API data unavailable\n`;
-      combinedContext += `- ⚠️ Unable to verify bonding curve status\n\n`;
+      // Check if token graduated to pumpswap (bonding curve complete)
+      const isOnPumpswap = dexScreenerResult?.dex?.toLowerCase() === 'pumpswap';
+      if (isOnPumpswap) {
+        combinedContext += `- Bonding curve COMPLETE ✓ (graduated to Pumpswap)\n`;
+        combinedContext += `- Token has real liquidity pool on Raydium\n\n`;
+      } else {
+        combinedContext += `- Pump.fun API data unavailable\n`;
+        combinedContext += `- ⚠️ Unable to verify bonding curve status\n\n`;
+      }
     }
 
     // Add DexScreener market data
