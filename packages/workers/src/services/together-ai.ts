@@ -34,6 +34,11 @@ export async function analyzeForHoneypot(
 
   const content = buildAnalysisContent(context);
 
+  // Log the full context being sent to AI for debugging
+  console.log('=== AI ANALYSIS CONTEXT START ===');
+  console.log(content);
+  console.log('=== AI ANALYSIS CONTEXT END ===');
+
   // Retry up to 2 times on parsing failure
   let lastError: Error | null = null;
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -145,7 +150,9 @@ async function callTogetherAI(content: string, apiKey: string, model: string): P
   };
 
   const rawContent = data.choices?.[0]?.message?.content || '';
-  console.log(`Together AI raw response (first 500 chars): ${rawContent.slice(0, 500)}`);
+  console.log('=== AI RESPONSE START ===');
+  console.log(rawContent);
+  console.log('=== AI RESPONSE END ===');
 
   return rawContent;
 }
