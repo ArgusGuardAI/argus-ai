@@ -561,14 +561,17 @@ export function buildOnChainContext(data: TokenOnChainData): string {
   }
   context += '\n';
 
-  // Liquidity
-  context += `LIQUIDITY:\n`;
-  context += `- Total Liquidity: $${data.totalLiquidityUsd.toLocaleString()}\n`;
-  context += `- LP Locked: ${data.lpLocked ? 'YES' : 'NO'}\n`;
-  if (data.lpLockDuration) {
-    context += `- Lock Duration: ${data.lpLockDuration} days\n`;
+  // Liquidity - only show if we have actual data (DexScreener provides more accurate liquidity)
+  // Don't show $0 as it's misleading - we just can't calculate it from on-chain data
+  if (data.totalLiquidityUsd > 0) {
+    context += `LIQUIDITY (on-chain):\n`;
+    context += `- Total Liquidity: $${data.totalLiquidityUsd.toLocaleString()}\n`;
+    context += `- LP Locked: ${data.lpLocked ? 'YES' : 'NO'}\n`;
+    if (data.lpLockDuration) {
+      context += `- Lock Duration: ${data.lpLockDuration} days\n`;
+    }
+    context += '\n';
   }
-  context += '\n';
 
   // Deployer
   context += `DEPLOYER INFO:\n`;
