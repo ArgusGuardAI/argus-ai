@@ -671,13 +671,8 @@ export function buildHeliusContext(
         context += `  - ${token.symbol || token.tokenAddress.slice(0, 8)}: Liquidity drained\n`;
       }
     }
-
-    if (creator.riskFlags.length > 0) {
-      context += `\nCreator Risk Flags:\n`;
-      for (const flag of creator.riskFlags) {
-        context += `  - ${flag}\n`;
-      }
-    }
+    // Note: Removed "Creator Risk Flags" section to avoid AI duplicating flags
+    // The AI already sees wallet age and can derive appropriate flags
   }
 
   // Transaction analysis

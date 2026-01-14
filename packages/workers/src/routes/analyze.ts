@@ -60,23 +60,14 @@ function applyHardcodedRules(
     }
 
     // Brand new wallet = higher risk baseline
+    // Only adjust score here - AI will add the appropriate flag
     if (creator.walletAge === 0) {
       if (adjustedScore < 65) {
         adjustedScore = 65;
-        additionalFlags.push({
-          type: 'DEPLOYER',
-          severity: 'HIGH',
-          message: 'Creator wallet is brand new (0 days old)',
-        });
       }
     } else if (creator.walletAge < 7) {
       if (adjustedScore < 55) {
         adjustedScore = 55;
-        additionalFlags.push({
-          type: 'DEPLOYER',
-          severity: 'MEDIUM',
-          message: `Creator wallet is very new (${creator.walletAge} days old)`,
-        });
       }
     }
 
