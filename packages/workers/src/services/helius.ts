@@ -579,10 +579,11 @@ export async function analyzeTokenTransactions(
     analysis.uniqueSellers24h = sellers.size;
 
     // Detect bundles (multiple different wallets in same slot)
+    // Threshold of 5+ wallets to avoid false positives from normal trading
     let bundledWallets = 0;
     for (const [, wallets] of slotGroups) {
       const uniqueWallets = new Set(wallets);
-      if (uniqueWallets.size >= 3) {
+      if (uniqueWallets.size >= 5) {
         analysis.bundleDetected = true;
         bundledWallets += uniqueWallets.size;
         analysis.suspiciousPatterns.push(
