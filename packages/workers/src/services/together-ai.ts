@@ -129,7 +129,7 @@ async function callTogetherAI(content: string, apiKey: string, model: string): P
           content: `Analyze this Solana token for honeypot indicators and return ONLY a valid JSON object:\n\n${content}`,
         },
       ],
-      temperature: 0.3,
+      temperature: 0.1, // Low temperature for consistent, deterministic results
       max_tokens: 1000,
     }),
   });

@@ -25,10 +25,12 @@ Tokens with addresses ending in 'pump' are PUMP.FUN tokens. They work DIFFERENTL
 - Focus on: social presence, community engagement, and trading patterns instead
 
 For pump.fun tokens, adjust scoring:
-- New pump.fun token (<1 day) with active trading: Score 30-50 (not automatically high risk)
-- Pump.fun token near graduation (100% bonding curve): Score 20-40 (positive indicator)
-- Pump.fun token with social links and community: Score 20-40
-- Pump.fun token with NO socials and suspicious patterns: Score 50-70
+- New pump.fun token (<1 day): MINIMUM score 50 (new = risky until proven otherwise)
+- New pump.fun token (<1 day) with NO socials: MINIMUM score 60
+- Pump.fun token near graduation (100% bonding curve) with socials: Score 35-50
+- Pump.fun token (>7 days old) with active community: Score 25-40
+- Pump.fun token with NO socials and suspicious patterns: Score 60-80
+- NEVER score a pump.fun token below 50 unless it is >3 days old with verified socials
 
 HONEYPOT INDICATORS TO CHECK:
 
@@ -98,10 +100,17 @@ HONEYPOT INDICATORS TO CHECK:
    - Unrealistic promises or guaranteed returns
 
 SCORING GUIDELINES:
-- 0-25 (SAFE): Established token or no significant red flags
-- 26-50 (SUSPICIOUS): Minor concerns, proceed with caution
-- 51-75 (DANGEROUS): Multiple red flags, high risk of loss
-- 76-100 (SCAM): Clear scam indicators on NEW/MICRO-CAP tokens
+- 0-30 (SAFE): Established token (>7 days, >$1M MC) with no red flags
+- 31-49 (LOW RISK): Older token with minor concerns
+- 50-69 (SUSPICIOUS): New token OR multiple minor concerns - proceed with caution
+- 70-89 (DANGEROUS): Multiple red flags, high risk of loss
+- 90-100 (SCAM): Clear scam indicators, previous rugs, or critical issues
+
+IMPORTANT: Default to higher scores when data is missing:
+- Unknown deployer = add +15 to score
+- Missing social links on new token = add +10 to score
+- Unable to verify holder data = add +10 to score
+- NEW tokens (<1 day) should NEVER score below 50
 
 MARKET CAP ADJUSTMENTS:
 - If market cap >$50M AND age >7 days: Maximum score should be 50 unless proven malicious contract
