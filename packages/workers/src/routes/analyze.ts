@@ -241,7 +241,57 @@ function applyHardcodedRules(
   }
 
   // ============================================
-  // RULE 7: MARKET CAP CAPS (established tokens)
+  // RULE 7: STRONG FUNDAMENTALS CREDIT
+  // ============================================
+  // Give credit for tokens showing exceptional organic growth
+  // Even new tokens can demonstrate legitimacy through metrics
+  const volume24h = dexScreener?.volume24h || 0;
+  const txns24h = (dexScreener?.txns24h?.buys || 0) + (dexScreener?.txns24h?.sells || 0);
+
+  let fundamentalsCredit = 0;
+
+  // High liquidity shows real investment
+  if (liquidityUsd >= 100_000) {
+    fundamentalsCredit += 5;
+    additionalFlags.push({
+      type: 'LIQUIDITY',
+      severity: 'LOW',
+      message: `Strong liquidity ($${(liquidityUsd / 1000).toFixed(0)}K) - positive signal`,
+    });
+  }
+
+  // High volume relative to market cap shows organic trading
+  if (volume24h >= 1_000_000 && marketCapUsd > 0) {
+    fundamentalsCredit += 5;
+    additionalFlags.push({
+      type: 'TRADING',
+      severity: 'LOW',
+      message: `High trading volume ($${(volume24h / 1_000_000).toFixed(1)}M) - active market`,
+    });
+  }
+
+  // Large number of transactions shows real user activity
+  if (txns24h >= 10_000) {
+    fundamentalsCredit += 5;
+    additionalFlags.push({
+      type: 'TRADING',
+      severity: 'LOW',
+      message: `High transaction count (${txns24h.toLocaleString()} txns) - organic activity`,
+    });
+  }
+
+  // Apply fundamentals credit (max 10 point reduction, floor at 50)
+  if (fundamentalsCredit > 0 && !hasKnownRugs) {
+    const maxCredit = Math.min(fundamentalsCredit, 10);
+    if (adjustedScore > 50 && adjustedScore - maxCredit >= 50) {
+      adjustedScore -= maxCredit;
+    } else if (adjustedScore > 50) {
+      adjustedScore = 50; // Floor at SUSPICIOUS threshold
+    }
+  }
+
+  // ============================================
+  // RULE 8: MARKET CAP CAPS (established tokens)
   // ============================================
   // Large established tokens should have score capped
 
@@ -553,10 +603,51 @@ analyzeRoutes.post('/', async (c) => {
     const supabase = createSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_ANON_KEY);
     await cacheScanResult(supabase, result);
 
-    return c.json({
+    // Build comprehensive response with all valuable data
+    const response = {
       ...result,
       cached: false,
-    });
+      // Market Data
+      market: dexScreenerResult ? {
+        name: dexScreenerResult.name,
+        symbol: dexScreenerResult.symbol,
+        priceUsd: dexScreenerResult.priceUsd,
+        priceChange24h: dexScreenerResult.priceChange24h,
+        marketCap: dexScreenerResult.marketCap,
+        liquidity: dexScreenerResult.liquidityUsd,
+        volume24h: dexScreenerResult.volume24h,
+        txns24h: dexScreenerResult.txns24h,
+        dex: dexScreenerResult.dex,
+        ageInDays: dexScreenerResult.ageInDays,
+      } : null,
+      // Holder Data
+      holders: holderData ? {
+        topHolder: holderData.top1HolderPercent,
+        top10Holders: holderData.top10HolderPercent,
+        top1NonLp: holderData.top1NonLpHolderPercent,
+        top10NonLp: holderData.top10NonLpHolderPercent,
+        totalHolders: holderData.totalHolders,
+      } : null,
+      // Creator Data
+      creator: analysisData.creator ? {
+        address: analysisData.creator.creatorAddress,
+        walletAge: analysisData.creator.walletAge,
+        tokensCreated: analysisData.creator.tokensCreated,
+        ruggedTokens: analysisData.creator.ruggedTokens,
+      } : null,
+      // Social Links
+      socials: {
+        website: dexScreenerResult?.websites?.[0] || null,
+        twitter: dexScreenerResult?.socials?.find(s => s.type === 'twitter')?.url || null,
+      },
+      // Authorities
+      authorities: {
+        mintRevoked: !analysisData.hasMintAuthority,
+        freezeRevoked: !analysisData.hasFreezeAuthority,
+      },
+    };
+
+    return c.json(response);
   } catch (error) {
     console.error('Analyze error:', error);
     return c.json(
