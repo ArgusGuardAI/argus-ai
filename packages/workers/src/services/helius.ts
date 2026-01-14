@@ -9,6 +9,120 @@
  */
 
 const HELIUS_API_BASE = 'https://api.helius.xyz/v0';
+const HELIUS_RPC_BASE = 'https://mainnet.helius-rpc.com';
+
+/**
+ * Find the original creator/deployer of a token by looking at its first transaction
+ * This is a fallback when pump.fun API is unavailable
+ */
+export async function findTokenCreator(
+  tokenAddress: string,
+  apiKey: string
+): Promise<string | null> {
+  try {
+    // Method 1: Get token signatures and find the earliest one
+    const signaturesResponse = await fetch(
+      `${HELIUS_RPC_BASE}/?api-key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 'get-signatures',
+          method: 'getSignaturesForAddress',
+          params: [
+            tokenAddress,
+            { limit: 1000 } // Get as many as possible to find the first
+          ],
+        }),
+      }
+    );
+
+    if (!signaturesResponse.ok) {
+      console.warn(`Failed to get signatures: ${signaturesResponse.status}`);
+      return null;
+    }
+
+    const signaturesData = await signaturesResponse.json() as {
+      result?: Array<{
+        signature: string;
+        slot: number;
+        blockTime?: number;
+      }>;
+    };
+
+    const signatures = signaturesData.result;
+    if (!signatures || signatures.length === 0) {
+      console.warn('No signatures found for token');
+      return null;
+    }
+
+    // Get the earliest signature (last in the array since they're returned newest-first)
+    const earliestSignature = signatures[signatures.length - 1].signature;
+    console.log(`[Helius] Found earliest tx: ${earliestSignature}`);
+
+    // Method 2: Parse the earliest transaction to find the creator
+    const txResponse = await fetch(
+      `${HELIUS_API_BASE}/transactions/?api-key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          transactions: [earliestSignature],
+        }),
+      }
+    );
+
+    if (!txResponse.ok) {
+      console.warn(`Failed to parse transaction: ${txResponse.status}`);
+      return null;
+    }
+
+    const txData = await txResponse.json() as Array<{
+      signature: string;
+      feePayer: string;
+      type: string;
+      source?: string;
+      description?: string;
+      tokenTransfers?: Array<{
+        mint: string;
+        fromUserAccount: string;
+        toUserAccount: string;
+      }>;
+      accountData?: Array<{
+        account: string;
+        nativeBalanceChange: number;
+        tokenBalanceChanges?: Array<{
+          mint: string;
+          rawTokenAmount: {
+            tokenAmount: string;
+          };
+          userAccount: string;
+        }>;
+      }>;
+    }>;
+
+    if (!txData || txData.length === 0) {
+      console.warn('Could not parse earliest transaction');
+      return null;
+    }
+
+    const earliestTx = txData[0];
+
+    // The fee payer of the first transaction is typically the creator
+    const creator = earliestTx.feePayer;
+
+    if (creator) {
+      console.log(`[Helius] Found token creator: ${creator}`);
+      return creator;
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Error finding token creator:', error);
+    return null;
+  }
+}
 
 export interface HeliusTokenMetadata {
   tokenAddress: string;

@@ -11,6 +11,7 @@ import {
   analyzeCreatorWallet,
   analyzeTokenTransactions,
   buildHeliusContext,
+  findTokenCreator,
   CreatorAnalysis,
 } from '../services/helius';
 
@@ -92,14 +93,14 @@ function applyHardcodedRules(
     }
   }
 
-  // Unknown deployer = risk flag
+  // Unknown deployer = significant risk flag
   if (data.hasUnknownDeployer) {
-    if (adjustedScore < 55) {
-      adjustedScore = 55;
+    if (adjustedScore < 60) {
+      adjustedScore = 60;
       additionalFlags.push({
         type: 'DEPLOYER',
-        severity: 'MEDIUM',
-        message: 'Deployer/creator information unavailable',
+        severity: 'HIGH',
+        message: 'Deployer/creator could not be identified - higher risk',
       });
     }
   }
@@ -107,15 +108,26 @@ function applyHardcodedRules(
   // ============================================
   // RULE 2: TOKEN AGE RISK
   // ============================================
+  // Brand new tokens are inherently risky - NEVER allow them in SAFE range
   if (ageInDays < 1) {
-    // Brand new token - minimum score based on other factors
-    const baseMinScore = isPumpFun ? 50 : 60;
+    // Minimum 55 for ALL new tokens (SUSPICIOUS range)
+    const baseMinScore = 55;
     if (adjustedScore < baseMinScore) {
       adjustedScore = baseMinScore;
       additionalFlags.push({
-        type: 'CONTRACT',
+        type: 'TOKEN',
+        severity: 'HIGH',
+        message: `Very new token (<1 day old) - high risk of rug pull`,
+      });
+    }
+  } else if (ageInDays < 3) {
+    // Tokens 1-3 days old still risky
+    if (adjustedScore < 50) {
+      adjustedScore = 50;
+      additionalFlags.push({
+        type: 'TOKEN',
         severity: 'MEDIUM',
-        message: `Very new token (<1 day old) - exercise caution`,
+        message: `New token (${ageInDays} days old) - exercise caution`,
       });
     }
   }
@@ -385,7 +397,20 @@ analyzeRoutes.post('/', async (c) => {
     // ============================================
     // PHASE 2: Creator/Deployer Analysis
     // ============================================
-    const creatorAddress = pumpFunResult?.creator || heliusMetadata?.mintAuthority;
+    let creatorAddress = pumpFunResult?.creator || heliusMetadata?.mintAuthority;
+
+    // Fallback: If we don't have the creator, find it from the first transaction
+    if ((!creatorAddress || creatorAddress === 'unknown') && heliusApiKey) {
+      console.log(`[Analyze] Creator not found via API, searching transaction history...`);
+      const foundCreator = await findTokenCreator(body.tokenAddress, heliusApiKey).catch(err => {
+        console.warn('findTokenCreator failed:', err);
+        return null;
+      });
+      if (foundCreator) {
+        creatorAddress = foundCreator;
+        console.log(`[Analyze] Found creator via transaction history: ${creatorAddress}`);
+      }
+    }
 
     if (creatorAddress && creatorAddress !== 'unknown' && heliusApiKey) {
       console.log(`[Analyze] Analyzing creator wallet: ${creatorAddress}`);

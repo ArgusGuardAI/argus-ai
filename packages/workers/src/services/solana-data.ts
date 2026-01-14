@@ -573,12 +573,15 @@ export function buildOnChainContext(data: TokenOnChainData): string {
     context += '\n';
   }
 
-  // Deployer
-  context += `DEPLOYER INFO:\n`;
-  context += `- Address: ${data.deployerAddress}\n`;
-  context += `- Wallet Age: ${data.deployerAge} days\n`;
-  context += `- Previous Tokens: ${data.deployerTokenCount}\n`;
-  context += `- Previous Rugs: ${data.deployerPreviousRugs}\n\n`;
+  // Deployer - only show if we have actual deployer data (not "unknown")
+  // Helius CREATOR/DEPLOYER ANALYSIS section provides more accurate info when available
+  if (data.deployerAddress && data.deployerAddress !== 'unknown') {
+    context += `DEPLOYER INFO:\n`;
+    context += `- Address: ${data.deployerAddress}\n`;
+    context += `- Wallet Age: ${data.deployerAge} days\n`;
+    context += `- Previous Tokens: ${data.deployerTokenCount}\n`;
+    context += `- Previous Rugs: ${data.deployerPreviousRugs}\n\n`;
+  }
 
   // Bundle detection
   if (data.bundleDetected && data.bundleInfo) {
