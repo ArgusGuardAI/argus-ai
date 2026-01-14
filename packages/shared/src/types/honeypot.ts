@@ -1,7 +1,7 @@
 export type HoneypotRiskLevel = 'SAFE' | 'SUSPICIOUS' | 'DANGEROUS' | 'SCAM';
 
 export interface HoneypotFlag {
-  type: 'LIQUIDITY' | 'OWNERSHIP' | 'CONTRACT' | 'SOCIAL' | 'DEPLOYER' | 'BUNDLE' | 'HOLDERS' | 'TRADING';
+  type: 'LIQUIDITY' | 'OWNERSHIP' | 'CONTRACT' | 'SOCIAL' | 'DEPLOYER' | 'BUNDLE' | 'HOLDERS' | 'TRADING' | 'TOKEN';
   severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   message: string;
 }

@@ -226,11 +226,33 @@ function applyHardcodedRules(
   }
 
   // ============================================
-  // RULE 6: MARKET CAP CAPS (established tokens)
+  // RULE 6: SOCIAL PRESENCE CREDIT
+  // ============================================
+  // Give credit for having real social presence (website + Twitter)
+  // This indicates some level of legitimacy and accountability
+  const hasKnownRugs = creator && creator.ruggedTokens > 0;
+  const hasWebsite = dexScreener?.websites && dexScreener.websites.length > 0;
+  const hasTwitter = dexScreener?.socials?.some(s =>
+    s.type === 'twitter' || s.url?.includes('twitter.com') || s.url?.includes('x.com')
+  );
+
+  if (hasWebsite && hasTwitter && !hasKnownRugs) {
+    // Reduce score by 5 for having social presence (min 50 to stay in SUSPICIOUS)
+    const reduction = 5;
+    if (adjustedScore > 50 && adjustedScore - reduction >= 50) {
+      adjustedScore -= reduction;
+      additionalFlags.push({
+        type: 'SOCIAL',
+        severity: 'LOW',
+        message: 'Website and Twitter presence verified - slightly lower risk',
+      });
+    }
+  }
+
+  // ============================================
+  // RULE 7: MARKET CAP CAPS (established tokens)
   // ============================================
   // Large established tokens should have score capped
-  // Only skip the cap if we KNOW the creator has rugs
-  const hasKnownRugs = creator && creator.ruggedTokens > 0;
 
   if (marketCapUsd >= 100_000_000 && ageInDays >= 30 && !hasKnownRugs) {
     // $100M+ market cap, 30+ days old - very established
