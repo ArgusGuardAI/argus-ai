@@ -39,15 +39,27 @@ export async function analyzeForHoneypot(
   console.log(content);
   console.log('=== AI ANALYSIS CONTEXT END ===');
 
-  // Retry up to 2 times on parsing failure
+  // Retry up to 3 times on failure with exponential backoff
   let lastError: Error | null = null;
-  for (let attempt = 0; attempt < 2; attempt++) {
+  let lastRawResponse = '';
+  const delays = [0, 1000, 2000]; // No delay, 1s, 2s
+
+  for (let attempt = 0; attempt < 3; attempt++) {
     try {
+      // Add delay between retries (exponential backoff)
+      if (delays[attempt] > 0) {
+        console.log(`[TogetherAI] Waiting ${delays[attempt]}ms before retry ${attempt + 1}...`);
+        await new Promise(resolve => setTimeout(resolve, delays[attempt]));
+      }
+
+      console.log(`[TogetherAI] Attempt ${attempt + 1}/3...`);
       const rawResponse = await callTogetherAI(content, apiKey, model);
+      lastRawResponse = rawResponse;
       const parsed = parseAIResponse(rawResponse);
 
       // If parsing succeeded (confidence > 0), return result
       if (parsed.confidence > 0) {
+        console.log(`[TogetherAI] Success on attempt ${attempt + 1}`);
         return {
           tokenAddress: context.tokenAddress,
           riskLevel: getHoneypotRiskLevel(parsed.riskScore),
@@ -60,29 +72,32 @@ export async function analyzeForHoneypot(
       }
 
       // Parsing failed, retry
-      console.log(`Attempt ${attempt + 1} failed parsing, retrying...`);
+      console.log(`[TogetherAI] Attempt ${attempt + 1} failed parsing, will retry...`);
     } catch (error) {
       lastError = error as Error;
-      console.error(`Attempt ${attempt + 1} error:`, error);
+      console.error(`[TogetherAI] Attempt ${attempt + 1} error:`, error instanceof Error ? error.message : error);
     }
   }
 
-  // All retries failed
+  // All retries failed - return a DANGEROUS score since we can't verify safety
+  // Unknown = risky. If we can't analyze it, we shouldn't give it a low score.
   console.error('All retry attempts failed:', lastError);
+  console.error('Last raw response:', lastRawResponse.slice(0, 500));
+
   return {
     tokenAddress: context.tokenAddress,
-    riskLevel: 'SCAM',
-    riskScore: 100,
+    riskLevel: 'DANGEROUS',
+    riskScore: 70, // Dangerous default - can't verify safety
     confidence: 0,
     flags: [
       {
         type: 'CONTRACT',
-        severity: 'CRITICAL',
-        message: 'ANALYSIS FAILED: Unable to parse AI response after retries',
+        severity: 'MEDIUM',
+        message: 'AI analysis unavailable - score based on on-chain data only',
       },
     ],
     summary:
-      'Analysis failed due to AI response parsing error. Exercise extreme caution - do not interact with this token without manual verification.',
+      'AI analysis temporarily unavailable. Risk assessment based on on-chain data analysis only.',
     checkedAt: Date.now(),
   };
 }
@@ -118,43 +133,74 @@ function buildAnalysisContent(context: AnalysisContext): string {
 
 async function callTogetherAI(content: string, apiKey: string, model: string): Promise<string> {
   console.log(`Calling Together AI with model: ${model}`);
+  console.log(`Context size: ${content.length} chars`);
 
-  const response = await fetch(TOGETHER_API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: 'system', content: HONEYPOT_SYSTEM_PROMPT },
-        {
-          role: 'user',
-          content: `Analyze this Solana token for honeypot indicators and return ONLY a valid JSON object:\n\n${content}`,
-        },
-      ],
-      temperature: 0.1, // Low temperature for consistent, deterministic results
-      max_tokens: 1000,
-    }),
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    console.error(`Together AI error response: ${error}`);
-    throw new Error(`Together AI API error: ${response.status} - ${error}`);
+  // Truncate context if too large (Together AI has token limits)
+  const maxContextChars = 12000; // ~3000 tokens
+  let truncatedContent = content;
+  if (content.length > maxContextChars) {
+    truncatedContent = content.slice(0, maxContextChars) + '\n\n[Context truncated due to size]';
+    console.log(`Context truncated from ${content.length} to ${maxContextChars} chars`);
   }
 
-  const data = (await response.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
+  // Add timeout to prevent hanging (15 seconds)
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
 
-  const rawContent = data.choices?.[0]?.message?.content || '';
-  console.log('=== AI RESPONSE START ===');
-  console.log(rawContent);
-  console.log('=== AI RESPONSE END ===');
+  try {
+    const response = await fetch(TOGETHER_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: HONEYPOT_SYSTEM_PROMPT },
+          {
+            role: 'user',
+            content: `Analyze this Solana token for honeypot indicators and return ONLY a valid JSON object:\n\n${truncatedContent}`,
+          },
+        ],
+        temperature: 0.1, // Low temperature for consistent, deterministic results
+        max_tokens: 1000,
+      }),
+      signal: controller.signal,
+    });
 
-  return rawContent;
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const error = await response.text();
+      console.error(`Together AI error response: ${error}`);
+      throw new Error(`Together AI API error: ${response.status} - ${error}`);
+    }
+
+    const data = (await response.json()) as {
+      choices?: Array<{ message?: { content?: string } }>;
+    };
+
+    const rawContent = data.choices?.[0]?.message?.content || '';
+
+    if (!rawContent) {
+      console.error('Together AI returned empty response');
+      throw new Error('Together AI returned empty response');
+    }
+
+    console.log('=== AI RESPONSE START ===');
+    console.log(rawContent.slice(0, 500) + (rawContent.length > 500 ? '...' : ''));
+    console.log('=== AI RESPONSE END ===');
+
+    return rawContent;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error instanceof Error && error.name === 'AbortError') {
+      console.error('Together AI request timed out after 15 seconds');
+      throw new Error('Together AI request timed out');
+    }
+    throw error;
+  }
 }
 
 function extractJsonFromResponse(rawResponse: string): string | null {

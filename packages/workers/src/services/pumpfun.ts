@@ -43,102 +43,132 @@ export interface PumpFunTokenData {
 }
 
 export async function fetchPumpFunData(tokenAddress: string): Promise<PumpFunTokenData | null> {
-  try {
-    // Fetch coin data with browser-like headers to avoid Cloudflare blocking
-    const response = await fetch(`${PUMPFUN_API}/coins/${tokenAddress}`, {
-      headers: {
-        'Accept': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Referer': 'https://pump.fun/',
-        'Origin': 'https://pump.fun',
-      },
-    });
+  // Retry up to 3 times with exponential backoff to handle Cloudflare blocking (error 1016)
+  const maxRetries = 3;
+  const delays = [0, 500, 1500]; // No delay, 500ms, 1500ms
 
-    if (!response.ok) {
-      if (response.status === 404) {
-        console.log('Token not found on Pump.fun');
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      // Add delay between retries (exponential backoff)
+      if (delays[attempt] > 0) {
+        console.log(`[PumpFun] Waiting ${delays[attempt]}ms before retry ${attempt + 1}...`);
+        await new Promise(resolve => setTimeout(resolve, delays[attempt]));
+      }
+
+      console.log(`[PumpFun] Attempt ${attempt + 1}/${maxRetries} for ${tokenAddress.slice(0, 8)}...`);
+
+      // Fetch coin data with browser-like headers to avoid Cloudflare blocking
+      const response = await fetch(`${PUMPFUN_API}/coins/${tokenAddress}`, {
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Referer': 'https://pump.fun/',
+          'Origin': 'https://pump.fun',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Cache-Control': 'no-cache',
+        },
+      });
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          console.log('[PumpFun] Token not found on Pump.fun');
+          return null;
+        }
+        // Log the error details
+        const errorText = await response.text().catch(() => 'unknown');
+        const isCloudflareBlock = errorText.includes('1016') || errorText.includes('Cloudflare');
+        console.warn(`[PumpFun] API error: ${response.status} - ${errorText.slice(0, 100)}`);
+
+        // If Cloudflare is blocking, retry
+        if (isCloudflareBlock && attempt < maxRetries - 1) {
+          console.log(`[PumpFun] Cloudflare blocking detected, will retry...`);
+          continue;
+        }
         return null;
       }
-      // Log the error details
-      const errorText = await response.text().catch(() => 'unknown');
-      console.warn(`Pump.fun API error: ${response.status} - ${errorText.slice(0, 100)}`);
-      return null;
+
+      // Check if response is JSON
+      const contentType = response.headers.get('content-type');
+      if (!contentType?.includes('application/json')) {
+        console.warn('[PumpFun] API returned non-JSON response');
+        continue; // Retry
+      }
+
+      const data = await response.json() as {
+        mint: string;
+        name: string;
+        symbol: string;
+        description?: string;
+        image_uri?: string;
+        creator: string;
+        created_timestamp: number;
+        bonding_curve: string;
+        virtual_sol_reserves: number;
+        virtual_token_reserves: number;
+        real_sol_reserves: number;
+        real_token_reserves: number;
+        market_cap: number;
+        complete: boolean;
+        raydium_pool?: string;
+        twitter?: string;
+        telegram?: string;
+        website?: string;
+        reply_count: number;
+        last_reply?: number;
+      };
+
+      const createdAt = data.created_timestamp || 0;
+      const ageInMs = Date.now() - createdAt;
+      const ageInDays = Math.floor(ageInMs / (1000 * 60 * 60 * 24));
+
+      // Calculate price from bonding curve
+      // Price = virtual_sol_reserves / virtual_token_reserves
+      const pricePerToken = data.virtual_token_reserves > 0
+        ? data.virtual_sol_reserves / data.virtual_token_reserves
+        : 0;
+
+      return {
+        tokenAddress: data.mint,
+        name: data.name,
+        symbol: data.symbol,
+        description: data.description,
+        imageUri: data.image_uri,
+
+        creator: data.creator,
+        createdTimestamp: createdAt,
+        ageInDays,
+
+        bondingCurveAddress: data.bonding_curve,
+        virtualSolReserves: data.virtual_sol_reserves / 1e9, // Convert lamports to SOL
+        virtualTokenReserves: data.virtual_token_reserves / 1e6, // Adjust decimals
+        realSolReserves: data.real_sol_reserves / 1e9,
+        realTokenReserves: data.real_token_reserves / 1e6,
+
+        marketCapSol: data.market_cap / 1e9, // Convert to SOL
+        pricePerToken,
+
+        complete: data.complete,
+        raydiumPool: data.raydium_pool,
+
+        twitter: data.twitter,
+        telegram: data.telegram,
+        website: data.website,
+
+        replyCount: data.reply_count || 0,
+        lastReply: data.last_reply,
+      };
+    } catch (error) {
+      console.error(`[PumpFun] Attempt ${attempt + 1} error:`, error);
+      // Continue to next retry if not the last attempt
+      if (attempt < maxRetries - 1) {
+        continue;
+      }
     }
-
-    // Check if response is JSON
-    const contentType = response.headers.get('content-type');
-    if (!contentType?.includes('application/json')) {
-      console.warn('Pump.fun API returned non-JSON response');
-      return null;
-    }
-
-    const data = await response.json() as {
-      mint: string;
-      name: string;
-      symbol: string;
-      description?: string;
-      image_uri?: string;
-      creator: string;
-      created_timestamp: number;
-      bonding_curve: string;
-      virtual_sol_reserves: number;
-      virtual_token_reserves: number;
-      real_sol_reserves: number;
-      real_token_reserves: number;
-      market_cap: number;
-      complete: boolean;
-      raydium_pool?: string;
-      twitter?: string;
-      telegram?: string;
-      website?: string;
-      reply_count: number;
-      last_reply?: number;
-    };
-
-    const createdAt = data.created_timestamp || 0;
-    const ageInMs = Date.now() - createdAt;
-    const ageInDays = Math.floor(ageInMs / (1000 * 60 * 60 * 24));
-
-    // Calculate price from bonding curve
-    // Price = virtual_sol_reserves / virtual_token_reserves
-    const pricePerToken = data.virtual_token_reserves > 0
-      ? data.virtual_sol_reserves / data.virtual_token_reserves
-      : 0;
-
-    return {
-      tokenAddress: data.mint,
-      name: data.name,
-      symbol: data.symbol,
-      description: data.description,
-      imageUri: data.image_uri,
-
-      creator: data.creator,
-      createdTimestamp: createdAt,
-      ageInDays,
-
-      bondingCurveAddress: data.bonding_curve,
-      virtualSolReserves: data.virtual_sol_reserves / 1e9, // Convert lamports to SOL
-      virtualTokenReserves: data.virtual_token_reserves / 1e6, // Adjust decimals
-      realSolReserves: data.real_sol_reserves / 1e9,
-      realTokenReserves: data.real_token_reserves / 1e6,
-
-      marketCapSol: data.market_cap / 1e9, // Convert to SOL
-      pricePerToken,
-
-      complete: data.complete,
-      raydiumPool: data.raydium_pool,
-
-      twitter: data.twitter,
-      telegram: data.telegram,
-      website: data.website,
-
-      replyCount: data.reply_count || 0,
-      lastReply: data.last_reply,
-    };
-  } catch (error) {
-    console.error('Pump.fun fetch error:', error);
-    return null;
   }
+
+  // All retries failed
+  console.warn('[PumpFun] All retry attempts failed');
+  return null;
 }
 
 /**

@@ -9,7 +9,7 @@ import type {
 } from '@whaleshield/shared';
 
 const API_BASE =
-  process.env.PLASMO_PUBLIC_API_URL || 'https://api.whaleshield.io';
+  process.env.PLASMO_PUBLIC_API_URL || 'https://whaleshield-api.hermosillo-jessie.workers.dev';
 
 // ============================================
 // Token Analysis
@@ -23,27 +23,54 @@ export async function analyzeToken(
   tokenAddress: string,
   options: AnalyzeOptions = {}
 ): Promise<HoneypotResult | null> {
-  try {
-    const response = await fetch(`${API_BASE}/analyze`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        tokenAddress,
-        chain: 'solana',
-        forceRefresh: options.forceRefresh,
-      }),
-    });
+  // Retry up to 2 times with 60 second timeout each
+  const maxRetries = 2;
+  const timeoutMs = 60000; // 60 seconds - AI analysis can be slow
 
-    if (!response.ok) {
-      console.error('Analyze API error:', response.status);
-      return null;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      console.log(`[WhaleShield] Analyze attempt ${attempt + 1}/${maxRetries} for ${tokenAddress.slice(0, 8)}...`);
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+      const response = await fetch(`${API_BASE}/analyze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tokenAddress,
+          chain: 'solana',
+          forceRefresh: options.forceRefresh,
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        console.error(`[WhaleShield] API error: ${response.status}`);
+        if (attempt < maxRetries - 1) continue; // Retry
+        return null;
+      }
+
+      const data = await response.json();
+      console.log(`[WhaleShield] Analysis complete for ${tokenAddress.slice(0, 8)}: ${data.riskLevel}`);
+      return data;
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.error(`[WhaleShield] Request timed out (${timeoutMs}ms), attempt ${attempt + 1}/${maxRetries}`);
+      } else {
+        console.error(`[WhaleShield] Request failed:`, error);
+      }
+      if (attempt < maxRetries - 1) {
+        await new Promise(r => setTimeout(r, 1000)); // Wait 1s before retry
+        continue;
+      }
     }
-
-    return response.json();
-  } catch (error) {
-    console.error('Analyze request failed:', error);
-    return null;
   }
+
+  console.error(`[WhaleShield] All ${maxRetries} attempts failed for ${tokenAddress.slice(0, 8)}`);
+  return null;
 }
 
 export async function getCachedAnalysis(tokenAddress: string): Promise<HoneypotResult | null> {

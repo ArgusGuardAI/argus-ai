@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { Bindings } from '../index';
-import { WalletReputation, getWalletRiskLevel } from '@whaleshield/shared';
+import { getWalletRiskLevel } from '@whaleshield/shared';
 import { createSupabaseClient, getWalletReputation, upsertWalletReputation } from '../services/supabase';
 
 export const walletHistoryRoutes = new Hono<{ Bindings: Bindings }>();

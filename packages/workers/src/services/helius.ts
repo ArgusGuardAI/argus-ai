@@ -15,25 +15,77 @@ const HELIUS_RPC_BASE = 'https://mainnet.helius-rpc.com';
  * Find the original creator/deployer of a token
  * For pump.fun tokens: Uses DexScreener to get creation timestamp, then finds the exact slot
  * For other tokens: Falls back to signature-based search
+ *
+ * @param tokenAddress - The token mint address
+ * @param apiKey - Helius API key
+ * @param dexId - Optional pre-fetched dexId from DexScreener (avoids duplicate fetch)
+ * @param pairCreatedAt - Optional pre-fetched creation timestamp from DexScreener
  */
 export async function findTokenCreator(
   tokenAddress: string,
-  apiKey: string
+  apiKey: string,
+  dexId?: string,
+  pairCreatedAt?: number
 ): Promise<string | null> {
   try {
     console.log(`[Helius] Finding creator for token ${tokenAddress.slice(0, 8)}...`);
 
-    // Check if this is a pump.fun token (address ends in 'pump')
-    const isPumpFun = tokenAddress.toLowerCase().endsWith('pump');
+    // Check if this is a pump.fun token
+    // Use pre-fetched dexId if available to avoid duplicate DexScreener call
+    let isPumpFun = tokenAddress.toLowerCase().endsWith('pump');
+    let creationTimestamp = pairCreatedAt;
+
+    if (dexId) {
+      // Use pre-fetched data
+      isPumpFun = isPumpFun || dexId === 'pumpfun' || dexId === 'pumpswap';
+    }
+
+    // ALWAYS fetch from DexScreener to get the ORIGINAL pumpfun creation time
+    // (even if we have a timestamp, it might be from pumpswap graduation)
+    if (isPumpFun) {
+      try {
+        const dexResponse = await fetch(
+          `https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`
+        );
+
+        if (dexResponse.ok) {
+          const dexData = await dexResponse.json() as {
+            pairs?: Array<{ dexId?: string; pairCreatedAt?: number }>;
+          };
+          // ALWAYS prefer the original pumpfun pair timestamp (not pumpswap graduation)
+          const pumpfunPair = dexData.pairs?.find(p => p.dexId === 'pumpfun');
+          if (pumpfunPair?.pairCreatedAt) {
+            console.log(`[Helius] Using original pumpfun timestamp: ${pumpfunPair.pairCreatedAt}`);
+            creationTimestamp = pumpfunPair.pairCreatedAt;
+          }
+          isPumpFun = isPumpFun || dexData.pairs?.some(p =>
+            p.dexId === 'pumpfun' || p.dexId === 'pumpswap'
+          ) || false;
+        }
+      } catch (err) {
+        console.warn('[Helius] Failed to fetch DexScreener for pumpfun timestamp:', err);
+      }
+    }
 
     if (isPumpFun) {
       // For pump.fun tokens, use the reliable slot-based method
-      const creator = await findPumpFunCreator(tokenAddress, apiKey);
+      console.log(`[Helius] Token is pump.fun/pumpswap, using slot-based creator detection`);
+      const creator = await findPumpFunCreator(tokenAddress, apiKey, creationTimestamp);
       if (creator) return creator;
     }
 
-    // Fallback: signature-based search (works for tokens with < 1000 txs)
-    return await findCreatorBySignatures(tokenAddress, apiKey);
+    // Fallback 1: signature-based search (works for tokens with < 1000 txs)
+    const creatorBySig = await findCreatorBySignatures(tokenAddress, apiKey);
+    if (creatorBySig) return creatorBySig;
+
+    // Fallback 2: Use Helius getAsset API to get update authority
+    // For pump.fun tokens, update authority is often the creator
+    console.log(`[Helius] Trying getAsset fallback for creator detection...`);
+    const creatorByAsset = await findCreatorByAsset(tokenAddress, apiKey);
+    if (creatorByAsset) return creatorByAsset;
+
+    console.warn(`[Helius] All creator detection methods failed for ${tokenAddress.slice(0, 8)}`);
+    return null;
   } catch (error) {
     console.error('[Helius] Error finding token creator:', error);
     return null;
@@ -43,39 +95,49 @@ export async function findTokenCreator(
 /**
  * Find pump.fun token creator by locating the exact creation slot
  * Uses binary search to quickly find the slot matching the creation timestamp
+ *
+ * @param tokenAddress - The token mint address
+ * @param apiKey - Helius API key
+ * @param pairCreatedAt - Optional pre-fetched creation timestamp (ms) from DexScreener
  */
 async function findPumpFunCreator(
   tokenAddress: string,
-  apiKey: string
+  apiKey: string,
+  pairCreatedAt?: number
 ): Promise<string | null> {
   try {
     console.log(`[Helius] Finding pump.fun creator for ${tokenAddress.slice(0, 8)}...`);
 
-    // Step 1: Get creation timestamp from DexScreener
-    const dexResponse = await fetch(
-      `https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`
-    );
+    let creationTimestampMs = pairCreatedAt;
 
-    if (!dexResponse.ok) {
-      console.warn(`[Helius] DexScreener request failed: ${dexResponse.status}`);
-      return null;
+    // Only fetch from DexScreener if timestamp not provided
+    if (!creationTimestampMs) {
+      const dexResponse = await fetch(
+        `https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`
+      );
+
+      if (!dexResponse.ok) {
+        console.warn(`[Helius] DexScreener request failed: ${dexResponse.status}`);
+        return null;
+      }
+
+      const dexData = await dexResponse.json() as {
+        pairs?: Array<{
+          dexId: string;
+          pairCreatedAt?: number;
+        }>;
+      };
+
+      // Find the pumpfun pair (original creation)
+      const pumpfunPair = dexData.pairs?.find(p => p.dexId === 'pumpfun');
+      if (!pumpfunPair?.pairCreatedAt) {
+        console.warn(`[Helius] No pump.fun pair found in DexScreener`);
+        return null;
+      }
+      creationTimestampMs = pumpfunPair.pairCreatedAt;
     }
 
-    const dexData = await dexResponse.json() as {
-      pairs?: Array<{
-        dexId: string;
-        pairCreatedAt?: number;
-      }>;
-    };
-
-    // Find the pumpfun pair (original creation)
-    const pumpfunPair = dexData.pairs?.find(p => p.dexId === 'pumpfun');
-    if (!pumpfunPair?.pairCreatedAt) {
-      console.warn(`[Helius] No pump.fun pair found in DexScreener`);
-      return null;
-    }
-
-    const creationTimestamp = Math.floor(pumpfunPair.pairCreatedAt / 1000);
+    const creationTimestamp = Math.floor(creationTimestampMs / 1000);
     console.log(`[Helius] Pump.fun creation timestamp: ${creationTimestamp}`);
 
     // Step 2: Binary search to find the slot with matching timestamp
@@ -88,7 +150,8 @@ async function findPumpFunCreator(
     console.log(`[Helius] Found slot ${targetSlot} for timestamp ${creationTimestamp}`);
 
     // Step 3: Search this slot and nearby for the CREATE transaction
-    for (let offset = -5; offset <= 5; offset++) {
+    // Expanded range to ±10 slots to account for timestamp drift
+    for (let offset = -10; offset <= 10; offset++) {
       const creator = await findCreateTxInSlot(tokenAddress, targetSlot + offset, apiKey);
       if (creator) {
         console.log(`[Helius] Found pump.fun creator at slot ${targetSlot + offset}: ${creator}`);
@@ -197,65 +260,6 @@ async function binarySearchSlotByTime(
     return bestSlot;
   } catch (error) {
     console.error('[Helius] Binary search error:', error);
-    return null;
-  }
-}
-
-/**
- * Convert a Unix timestamp to a Solana slot number (simple estimation)
- */
-async function timestampToSlot(
-  targetTimestamp: number,
-  apiKey: string
-): Promise<number | null> {
-  try {
-    // Get a recent slot as reference point
-    const recentSlotResponse = await fetch(
-      `${HELIUS_RPC_BASE}/?api-key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 'get-slot',
-          method: 'getSlot',
-          params: [],
-        }),
-      }
-    );
-
-    const recentSlotData = await recentSlotResponse.json() as { result?: number };
-    const recentSlot = recentSlotData.result;
-    if (!recentSlot) return null;
-
-    // Get timestamp for recent slot
-    const recentTimeResponse = await fetch(
-      `${HELIUS_RPC_BASE}/?api-key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 'get-time',
-          method: 'getBlockTime',
-          params: [recentSlot],
-        }),
-      }
-    );
-
-    const recentTimeData = await recentTimeResponse.json() as { result?: number };
-    const recentTimestamp = recentTimeData.result;
-    if (!recentTimestamp) return null;
-
-    // Calculate estimated slot (~2.5 slots per second)
-    const timeDiff = recentTimestamp - targetTimestamp;
-    const slotDiff = Math.floor(timeDiff * 2.5);
-    const estimatedSlot = recentSlot - slotDiff;
-
-    console.log(`[Helius] Estimated slot: ${estimatedSlot} (reference: ${recentSlot}, diff: ${slotDiff})`);
-    return estimatedSlot;
-  } catch (error) {
-    console.error('[Helius] Error converting timestamp to slot:', error);
     return null;
   }
 }
@@ -404,6 +408,81 @@ async function findCreatorBySignatures(
   }
 }
 
+/**
+ * Fallback: Find creator using Helius getAsset API
+ * For pump.fun tokens, the update authority is often the original creator
+ */
+async function findCreatorByAsset(
+  tokenAddress: string,
+  apiKey: string
+): Promise<string | null> {
+  try {
+    const response = await fetch(`${HELIUS_RPC_BASE}/?api-key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'get-asset',
+        method: 'getAsset',
+        params: { id: tokenAddress },
+      }),
+    });
+
+    if (!response.ok) {
+      console.warn(`[Helius] getAsset request failed: ${response.status}`);
+      return null;
+    }
+
+    const data = await response.json() as {
+      result?: {
+        authorities?: Array<{
+          address: string;
+          scopes: string[];
+        }>;
+        creators?: Array<{
+          address: string;
+          verified: boolean;
+          share: number;
+        }>;
+        ownership?: {
+          owner: string;
+        };
+      };
+    };
+
+    const result = data.result;
+    if (!result) return null;
+
+    // Priority 1: Check for verified creators
+    const verifiedCreator = result.creators?.find(c => c.verified);
+    if (verifiedCreator) {
+      console.log(`[Helius] Found verified creator via getAsset: ${verifiedCreator.address.slice(0, 8)}...`);
+      return verifiedCreator.address;
+    }
+
+    // Priority 2: Check update authority (common for pump.fun tokens)
+    const updateAuth = result.authorities?.find(a =>
+      a.scopes.includes('metadata') || a.scopes.includes('full')
+    );
+    if (updateAuth) {
+      console.log(`[Helius] Found update authority via getAsset: ${updateAuth.address.slice(0, 8)}...`);
+      return updateAuth.address;
+    }
+
+    // Priority 3: First creator (even if not verified)
+    if (result.creators && result.creators.length > 0) {
+      console.log(`[Helius] Found unverified creator via getAsset: ${result.creators[0].address.slice(0, 8)}...`);
+      return result.creators[0].address;
+    }
+
+    console.warn(`[Helius] getAsset returned no creator/authority info`);
+    return null;
+  } catch (error) {
+    console.error('[Helius] Error in getAsset fallback:', error);
+    return null;
+  }
+}
+
 export interface HeliusTokenMetadata {
   tokenAddress: string;
   name?: string;
@@ -499,12 +578,33 @@ export interface DevSellingAnalysis {
   lastSellTimestamp?: number;
   sellCount: number;
 
-  // Current holdings
+  // Current holdings (PROACTIVE - can they still dump?)
   currentBalance: number;
+  currentHoldingsPercent: number; // % of total supply they currently hold
 
   // Risk assessment
   severity: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   message: string;
+}
+
+export interface InsiderAnalysis {
+  // Early buyers who might be insiders/snipers
+  insiders: InsiderWallet[];
+
+  // Summary stats
+  totalInsiderHoldingsPercent: number;
+  highRiskInsiderCount: number; // Insiders holding 5%+ each
+
+  // Risk assessment
+  severity: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  message: string;
+}
+
+export interface InsiderWallet {
+  address: string;
+  buySlot: number; // When they bought (lower = earlier)
+  currentHoldingsPercent: number;
+  isHighRisk: boolean; // Holds 5%+ of supply
 }
 
 /**
@@ -699,7 +799,7 @@ export async function analyzeCreatorWallet(
  */
 async function checkTokenForRug(
   tokenAddress: string,
-  apiKey: string
+  _apiKey: string
 ): Promise<TokenMintInfo | null> {
   try {
     // Quick check via DexScreener for price history
@@ -939,6 +1039,7 @@ export async function analyzeDevSelling(
     percentSold: 0,
     sellCount: 0,
     currentBalance: 0,
+    currentHoldingsPercent: 0,
     severity: 'NONE',
     message: 'No dev selling detected',
   };
@@ -1026,26 +1127,45 @@ export async function analyzeDevSelling(
       }
     }
 
-    // Step 3: Get current token balance
-    try {
-      const balanceResponse = await fetch(
-        `${HELIUS_RPC_BASE}/?api-key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            jsonrpc: '2.0',
-            id: 'get-token-accounts',
-            method: 'getTokenAccountsByOwner',
-            params: [
-              creatorAddress,
-              { mint: tokenAddress },
-              { encoding: 'jsonParsed' }
-            ],
-          }),
-        }
-      );
+    // Step 3: Get current token balance AND total supply (for currentHoldingsPercent)
+    let totalSupply = 0;
 
+    try {
+      // Fetch balance and supply in parallel
+      const [balanceResponse, supplyResponse] = await Promise.all([
+        fetch(
+          `${HELIUS_RPC_BASE}/?api-key=${apiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              id: 'get-token-accounts',
+              method: 'getTokenAccountsByOwner',
+              params: [
+                creatorAddress,
+                { mint: tokenAddress },
+                { encoding: 'jsonParsed' }
+              ],
+            }),
+          }
+        ),
+        fetch(
+          `${HELIUS_RPC_BASE}/?api-key=${apiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              id: 'get-supply',
+              method: 'getTokenSupply',
+              params: [tokenAddress],
+            }),
+          }
+        )
+      ]);
+
+      // Parse balance
       if (balanceResponse.ok) {
         const balanceData = await balanceResponse.json() as {
           result?: {
@@ -1070,8 +1190,26 @@ export async function analyzeDevSelling(
           analysis.currentBalance += account.account.data.parsed.info.tokenAmount.uiAmount || 0;
         }
       }
+
+      // Parse total supply
+      if (supplyResponse.ok) {
+        const supplyData = await supplyResponse.json() as {
+          result?: {
+            value?: {
+              uiAmount: number;
+            };
+          };
+        };
+        totalSupply = supplyData.result?.value?.uiAmount || 0;
+      }
+
+      // Calculate currentHoldingsPercent (PROACTIVE metric)
+      if (totalSupply > 0 && analysis.currentBalance > 0) {
+        analysis.currentHoldingsPercent = (analysis.currentBalance / totalSupply) * 100;
+        console.log(`[DevSelling] Creator holds ${analysis.currentHoldingsPercent.toFixed(2)}% of total supply (${analysis.currentBalance}/${totalSupply})`);
+      }
     } catch (err) {
-      console.warn('[DevSelling] Failed to get current balance:', err);
+      console.warn('[DevSelling] Failed to get current balance/supply:', err);
     }
 
     // Step 4: Calculate selling metrics
@@ -1092,29 +1230,296 @@ export async function analyzeDevSelling(
         analysis.lastSellTimestamp = Math.max(...sellTimestamps);
       }
 
-      // Determine severity based on percent sold
-      if (analysis.percentSold >= 90) {
+      // Determine severity based on CURRENT HOLDINGS (proactive), not percent sold (reactive)
+      // What matters for new buyers is: can the dev still dump?
+      if (analysis.currentHoldingsPercent === 0) {
+        // Dev has completely exited - actually SAFER for new buyers
+        analysis.severity = 'NONE';
+        analysis.message = `Dev exited (sold ${analysis.percentSold.toFixed(0)}%) - now community-owned`;
+      } else if (analysis.currentHoldingsPercent >= 50) {
         analysis.severity = 'CRITICAL';
-        analysis.message = `DEV DUMPED: Creator sold ${analysis.percentSold.toFixed(0)}% of tokens (${analysis.sellCount} sales)`;
-      } else if (analysis.percentSold >= 70) {
+        analysis.message = `Dev holds ${analysis.currentHoldingsPercent.toFixed(1)}% - major dump risk`;
+      } else if (analysis.currentHoldingsPercent >= 30) {
         analysis.severity = 'HIGH';
-        analysis.message = `DEV SELLING HEAVILY: Creator sold ${analysis.percentSold.toFixed(0)}% of tokens`;
-      } else if (analysis.percentSold >= 50) {
+        analysis.message = `Dev holds ${analysis.currentHoldingsPercent.toFixed(1)}% - significant dump risk`;
+      } else if (analysis.currentHoldingsPercent >= 20) {
         analysis.severity = 'MEDIUM';
-        analysis.message = `Dev sold ${analysis.percentSold.toFixed(0)}% of holdings`;
-      } else if (analysis.percentSold >= 20) {
+        analysis.message = `Dev holds ${analysis.currentHoldingsPercent.toFixed(1)}% of supply`;
+      } else if (analysis.currentHoldingsPercent >= 10) {
         analysis.severity = 'LOW';
-        analysis.message = `Dev sold ${analysis.percentSold.toFixed(0)}% - taking some profit`;
+        analysis.message = `Dev holds ${analysis.currentHoldingsPercent.toFixed(1)}% - some dump potential`;
       } else {
         analysis.severity = 'NONE';
-        analysis.message = `Minor dev selling (${analysis.percentSold.toFixed(0)}%)`;
+        analysis.message = `Dev holds minimal amount (${analysis.currentHoldingsPercent.toFixed(1)}%)`;
       }
     }
 
-    console.log(`[DevSelling] Creator ${creatorAddress.slice(0, 8)}: sold ${analysis.percentSold.toFixed(1)}% (${analysis.sellCount} txs)`);
+    // Also evaluate severity if dev hasn't sold but holds tokens (most important proactive case!)
+    if (!analysis.hasSold && analysis.currentHoldingsPercent > 0) {
+      if (analysis.currentHoldingsPercent >= 50) {
+        analysis.severity = 'CRITICAL';
+        analysis.message = `Dev holds ${analysis.currentHoldingsPercent.toFixed(1)}% - major dump risk`;
+      } else if (analysis.currentHoldingsPercent >= 30) {
+        analysis.severity = 'HIGH';
+        analysis.message = `Dev holds ${analysis.currentHoldingsPercent.toFixed(1)}% - significant dump risk`;
+      } else if (analysis.currentHoldingsPercent >= 20) {
+        analysis.severity = 'MEDIUM';
+        analysis.message = `Dev holds ${analysis.currentHoldingsPercent.toFixed(1)}% of supply`;
+      } else if (analysis.currentHoldingsPercent >= 10) {
+        analysis.severity = 'LOW';
+        analysis.message = `Dev holds ${analysis.currentHoldingsPercent.toFixed(1)}% - some dump potential`;
+      }
+    }
+
+    console.log(`[DevSelling] Creator ${creatorAddress.slice(0, 8)}: holds ${analysis.currentHoldingsPercent.toFixed(1)}%, sold ${analysis.percentSold.toFixed(1)}%`);
 
   } catch (error) {
     console.error('[DevSelling] Analysis error:', error);
+  }
+
+  return analysis;
+}
+
+/**
+ * Analyze early buyers/snipers who might be insiders
+ * PROACTIVE detection - identifies wallets that could dump
+ */
+export async function analyzeInsiders(
+  tokenAddress: string,
+  creatorAddress: string | null,
+  apiKey: string,
+  knownLpAddresses?: string[]
+): Promise<InsiderAnalysis> {
+  const analysis: InsiderAnalysis = {
+    insiders: [],
+    totalInsiderHoldingsPercent: 0,
+    highRiskInsiderCount: 0,
+    severity: 'NONE',
+    message: 'No suspicious early buyers detected',
+  };
+
+  try {
+    console.log(`[Insiders] Analyzing early buyers for ${tokenAddress.slice(0, 8)}...`);
+
+    // Step 1: Get the first N transactions to find early buyers
+    const sigResponse = await fetch(
+      `${HELIUS_RPC_BASE}/?api-key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 'get-sigs',
+          method: 'getSignaturesForAddress',
+          params: [tokenAddress, { limit: 100 }],
+        }),
+      }
+    );
+
+    if (!sigResponse.ok) {
+      console.warn(`[Insiders] Failed to get signatures`);
+      return analysis;
+    }
+
+    const sigData = await sigResponse.json() as {
+      result?: Array<{ signature: string; slot: number }>;
+    };
+
+    const signatures = sigData.result || [];
+    if (signatures.length === 0) return analysis;
+
+    // Sort by slot (ascending) to find earliest
+    signatures.sort((a, b) => a.slot - b.slot);
+
+    // Get the first slot (creation slot)
+    const creationSlot = signatures[0].slot;
+
+    // Find early transactions (within first 50 slots of creation)
+    const earlySignatures = signatures
+      .filter(sig => sig.slot <= creationSlot + 50)
+      .slice(0, 30) // Max 30 to avoid timeout
+      .map(sig => sig.signature);
+
+    if (earlySignatures.length === 0) return analysis;
+
+    // Step 2: Parse these transactions to find buyers
+    const parseResponse = await fetch(
+      `${HELIUS_API_BASE}/transactions/?api-key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transactions: earlySignatures }),
+      }
+    );
+
+    if (!parseResponse.ok) return analysis;
+
+    const parsedTxs = await parseResponse.json() as Array<{
+      feePayer: string;
+      type: string;
+      slot: number;
+      source?: string;
+      tokenTransfers?: Array<{
+        mint: string;
+        toUserAccount: string;
+        tokenAmount: number;
+      }>;
+    }>;
+
+    // Step 3: Identify wallets that received tokens early (excluding creator and LPs)
+    const earlyBuyers = new Map<string, { slot: number; amount: number }>();
+
+    // Build set of known LP addresses (from DexScreener pair + hardcoded)
+    const lpAddressSet = new Set(knownLpAddresses || []);
+    // Add common Raydium LP authority
+    lpAddressSet.add('5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1');
+
+    for (const tx of parsedTxs) {
+      if (!tx.tokenTransfers) continue;
+
+      for (const transfer of tx.tokenTransfers) {
+        if (transfer.mint !== tokenAddress) continue;
+
+        const receiver = transfer.toUserAccount;
+
+        // Skip creator, known LPs, and pump.fun bonding curves
+        if (receiver === creatorAddress) continue;
+        if (lpAddressSet.has(receiver)) continue;
+        if (receiver.includes('pump')) continue; // Bonding curve addresses
+
+        // Track this early buyer
+        const existing = earlyBuyers.get(receiver);
+        if (!existing || tx.slot < existing.slot) {
+          earlyBuyers.set(receiver, {
+            slot: tx.slot,
+            amount: (existing?.amount || 0) + transfer.tokenAmount,
+          });
+        }
+      }
+    }
+
+    console.log(`[Insiders] Found ${earlyBuyers.size} early buyers`);
+
+    if (earlyBuyers.size === 0) return analysis;
+
+    // Step 4: Get total supply for percentage calculation
+    const supplyResponse = await fetch(
+      `${HELIUS_RPC_BASE}/?api-key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 'get-supply',
+          method: 'getTokenSupply',
+          params: [tokenAddress],
+        }),
+      }
+    );
+
+    let totalSupply = 0;
+    if (supplyResponse.ok) {
+      const supplyData = await supplyResponse.json() as {
+        result?: { value?: { uiAmount: number } };
+      };
+      totalSupply = supplyData.result?.value?.uiAmount || 0;
+    }
+
+    if (totalSupply === 0) {
+      console.warn('[Insiders] Could not get total supply');
+      return analysis;
+    }
+
+    // Step 5: Check current holdings of early buyers (sample top 10)
+    const earlyBuyerEntries = Array.from(earlyBuyers.entries())
+      .sort((a, b) => a[1].slot - b[1].slot)
+      .slice(0, 10);
+
+    for (const [wallet, data] of earlyBuyerEntries) {
+      try {
+        const balanceResponse = await fetch(
+          `${HELIUS_RPC_BASE}/?api-key=${apiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              id: `balance-${wallet.slice(0, 8)}`,
+              method: 'getTokenAccountsByOwner',
+              params: [
+                wallet,
+                { mint: tokenAddress },
+                { encoding: 'jsonParsed' }
+              ],
+            }),
+          }
+        );
+
+        if (!balanceResponse.ok) continue;
+
+        const balanceData = await balanceResponse.json() as {
+          result?: {
+            value?: Array<{
+              account: {
+                data: {
+                  parsed: {
+                    info: {
+                      tokenAmount: { uiAmount: number };
+                    };
+                  };
+                };
+              };
+            }>;
+          };
+        };
+
+        let currentBalance = 0;
+        for (const account of balanceData.result?.value || []) {
+          currentBalance += account.account.data.parsed.info.tokenAmount.uiAmount || 0;
+        }
+
+        const holdingsPercent = (currentBalance / totalSupply) * 100;
+
+        // Only track if they still hold meaningful amount (>1%)
+        if (holdingsPercent > 1) {
+          const isHighRisk = holdingsPercent >= 5; // 5%+ is high risk
+
+          analysis.insiders.push({
+            address: wallet,
+            buySlot: data.slot,
+            currentHoldingsPercent: holdingsPercent,
+            isHighRisk,
+          });
+
+          analysis.totalInsiderHoldingsPercent += holdingsPercent;
+          if (isHighRisk) {
+            analysis.highRiskInsiderCount++;
+          }
+        }
+      } catch (err) {
+        console.warn(`[Insiders] Error checking wallet ${wallet.slice(0, 8)}:`, err);
+      }
+    }
+
+    // Step 6: Calculate severity
+    if (analysis.highRiskInsiderCount >= 3) {
+      analysis.severity = 'CRITICAL';
+      analysis.message = `${analysis.highRiskInsiderCount} early buyers each hold 5%+ of supply (${analysis.totalInsiderHoldingsPercent.toFixed(1)}% total)`;
+    } else if (analysis.highRiskInsiderCount >= 2) {
+      analysis.severity = 'HIGH';
+      analysis.message = `${analysis.highRiskInsiderCount} early buyers hold significant portions (${analysis.totalInsiderHoldingsPercent.toFixed(1)}% total)`;
+    } else if (analysis.totalInsiderHoldingsPercent >= 20) {
+      analysis.severity = 'MEDIUM';
+      analysis.message = `Early buyers collectively hold ${analysis.totalInsiderHoldingsPercent.toFixed(1)}% of supply`;
+    } else if (analysis.totalInsiderHoldingsPercent >= 10) {
+      analysis.severity = 'LOW';
+      analysis.message = `Some early buyer concentration detected (${analysis.totalInsiderHoldingsPercent.toFixed(1)}%)`;
+    }
+
+    console.log(`[Insiders] ${analysis.insiders.length} insiders found, ${analysis.highRiskInsiderCount} high-risk, ${analysis.totalInsiderHoldingsPercent.toFixed(1)}% total holdings`);
+
+  } catch (error) {
+    console.error('[Insiders] Analysis error:', error);
   }
 
   return analysis;

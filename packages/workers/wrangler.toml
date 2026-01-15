@@ -5,6 +5,10 @@ name = "whaleshield-api"
 main = "src/index.ts"
 compatibility_date = "2024-01-01"
 
+# Workers Paid Plan - 50ms CPU limit for AI analysis
+[limits]
+cpu_ms = 50
+
 # ===========================================
 # SETUP INSTRUCTIONS
 # ===========================================

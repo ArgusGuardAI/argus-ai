@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Token Scanner - WhaleShield</title>
+  <meta name="description" content="Scan any Solana token for honeypots, rugs, and scams. AI-powered risk analysis by WhaleShield.">
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="Token Scanner - WhaleShield">
+  <meta property="og:description" content="AI-powered honeypot and rug detection for Solana tokens">
+  <meta property="og:image" content="https://whaleshield.io/img/whale.png">
+  <meta property="og:url" content="https://whaleshield.io/scanner">
+  <meta name="twitter:card" content="summary_large_image">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="apple-touch-icon" href="favicon.svg">
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            cyber: {
+              blue: '#00d4ff',
+              purple: '#7b2cbf',
+              pink: '#ff006e',
+            },
+            dark: {
+              950: '#050508',
+              900: '#0a0a0f',
+              800: '#0f0f18',
+              700: '#151520',
+              600: '#1a1a28',
+            }
+          },
+          animation: {
+            'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            'glow-pulse': 'glow-pulse 2s ease-in-out infinite',
+            'spin-slow': 'spin 3s linear infinite',
+          },
+          keyframes: {
+            'glow-pulse': {
+              '0%, 100%': { boxShadow: '0 0 20px rgba(0, 212, 255, 0.3)' },
+              '50%': { boxShadow: '0 0 40px rgba(0, 212, 255, 0.6)' },
+            },
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700;800&display=swap');
+
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+
+    .font-cyber {
+      font-family: 'Orbitron', sans-serif;
+    }
+
+    .gradient-text {
+      background: linear-gradient(135deg, #00d4ff 0%, #00a8e8 50%, #0088cc 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .cyber-border {
+      border: 1px solid rgba(0, 212, 255, 0.3);
+      box-shadow: 0 0 20px rgba(0, 212, 255, 0.1), inset 0 0 20px rgba(0, 212, 255, 0.05);
+    }
+
+    .tech-grid {
+      background-image:
+        linear-gradient(rgba(0, 212, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 212, 255, 0.03) 1px, transparent 1px);
+      background-size: 50px 50px;
+    }
+
+    .token-card {
+      transition: all 0.3s ease;
+    }
+
+    .token-card:hover {
+      border-color: rgba(0, 212, 255, 0.5);
+      box-shadow: 0 0 40px rgba(0, 212, 255, 0.2);
+      transform: translateY(-2px);
+    }
+
+    .risk-safe {
+      background: linear-gradient(135deg, #10b981, #059669);
+    }
+    .risk-suspicious {
+      background: linear-gradient(135deg, #f59e0b, #d97706);
+    }
+    .risk-dangerous {
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+    }
+    .risk-scam {
+      background: linear-gradient(135deg, #7c3aed, #6d28d9);
+    }
+
+    .score-ring {
+      position: relative;
+      width: 80px;
+      height: 80px;
+    }
+
+    .score-ring svg {
+      transform: rotate(-90deg);
+    }
+
+    .score-ring circle {
+      fill: none;
+      stroke-width: 8;
+    }
+
+    .score-ring .bg {
+      stroke: rgba(255, 255, 255, 0.1);
+    }
+
+    .score-ring .progress {
+      stroke-linecap: round;
+      transition: stroke-dashoffset 0.5s ease;
+    }
+
+    .score-value {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 1.25rem;
+      font-weight: 700;
+    }
+
+    .input-glow:focus {
+      box-shadow: 0 0 0 2px rgba(0, 212, 255, 0.3), 0 0 20px rgba(0, 212, 255, 0.2);
+    }
+  </style>
+</head>
+<body class="bg-dark-950 text-white min-h-screen tech-grid">
+  <!-- Navigation -->
+  <nav class="fixed top-0 left-0 right-0 z-50 bg-dark-950/90 backdrop-blur-md border-b border-white/5">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/" class="flex items-center space-x-3">
+          <img src="img/whale.png" alt="WhaleShield" class="h-10 w-10">
+          <span class="font-cyber text-xl gradient-text">WHALESHIELD</span>
+        </a>
+        <div class="flex items-center space-x-6">
+          <a href="/" class="text-gray-400 hover:text-cyber-blue transition-colors">Home</a>
+          <a href="/trends" class="text-gray-400 hover:text-cyber-blue transition-colors">Trends</a>
+          <a href="/scanner" class="text-cyber-blue font-medium">Scanner</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="pt-24 pb-16 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto">
+    <!-- Header -->
+    <div class="text-center mb-12">
+      <h1 class="font-cyber text-4xl sm:text-5xl gradient-text mb-4">TOKEN SCANNER</h1>
+      <p class="text-gray-400 text-lg">AI-powered honeypot and rug detection for Solana tokens</p>
+    </div>
+
+    <!-- Search Box -->
+    <div class="mb-12">
+      <div class="cyber-border rounded-xl p-6 bg-dark-800/50">
+        <label class="block text-sm text-gray-400 mb-2">Enter Token Address</label>
+        <div class="flex gap-3">
+          <input
+            type="text"
+            id="tokenInput"
+            placeholder="e.g., DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"
+            class="flex-1 bg-dark-700 border border-white/10 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none input-glow transition-all"
+          >
+          <button
+            id="scanBtn"
+            onclick="scanToken()"
+            class="px-6 py-3 bg-gradient-to-r from-cyber-blue to-blue-600 rounded-lg font-semibold hover:opacity-90 transition-opacity flex items-center gap-2"
+          >
+            <i class="fas fa-search"></i>
+            <span>Scan</span>
+          </button>
+        </div>
+        <p class="text-xs text-gray-500 mt-2">Paste any Solana token mint address to check for risks</p>
+      </div>
+    </div>
+
+    <!-- Loading State -->
+    <div id="loadingState" class="hidden">
+      <div class="cyber-border rounded-xl p-12 bg-dark-800/50 text-center">
+        <i class="fas fa-spinner animate-spin-slow text-4xl text-cyber-blue mb-4"></i>
+        <p class="text-gray-400">Analyzing token...</p>
+        <p class="text-xs text-gray-500 mt-2">This may take 10-30 seconds for fresh analysis</p>
+      </div>
+    </div>
+
+    <!-- Error State -->
+    <div id="errorState" class="hidden">
+      <div class="cyber-border rounded-xl p-8 bg-dark-800/50 border-red-500/30">
+        <div class="flex items-center gap-3 text-red-400 mb-2">
+          <i class="fas fa-exclamation-circle text-xl"></i>
+          <span class="font-semibold">Error</span>
+        </div>
+        <p id="errorMessage" class="text-gray-400"></p>
+      </div>
+    </div>
+
+    <!-- Result Card -->
+    <div id="resultCard" class="hidden">
+      <div class="cyber-border rounded-xl overflow-hidden bg-dark-800/50">
+        <!-- Header with Score -->
+        <div id="resultHeader" class="p-6 flex items-center justify-between">
+          <div class="flex items-center gap-4">
+            <div class="score-ring">
+              <svg width="80" height="80">
+                <circle class="bg" cx="40" cy="40" r="32"></circle>
+                <circle id="scoreCircle" class="progress" cx="40" cy="40" r="32"
+                  stroke-dasharray="201" stroke-dashoffset="201"></circle>
+              </svg>
+              <div id="scoreValue" class="score-value">--</div>
+            </div>
+            <div>
+              <h2 id="tokenName" class="text-2xl font-bold">--</h2>
+              <p id="tokenSymbol" class="text-gray-400">--</p>
+            </div>
+          </div>
+          <div id="riskBadge" class="px-4 py-2 rounded-full text-sm font-bold uppercase">
+            --
+          </div>
+        </div>
+
+        <!-- Stats Grid -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 p-6 border-t border-white/5">
+          <div class="text-center">
+            <p class="text-gray-500 text-xs uppercase mb-1">Market Cap</p>
+            <p id="marketCap" class="font-semibold text-lg">--</p>
+          </div>
+          <div class="text-center">
+            <p class="text-gray-500 text-xs uppercase mb-1">Liquidity</p>
+            <p id="liquidity" class="font-semibold text-lg">--</p>
+          </div>
+          <div class="text-center">
+            <p class="text-gray-500 text-xs uppercase mb-1">Creator Tokens</p>
+            <p id="creatorTokens" class="font-semibold text-lg">--</p>
+          </div>
+          <div class="text-center">
+            <p class="text-gray-500 text-xs uppercase mb-1">Previous Rugs</p>
+            <p id="ruggedTokens" class="font-semibold text-lg">--</p>
+          </div>
+        </div>
+
+        <!-- Flags -->
+        <div id="flagsSection" class="p-6 border-t border-white/5">
+          <h3 class="text-sm text-gray-500 uppercase mb-3">Risk Flags (<span id="flagCount">0</span>)</h3>
+          <div id="flagsList" class="space-y-2">
+            <!-- Flags will be inserted here -->
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="p-6 border-t border-white/5 flex gap-3">
+          <a id="pumpfunLink" href="#" target="_blank"
+            class="flex-1 py-3 bg-dark-700 hover:bg-dark-600 rounded-lg text-center transition-colors">
+            <i class="fas fa-external-link-alt mr-2"></i>View on Pump.fun
+          </a>
+          <a id="dexscreenerLink" href="#" target="_blank"
+            class="flex-1 py-3 bg-dark-700 hover:bg-dark-600 rounded-lg text-center transition-colors">
+            <i class="fas fa-chart-line mr-2"></i>DexScreener
+          </a>
+        </div>
+
+        <!-- Cached Notice -->
+        <div id="cachedNotice" class="hidden px-6 py-3 bg-dark-700/50 text-center text-xs text-gray-500">
+          <i class="fas fa-clock mr-1"></i>
+          Cached result from <span id="cachedTime">--</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recent Scans -->
+    <div id="recentScans" class="mt-12">
+      <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
+        <i class="fas fa-history text-cyber-blue"></i>
+        Recent Scans
+      </h3>
+      <div id="recentList" class="space-y-3">
+        <p class="text-gray-500 text-sm">Your recent scans will appear here</p>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-white/5 py-8 px-4">
+    <div class="max-w-4xl mx-auto text-center text-gray-500 text-sm">
+      <p>&copy; 2025 WhaleShield. AI-powered protection for Solana traders.</p>
+      <div class="flex justify-center gap-6 mt-4">
+        <a href="/privacy" class="hover:text-cyber-blue transition-colors">Privacy Policy</a>
+        <a href="https://twitter.com/WhaleShield" target="_blank" class="hover:text-cyber-blue transition-colors">
+          <i class="fab fa-twitter"></i> Twitter
+        </a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    const API_BASE = 'https://whaleshield-api.hermosillo-jessie.workers.dev';
+    let recentScans = JSON.parse(localStorage.getItem('recentScans') || '[]');
+
+    // Load recent scans on page load
+    document.addEventListener('DOMContentLoaded', () => {
+      renderRecentScans();
+
+      // Check for token in URL
+      const params = new URLSearchParams(window.location.search);
+      const token = params.get('token');
+      if (token) {
+        document.getElementById('tokenInput').value = token;
+        scanToken();
+      }
+    });
+
+    // Handle enter key
+    document.getElementById('tokenInput').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') scanToken();
+    });
+
+    async function scanToken() {
+      const input = document.getElementById('tokenInput');
+      const tokenAddress = input.value.trim();
+
+      if (!tokenAddress) {
+        showError('Please enter a token address');
+        return;
+      }
+
+      // Validate address format (basic check)
+      if (tokenAddress.length < 32 || tokenAddress.length > 50) {
+        showError('Invalid token address format');
+        return;
+      }
+
+      // Show loading
+      hideAll();
+      document.getElementById('loadingState').classList.remove('hidden');
+
+      try {
+        // First try cached score (instant)
+        const cachedResponse = await fetch(`${API_BASE}/scores?tokens=${tokenAddress}`);
+        const cachedData = await cachedResponse.json();
+
+        if (cachedData.scores && cachedData.scores[tokenAddress]) {
+          displayResult(cachedData.scores[tokenAddress], true);
+          saveToRecent(cachedData.scores[tokenAddress]);
+          return;
+        }
+
+        // Not cached, do full analysis
+        const response = await fetch(`${API_BASE}/analyze`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tokenAddress })
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.message || 'Analysis failed');
+        }
+
+        const data = await response.json();
+        displayResult(data, false);
+        saveToRecent(data);
+
+      } catch (error) {
+        showError(error.message || 'Failed to analyze token');
+      }
+    }
+
+    function displayResult(data, fromCache) {
+      hideAll();
+
+      const resultCard = document.getElementById('resultCard');
+      resultCard.classList.remove('hidden');
+
+      // Token info
+      document.getElementById('tokenName').textContent = data.market?.name || 'Unknown Token';
+      document.getElementById('tokenSymbol').textContent = `$${data.market?.symbol || '???'}`;
+
+      // Score
+      const score = data.riskScore || 0;
+      document.getElementById('scoreValue').textContent = score;
+
+      // Animate score ring
+      const circumference = 2 * Math.PI * 32;
+      const offset = circumference - (score / 100) * circumference;
+      const circle = document.getElementById('scoreCircle');
+      circle.style.strokeDashoffset = offset;
+
+      // Score color
+      let scoreColor = '#10b981'; // green
+      if (score >= 70) scoreColor = '#ef4444'; // red
+      else if (score >= 50) scoreColor = '#f59e0b'; // yellow
+      circle.style.stroke = scoreColor;
+      document.getElementById('scoreValue').style.color = scoreColor;
+
+      // Risk badge
+      const riskLevel = data.riskLevel || 'UNKNOWN';
+      const badge = document.getElementById('riskBadge');
+      badge.textContent = riskLevel;
+      badge.className = 'px-4 py-2 rounded-full text-sm font-bold uppercase ';
+      if (riskLevel === 'SAFE') badge.classList.add('risk-safe');
+      else if (riskLevel === 'SUSPICIOUS') badge.classList.add('risk-suspicious');
+      else if (riskLevel === 'DANGEROUS') badge.classList.add('risk-dangerous');
+      else badge.classList.add('risk-scam');
+
+      // Header background based on risk
+      const header = document.getElementById('resultHeader');
+      header.className = 'p-6 flex items-center justify-between ';
+      if (riskLevel === 'SAFE') header.classList.add('bg-green-900/20');
+      else if (riskLevel === 'SUSPICIOUS') header.classList.add('bg-yellow-900/20');
+      else header.classList.add('bg-red-900/20');
+
+      // Stats
+      document.getElementById('marketCap').textContent = formatCurrency(data.market?.marketCap);
+      document.getElementById('liquidity').textContent = formatCurrency(data.market?.liquidity);
+      document.getElementById('creatorTokens').textContent = data.creator?.tokensCreated ?? '--';
+      document.getElementById('ruggedTokens').textContent = data.creator?.ruggedTokens ?? '--';
+
+      // Color rugged tokens red if > 0
+      const ruggedEl = document.getElementById('ruggedTokens');
+      if (data.creator?.ruggedTokens > 0) {
+        ruggedEl.classList.add('text-red-400');
+      } else {
+        ruggedEl.classList.remove('text-red-400');
+      }
+
+      // Flags
+      const flagCount = data.flagCount || (data.flags?.length || 0);
+      document.getElementById('flagCount').textContent = flagCount;
+
+      const flagsList = document.getElementById('flagsList');
+      flagsList.innerHTML = '';
+
+      if (data.flags && data.flags.length > 0) {
+        data.flags.forEach(flag => {
+          const div = document.createElement('div');
+          div.className = 'flex items-start gap-2 text-sm';
+
+          let icon = 'fa-info-circle';
+          let color = 'text-gray-400';
+          if (flag.severity === 'CRITICAL') { icon = 'fa-skull'; color = 'text-red-400'; }
+          else if (flag.severity === 'HIGH') { icon = 'fa-exclamation-triangle'; color = 'text-orange-400'; }
+          else if (flag.severity === 'MEDIUM') { icon = 'fa-exclamation-circle'; color = 'text-yellow-400'; }
+          else if (flag.severity === 'LOW') { icon = 'fa-check-circle'; color = 'text-green-400'; }
+
+          div.innerHTML = `
+            <i class="fas ${icon} ${color} mt-0.5"></i>
+            <span class="text-gray-300">${flag.message}</span>
+          `;
+          flagsList.appendChild(div);
+        });
+      } else {
+        flagsList.innerHTML = '<p class="text-gray-500 text-sm">No specific flags</p>';
+      }
+
+      // Links
+      const tokenAddress = data.tokenAddress;
+      document.getElementById('pumpfunLink').href = `https://pump.fun/coin/${tokenAddress}`;
+      document.getElementById('dexscreenerLink').href = `https://dexscreener.com/solana/${tokenAddress}`;
+
+      // Cached notice
+      const cachedNotice = document.getElementById('cachedNotice');
+      if (fromCache && data.checkedAt) {
+        cachedNotice.classList.remove('hidden');
+        const date = new Date(data.checkedAt);
+        document.getElementById('cachedTime').textContent = date.toLocaleString();
+      } else {
+        cachedNotice.classList.add('hidden');
+      }
+    }
+
+    function showError(message) {
+      hideAll();
+      document.getElementById('errorState').classList.remove('hidden');
+      document.getElementById('errorMessage').textContent = message;
+    }
+
+    function hideAll() {
+      document.getElementById('loadingState').classList.add('hidden');
+      document.getElementById('errorState').classList.add('hidden');
+      document.getElementById('resultCard').classList.add('hidden');
+    }
+
+    function formatCurrency(value) {
+      if (!value && value !== 0) return '--';
+      if (value >= 1e9) return `$${(value / 1e9).toFixed(2)}B`;
+      if (value >= 1e6) return `$${(value / 1e6).toFixed(2)}M`;
+      if (value >= 1e3) return `$${(value / 1e3).toFixed(2)}K`;
+      return `$${value.toFixed(2)}`;
+    }
+
+    function saveToRecent(data) {
+      if (!data.tokenAddress) return;
+
+      // Remove if already exists
+      recentScans = recentScans.filter(s => s.tokenAddress !== data.tokenAddress);
+
+      // Add to front
+      recentScans.unshift({
+        tokenAddress: data.tokenAddress,
+        name: data.market?.name || 'Unknown',
+        symbol: data.market?.symbol || '???',
+        riskScore: data.riskScore,
+        riskLevel: data.riskLevel,
+        scannedAt: Date.now()
+      });
+
+      // Keep only last 10
+      recentScans = recentScans.slice(0, 10);
+
+      localStorage.setItem('recentScans', JSON.stringify(recentScans));
+      renderRecentScans();
+    }
+
+    function renderRecentScans() {
+      const container = document.getElementById('recentList');
+
+      if (recentScans.length === 0) {
+        container.innerHTML = '<p class="text-gray-500 text-sm">Your recent scans will appear here</p>';
+        return;
+      }
+
+      container.innerHTML = recentScans.map(scan => {
+        let badgeClass = 'bg-green-500/20 text-green-400';
+        if (scan.riskLevel === 'DANGEROUS' || scan.riskLevel === 'SCAM') {
+          badgeClass = 'bg-red-500/20 text-red-400';
+        } else if (scan.riskLevel === 'SUSPICIOUS') {
+          badgeClass = 'bg-yellow-500/20 text-yellow-400';
+        }
+
+        return `
+          <div class="token-card cyber-border rounded-lg p-4 bg-dark-800/50 cursor-pointer flex items-center justify-between"
+               onclick="quickScan('${scan.tokenAddress}')">
+            <div>
+              <p class="font-semibold">${scan.name}</p>
+              <p class="text-sm text-gray-500">$${scan.symbol}</p>
+            </div>
+            <div class="flex items-center gap-3">
+              <span class="text-lg font-bold" style="color: ${scan.riskScore >= 70 ? '#ef4444' : scan.riskScore >= 50 ? '#f59e0b' : '#10b981'}">
+                ${scan.riskScore}
+              </span>
+              <span class="px-2 py-1 rounded text-xs font-medium ${badgeClass}">
+                ${scan.riskLevel}
+              </span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function quickScan(tokenAddress) {
+      document.getElementById('tokenInput').value = tokenAddress;
+      scanToken();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  </script>
+</body>
+</html>

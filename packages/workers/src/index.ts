@@ -5,6 +5,7 @@ import { graffitiRoutes } from './routes/graffiti';
 import { walletHistoryRoutes } from './routes/wallet-history';
 import { subscriptionRoutes } from './routes/subscription';
 import { trendsRoutes } from './routes/trends';
+import scoresRoutes from './routes/scores';
 
 export type Bindings = {
   SCAN_CACHE: KVNamespace;
@@ -155,6 +156,7 @@ app.route('/graffiti', graffitiRoutes);
 app.route('/wallet-history', walletHistoryRoutes);
 app.route('/subscribe', subscriptionRoutes);
 app.route('/trends', trendsRoutes);
+app.route('/scores', scoresRoutes);
 
 // 404 handler
 app.notFound((c) => {

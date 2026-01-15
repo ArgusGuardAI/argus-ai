@@ -208,12 +208,7 @@ async function fetchTokenInfo(tokenAddress: string, rpcUrl: string): Promise<Tok
 
     const parsed = data.result?.value?.data?.parsed?.info;
 
-    // Try to get token metadata from Metaplex
-    const metadata = await fetchMetaplexMetadata(tokenAddress, rpcUrl);
-
     return {
-      name: metadata?.name,
-      symbol: metadata?.symbol,
       decimals: parsed?.decimals || 9,
       supply: parseInt(parsed?.supply || '0') / Math.pow(10, parsed?.decimals || 9),
       deployer: parsed?.mintAuthority || 'unknown',
@@ -235,22 +230,6 @@ async function fetchTokenInfo(tokenAddress: string, rpcUrl: string): Promise<Tok
       liquidityPools: [],
       lpLocked: false,
     };
-  }
-}
-
-async function fetchMetaplexMetadata(
-  tokenAddress: string,
-  rpcUrl: string
-): Promise<{ name?: string; symbol?: string } | null> {
-  try {
-    // Derive Metaplex metadata PDA
-    // This is a simplified version - full implementation would use proper PDA derivation
-    const METADATA_PROGRAM = 'metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s';
-
-    // For now, return null - full implementation would fetch metadata
-    return null;
-  } catch {
-    return null;
   }
 }
 
@@ -292,41 +271,63 @@ async function fetchTopHolders(
       ? totalSupply
       : accounts.reduce((sum, acc) => sum + (acc.uiAmount || 0), 0);
 
-    // Known LP/AMM program addresses
+    // Known LP/AMM program addresses and pool authority patterns
     const knownLpPrograms = new Set([
       // Raydium AMM
       '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8',
+      // Raydium CLMM
+      'CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK',
       // Orca Whirlpool
       'whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc',
+      // Meteora
+      'LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo',
     ]);
 
     // Create a set of known LP wallet addresses for quick lookup
     const knownLpWallets = new Set(knownLpAddresses || []);
 
-    // Fetch owners for accounts that might be LP (top 5)
+    // ALWAYS fetch owners for top 10 accounts to detect LP pools
+    // This is critical for graduated pump.fun tokens where LP is on Raydium
     const accountsWithOwners = await Promise.all(
-      accounts.slice(0, 5).map(async (acc) => {
-        // If we have known LP addresses, fetch the owner of this token account
-        if (knownLpWallets.size > 0) {
-          const owner = await fetchTokenAccountOwner(acc.address, rpcUrl);
-          return { ...acc, owner };
-        }
-        return { ...acc, owner: null };
+      accounts.slice(0, 10).map(async (acc) => {
+        const owner = await fetchTokenAccountOwner(acc.address, rpcUrl);
+        return { ...acc, owner };
       })
     );
 
     // Add remaining accounts without owner lookup
-    const remainingAccounts = accounts.slice(5).map(acc => ({ ...acc, owner: null }));
+    const remainingAccounts = accounts.slice(10).map(acc => ({ ...acc, owner: null }));
     const allAccounts = [...accountsWithOwners, ...remainingAccounts];
 
     return allAccounts.map((acc) => {
-      // Check if this is a liquidity pool by:
+      // Check if this is a liquidity pool by multiple methods:
       // 1. Token account address matches known LP programs
-      // 2. Token account address contains 'pump' (old heuristic)
-      // 3. Owner of this token account is a known LP wallet (bonding curve)
-      const isLp = knownLpPrograms.has(acc.address) ||
-        acc.address.includes('pump') ||
+      // 2. Owner of this token account is a known LP wallet (bonding curve)
+      // 3. Owner starts with '5Q544' (Raydium pool authority pattern)
+      // 4. Owner matches known LP program addresses (for Raydium/Pumpswap LPs)
+      // 5. Owner contains common LP patterns
+
+      let isLp = knownLpPrograms.has(acc.address) ||
         Boolean(acc.owner && knownLpWallets.has(acc.owner));
+
+      // Check owner for LP patterns (for Raydium/Pumpswap graduated tokens)
+      if (acc.owner) {
+        // Raydium AMM pool authorities typically start with '5Q544'
+        if (acc.owner.startsWith('5Q544')) {
+          isLp = true;
+        }
+        // Check if owner is a known AMM program
+        if (knownLpPrograms.has(acc.owner)) {
+          isLp = true;
+        }
+        // Raydium CLMM and Pumpswap pool patterns
+        // Pool authorities are PDAs that often have specific patterns
+        // Check for common Raydium pool authority prefixes
+        const raydiumPoolPrefixes = ['5Q544', 'HWy1', 'Gnt2', 'BVCh', 'DQyr'];
+        if (raydiumPoolPrefixes.some(prefix => acc.owner!.startsWith(prefix))) {
+          isLp = true;
+        }
+      }
 
       return {
         address: acc.address,

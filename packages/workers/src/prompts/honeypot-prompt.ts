@@ -30,17 +30,34 @@ Tokens with addresses ending in 'pump' are PUMP.FUN tokens. They work DIFFERENTL
 - They use a BONDING CURVE mechanism, NOT traditional LP pools
 - "No liquidity lock" is NOT a red flag for pump.fun - the bonding curve IS the liquidity
 - Bonding curves automatically provide liquidity - no LP lock needed
-- When bonding curve reaches 100%, token "graduates" to Raydium with real LP
+- When bonding curve reaches 100%, token "graduates" to Raydium/Pumpswap with real LP
 - High trading volume on new pump.fun tokens is NORMAL - it's how the platform works
 - Focus on: social presence, community engagement, and trading patterns instead
 
-For pump.fun tokens, adjust scoring:
-- New pump.fun token (<1 day): MINIMUM score 50 (new = risky until proven otherwise)
-- New pump.fun token (<1 day) with NO socials: MINIMUM score 60
-- Pump.fun token near graduation (100% bonding curve) with socials: Score 35-50
+CRITICAL - BONDING CURVE vs GRADUATED:
+- If DEX = "pumpfun": Token is STILL ON BONDING CURVE
+  → $0 liquidity is EXPECTED and NORMAL - DO NOT flag as low liquidity!
+  → The bonding curve itself provides buy/sell functionality
+  → This is NOT a red flag - it's how pump.fun works
+- If DEX = "pumpswap" or "raydium": Token has GRADUATED
+  → Now has traditional LP pool
+  → $0 liquidity would be a red flag
+
+For pump.fun tokens STILL ON BONDING CURVE (dex="pumpfun"):
+- DO NOT add liquidity flags - bonding curve IS the liquidity
+- Focus on: holder distribution, dev holdings, socials, trading volume
+
+PUMP.FUN SCORING (consider good indicators!):
+- New pump.fun token (<1 day), NO positive indicators: Score 60-70
+- New pump.fun token (<1 day) with GOOD indicators: Score 50-60
+  GOOD indicators that REDUCE risk:
+  → Dev exited (sold 100%, holds 0%) = -10 points
+  → Top non-LP holder <5% = -5 points
+  → No insiders detected = -5 points
+  → Has socials (Twitter/website) = -5 points
+  → Mint & freeze revoked = -5 points
+- Pump.fun token (>3 days old) with good indicators: Score 40-55
 - Pump.fun token (>7 days old) with active community: Score 25-40
-- Pump.fun token with NO socials and suspicious patterns: Score 60-80
-- NEVER score a pump.fun token below 50 unless it is >3 days old with verified socials
 
 HONEYPOT INDICATORS TO CHECK:
 

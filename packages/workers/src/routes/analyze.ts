@@ -1,9 +1,9 @@
 import { Hono } from 'hono';
 import type { Bindings } from '../index';
-import { HoneypotAnalysisRequest, HoneypotResult, HoneypotFlag, HoneypotRiskLevel } from '@whaleshield/shared';
+import { HoneypotAnalysisRequest, HoneypotResult, HoneypotFlag } from '@whaleshield/shared';
 import { analyzeForHoneypot } from '../services/together-ai';
 import { createSupabaseClient, cacheScanResult } from '../services/supabase';
-import { fetchTokenData, buildOnChainContext } from '../services/solana-data';
+import { fetchTokenData, buildOnChainContext, TokenOnChainData } from '../services/solana-data';
 import { fetchDexScreenerData, buildMarketContext, DexScreenerData } from '../services/dexscreener';
 import { fetchPumpFunData, buildPumpFunContext, isPumpFunToken, PumpFunTokenData } from '../services/pumpfun';
 import {
@@ -11,10 +11,13 @@ import {
   analyzeCreatorWallet,
   analyzeTokenTransactions,
   analyzeDevSelling,
+  analyzeInsiders,
   buildHeliusContext,
   findTokenCreator,
   CreatorAnalysis,
   DevSellingAnalysis,
+  InsiderAnalysis,
+  TransactionAnalysis,
 } from '../services/helius';
 
 interface AnalysisData {
@@ -22,6 +25,9 @@ interface AnalysisData {
   pumpFun: PumpFunTokenData | null;
   creator: CreatorAnalysis | null;
   devSelling: DevSellingAnalysis | null;
+  insiders: InsiderAnalysis | null;
+  holderData: TokenOnChainData | null;
+  bundleData: TransactionAnalysis | null;
   isPumpFun: boolean;
   ageInDays: number;
   marketCapUsd: number;
@@ -74,16 +80,38 @@ function applyHardcodedRules(
       }
     }
 
-    // Serial token creator
+    // Serial token creator - VERY suspicious, most are rug farmers
     if (creator.tokensCreated > 10) {
-      if (adjustedScore < 60) {
-        adjustedScore = 60;
+      // 10+ tokens = almost certainly a serial rugger
+      if (adjustedScore < 75) {
+        adjustedScore = 75;
+        additionalFlags.push({
+          type: 'DEPLOYER',
+          severity: 'CRITICAL',
+          message: `⚠️ Serial token creator: ${creator.tokensCreated} tokens deployed - high rug risk`,
+        });
+      }
+    } else if (creator.tokensCreated > 5) {
+      // 5-10 tokens = suspicious
+      if (adjustedScore < 65) {
+        adjustedScore = 65;
         additionalFlags.push({
           type: 'DEPLOYER',
           severity: 'HIGH',
           message: `Serial token creator: ${creator.tokensCreated} tokens deployed`,
         });
       }
+    } else if (creator.tokensCreated > 2) {
+      // 3-5 tokens = suspicious, especially for new micro-cap tokens
+      const minScore = (marketCapUsd < 50000 && ageInDays < 1) ? 65 : 55;
+      if (adjustedScore < minScore) {
+        adjustedScore = minScore;
+      }
+      additionalFlags.push({
+        type: 'DEPLOYER',
+        severity: 'MEDIUM',
+        message: `Creator has deployed ${creator.tokensCreated} tokens previously`,
+      });
     }
   }
 
@@ -95,6 +123,19 @@ function applyHardcodedRules(
         type: 'DEPLOYER',
         severity: 'HIGH',
         message: 'Deployer/creator could not be identified - higher risk',
+      });
+    }
+  }
+
+  // Creator address known but analysis failed = still risky (can't verify history)
+  // This catches cases where pump.fun gives us address but analyzeCreatorWallet fails
+  if (!data.hasUnknownDeployer && !creator) {
+    if (adjustedScore < 60) {
+      adjustedScore = 60;
+      additionalFlags.push({
+        type: 'DEPLOYER',
+        severity: 'MEDIUM',
+        message: 'Creator wallet history could not be verified - exercise caution',
       });
     }
   }
@@ -127,22 +168,55 @@ function applyHardcodedRules(
   }
 
   // ============================================
-  // RULE 3: LIQUIDITY RULES (NON-PUMP.FUN)
+  // RULE 3: ZERO LIQUIDITY = HONEYPOT
   // ============================================
-  if (!isPumpFun && dexScreener) {
-    // Zero or near-zero liquidity = SCAM
-    if (liquidityUsd < 100) {
+  // IMPORTANT: Pump.fun bonding curve tokens report $0 liquidity on DexScreener
+  // but they CAN be sold via the bonding curve. Only flag as honeypot if:
+  // 1. NOT a pump.fun token, OR
+  // 2. IS a pump.fun token that has GRADUATED (complete=true) but has $0 LP
+  const isOnBondingCurve = isPumpFun && pumpFun && !pumpFun.complete;
+  const isGraduatedWithNoLiquidity = isPumpFun && pumpFun?.complete && liquidityUsd <= 0;
+
+  if (!isOnBondingCurve && liquidityUsd <= 0) {
+    // Only flag if NOT on bonding curve
+    if (isGraduatedWithNoLiquidity) {
+      // Graduated pump.fun token with no LP = real problem
       if (adjustedScore < 90) {
         adjustedScore = 90;
         additionalFlags.push({
           type: 'LIQUIDITY',
           severity: 'CRITICAL',
-          message: `CRITICAL: Liquidity is $${liquidityUsd.toFixed(2)} - token can be rugged instantly`,
+          message: `🚨 HONEYPOT: Graduated from pump.fun but $0 LP - YOU CANNOT SELL`,
+        });
+      }
+    } else if (!isPumpFun) {
+      // Non-pump.fun token with no liquidity
+      if (adjustedScore < 90) {
+        adjustedScore = 90;
+        additionalFlags.push({
+          type: 'LIQUIDITY',
+          severity: 'CRITICAL',
+          message: `🚨 HONEYPOT: $0 liquidity - YOU CANNOT SELL THIS TOKEN`,
         });
       }
     }
+  } else if (!isOnBondingCurve && liquidityUsd < 100) {
+    if (adjustedScore < 85) {
+      adjustedScore = 85;
+      additionalFlags.push({
+        type: 'LIQUIDITY',
+        severity: 'CRITICAL',
+        message: `CRITICAL: Only $${liquidityUsd.toFixed(2)} liquidity - extremely high rug risk`,
+      });
+    }
+  }
+
+  // ============================================
+  // RULE 3b: LIQUIDITY RULES (NON-PUMP.FUN)
+  // ============================================
+  if (!isPumpFun && dexScreener) {
     // Very low liquidity = DANGEROUS
-    else if (liquidityUsd < 1000) {
+    if (liquidityUsd < 1000 && liquidityUsd >= 100) {
       if (adjustedScore < 80) {
         adjustedScore = 80;
         additionalFlags.push({
@@ -230,6 +304,20 @@ function applyHardcodedRules(
     s.type === 'twitter' || s.url?.includes('twitter.com') || s.url?.includes('x.com')
   );
 
+  // PENALTY: Micro cap + no socials = high rug risk
+  const noSocials = !hasWebsite && !hasTwitter;
+  if (marketCapUsd < 50000 && noSocials && ageInDays < 1) {
+    if (adjustedScore < 70) {
+      adjustedScore = 70;
+      additionalFlags.push({
+        type: 'SOCIAL',
+        severity: 'HIGH',
+        message: `Micro cap ($${(marketCapUsd / 1000).toFixed(1)}K) with no social presence - high rug risk`,
+      });
+    }
+  }
+
+  // CREDIT: Website + Twitter presence
   if (hasWebsite && hasTwitter && !hasKnownRugs) {
     // Reduce score by 5 for having social presence (min 50 to stay in SUSPICIOUS)
     const reduction = 5;
@@ -326,54 +414,368 @@ function applyHardcodedRules(
   }
 
   // ============================================
-  // RULE 9: DEV SELLING DETECTION (CRITICAL)
+  // RULE 9: DEV EXIT STATUS (Informational)
   // ============================================
-  // If the creator/dev sells their tokens, it's a MASSIVE red flag
+  // NOTE: Dev having ALREADY sold is NOT necessarily bad for new buyers
+  // If dev exited and token has sustained activity, it's actually safer
+  // The PROACTIVE risk is in RULE 10 (current holdings)
   const { devSelling } = data;
 
   if (devSelling && devSelling.hasSold) {
-    const { percentSold, severity, message } = devSelling;
+    const { percentSold, currentHoldingsPercent } = devSelling;
 
-    if (severity === 'CRITICAL') {
-      // Dev dumped 90%+ - almost certainly a rug
-      if (adjustedScore < 90) {
-        adjustedScore = 90;
+    // If dev sold 100% and holds 0%, token is "community-owned"
+    if (percentSold >= 90 && currentHoldingsPercent === 0) {
+      // Dev has completely exited - this is NEUTRAL/POSITIVE for new buyers
+      // Only flag as info, don't increase score
+      additionalFlags.push({
+        type: 'DEPLOYER',
+        severity: 'LOW',
+        message: `Dev has exited (sold ${percentSold.toFixed(0)}%) - token is community-owned`,
+      });
+      // Give slight credit if token has sustained activity after dev exit
+      if (marketCapUsd > 100000 && liquidityUsd > 10000) {
+        if (adjustedScore > 50) {
+          adjustedScore -= 5; // Credit for surviving dev exit
+        }
+      }
+    } else if (percentSold >= 50 && currentHoldingsPercent > 0) {
+      // Dev sold significant amount but STILL HOLDS some - mixed signal
+      additionalFlags.push({
+        type: 'DEPLOYER',
+        severity: 'MEDIUM',
+        message: `Dev sold ${percentSold.toFixed(0)}% but still holds ${currentHoldingsPercent.toFixed(1)}%`,
+      });
+    }
+    // Note: Active selling while holding is handled by RULE 10 (current holdings)
+  }
+
+  // ============================================
+  // RULE 10: CREATOR CURRENT HOLDINGS (PROACTIVE)
+  // ============================================
+  // Even if dev hasn't sold yet, check if they COULD dump
+  if (devSelling && devSelling.currentHoldingsPercent > 0) {
+    const { currentHoldingsPercent } = devSelling;
+
+    if (currentHoldingsPercent >= 50) {
+      // Creator holds 50%+ - CRITICAL dump risk
+      if (adjustedScore < 75) {
+        adjustedScore = 75;
       }
       additionalFlags.push({
         type: 'DEPLOYER',
         severity: 'CRITICAL',
-        message: `🚨 ${message}`,
+        message: `⚠️ Creator holds ${currentHoldingsPercent.toFixed(1)}% of supply - major dump risk`,
       });
-    } else if (severity === 'HIGH') {
-      // Dev sold 70%+ - very concerning
-      if (adjustedScore < 80) {
-        adjustedScore = 80;
-      }
-      additionalFlags.push({
-        type: 'DEPLOYER',
-        severity: 'CRITICAL',
-        message: `⚠️ ${message}`,
-      });
-    } else if (severity === 'MEDIUM') {
-      // Dev sold 50%+ - concerning
-      if (adjustedScore < 70) {
-        adjustedScore = 70;
+    } else if (currentHoldingsPercent >= 30) {
+      // Creator holds 30%+ - HIGH risk
+      if (adjustedScore < 65) {
+        adjustedScore = 65;
       }
       additionalFlags.push({
         type: 'DEPLOYER',
         severity: 'HIGH',
-        message,
+        message: `Creator holds ${currentHoldingsPercent.toFixed(1)}% of supply - significant dump risk`,
       });
-    } else if (severity === 'LOW' && percentSold >= 20) {
-      // Dev sold 20%+ - worth noting
-      if (adjustedScore < 60) {
-        adjustedScore = 60;
+    } else if (currentHoldingsPercent >= 20) {
+      // Creator holds 20%+ - MEDIUM risk
+      if (adjustedScore < 55) {
+        adjustedScore = 55;
       }
       additionalFlags.push({
         type: 'DEPLOYER',
         severity: 'MEDIUM',
-        message,
+        message: `Creator holds ${currentHoldingsPercent.toFixed(1)}% of supply`,
       });
+    } else if (currentHoldingsPercent >= 10) {
+      // Creator holds 10%+ - worth noting
+      additionalFlags.push({
+        type: 'DEPLOYER',
+        severity: 'LOW',
+        message: `Creator still holds ${currentHoldingsPercent.toFixed(1)}% of supply`,
+      });
+    }
+  }
+
+  // ============================================
+  // RULE 11: INSIDER/SNIPER DETECTION (PROACTIVE)
+  // ============================================
+  // Check if early buyers (potential insiders) hold large amounts
+  const { insiders } = data;
+
+  if (insiders && insiders.insiders.length > 0) {
+    if (insiders.severity === 'CRITICAL') {
+      // 3+ insiders each holding 5%+
+      if (adjustedScore < 80) {
+        adjustedScore = 80;
+      }
+      additionalFlags.push({
+        type: 'HOLDERS',
+        severity: 'CRITICAL',
+        message: `🚨 ${insiders.message}`,
+      });
+    } else if (insiders.severity === 'HIGH') {
+      // 2 insiders holding 5%+
+      if (adjustedScore < 70) {
+        adjustedScore = 70;
+      }
+      additionalFlags.push({
+        type: 'HOLDERS',
+        severity: 'HIGH',
+        message: `⚠️ ${insiders.message}`,
+      });
+    } else if (insiders.severity === 'MEDIUM') {
+      // Collective 20%+ holdings
+      if (adjustedScore < 60) {
+        adjustedScore = 60;
+      }
+      additionalFlags.push({
+        type: 'HOLDERS',
+        severity: 'MEDIUM',
+        message: insiders.message,
+      });
+    } else if (insiders.severity === 'LOW') {
+      // Some early buyer concentration
+      additionalFlags.push({
+        type: 'HOLDERS',
+        severity: 'LOW',
+        message: insiders.message,
+      });
+    }
+  }
+
+  // ============================================
+  // RULE 11.5: BUNDLE DETECTION (PROACTIVE)
+  // ============================================
+  // Coordinated buying is a MAJOR red flag - often precedes rugs
+  const { bundleData } = data;
+  let bundleDetectedFromHelius = false;
+
+  if (bundleData && bundleData.coordinatedWallets > 0) {
+    const coordWallets = bundleData.coordinatedWallets;
+    const bundledPercent = bundleData.bundledBuyPercent;
+    bundleDetectedFromHelius = true;
+
+    if (coordWallets >= 15 || bundledPercent >= 30) {
+      // CRITICAL: 15+ coordinated wallets or 30%+ bundled buys
+      if (adjustedScore < 75) {
+        adjustedScore = 75;
+      }
+      additionalFlags.push({
+        type: 'BUNDLE',
+        severity: 'CRITICAL',
+        message: `🚨 ${coordWallets} coordinated wallets detected - likely rug setup`,
+      });
+    } else if (coordWallets >= 10 || bundledPercent >= 20) {
+      // HIGH: 10+ coordinated wallets or 20%+ bundled
+      if (adjustedScore < 70) {
+        adjustedScore = 70;
+      }
+      additionalFlags.push({
+        type: 'BUNDLE',
+        severity: 'HIGH',
+        message: `⚠️ ${coordWallets} coordinated wallets detected - suspicious activity`,
+      });
+    } else if (coordWallets >= 5) {
+      // MEDIUM: 5+ coordinated wallets
+      if (adjustedScore < 65) {
+        adjustedScore = 65;
+      }
+      additionalFlags.push({
+        type: 'BUNDLE',
+        severity: 'MEDIUM',
+        message: `${coordWallets} coordinated wallets detected`,
+      });
+    } else {
+      // Less than 5 coordinated wallets - still flag it with LOW severity
+      additionalFlags.push({
+        type: 'BUNDLE',
+        severity: 'LOW',
+        message: `${coordWallets} coordinated wallet(s) detected in same slot`,
+      });
+    }
+  }
+
+  // ============================================
+  // RULE 11.6: BUNDLE PENALTY (+5 for ANY bundle detection)
+  // ============================================
+  // Any bundle activity adds +5 risk points - bundling is always suspicious
+  // This applies ON TOP of the minimum score rules above
+  if (bundleDetectedFromHelius) {
+    adjustedScore += 5;
+    console.log(`[Rules] Bundle penalty +5 applied (Helius detected bundles) - new score: ${adjustedScore}`);
+  }
+
+  // ============================================
+  // RULE 11.7: AI BUNDLE MENTION PENALTY (+5)
+  // ============================================
+  // If AI mentions bundles in text but we didn't detect via Helius, add +5
+  // This catches cases where AI sees bundle patterns we missed
+  const bundleKeywords = ['bundle', 'bundled', 'coordinated wallet', 'same slot', 'sniping'];
+  const aiTextToSearch = [
+    result.summary.toLowerCase(),
+    ...result.flags.map(f => f.message.toLowerCase()),
+  ].join(' ');
+
+  const aiBundleMentioned = bundleKeywords.some(keyword => aiTextToSearch.includes(keyword));
+
+  if (aiBundleMentioned && !bundleDetectedFromHelius) {
+    // AI mentioned bundles but Helius didn't detect them - add penalty
+    adjustedScore += 5;
+    additionalFlags.push({
+      type: 'BUNDLE',
+      severity: 'MEDIUM',
+      message: 'AI detected potential bundle/coordinated activity',
+    });
+    console.log(`[Rules] AI bundle mention penalty +5 applied - new score: ${adjustedScore}`);
+  } else if (aiBundleMentioned && bundleDetectedFromHelius) {
+    // Both detected - add another +5 for double confirmation
+    adjustedScore += 5;
+    console.log(`[Rules] AI bundle confirmation penalty +5 applied - new score: ${adjustedScore}`);
+  }
+
+  // ============================================
+  // RULE 12: PUMP.FUN DISTRIBUTION CHECK (CRITICAL)
+  // ============================================
+  // Check if token has REAL distribution or if most is still in bonding curve
+  // A token where 95%+ is in bonding curve means almost nobody has bought!
+  if (isPumpFun && data.holderData) {
+    const topHolderPercent = data.holderData.top1HolderPercent;
+    const top10NonLpPercent = data.holderData.top10NonLpHolderPercent;
+
+    // If bonding curve holds 95%+ and total non-LP distribution is < 5%
+    // This means almost no one has actually bought - VERY THIN market
+    if (topHolderPercent >= 95 && top10NonLpPercent < 5) {
+      if (adjustedScore < 70) {
+        adjustedScore = 70;
+      }
+      additionalFlags.push({
+        type: 'HOLDERS',
+        severity: 'HIGH',
+        message: `⚠️ Only ${top10NonLpPercent.toFixed(1)}% of supply distributed - ${topHolderPercent.toFixed(1)}% still in bonding curve`,
+      });
+    } else if (topHolderPercent >= 90 && top10NonLpPercent < 10) {
+      // 90%+ in bonding curve, < 10% distributed - still risky
+      if (adjustedScore < 65) {
+        adjustedScore = 65;
+      }
+      additionalFlags.push({
+        type: 'HOLDERS',
+        severity: 'MEDIUM',
+        message: `Low distribution: ${top10NonLpPercent.toFixed(1)}% of supply distributed, ${topHolderPercent.toFixed(1)}% in bonding curve`,
+      });
+    }
+  }
+
+  // ============================================
+  // RULE 13: PUMP.FUN GOOD FUNDAMENTALS CREDIT
+  // ============================================
+  // For pump.fun tokens on bonding curve with GOOD indicators, reduce score
+  // This counterbalances the age/creator penalties for tokens showing healthy signs
+  // CRITICAL: NEVER apply credits when we have incomplete data!
+  if (isPumpFun && !hasKnownRugs) {
+    // Check if we have REAL, VERIFIED data before giving ANY credit
+    const hasVerifiedData = !!creator && // Must have verified creator
+      !!data.holderData && // Must have holder data
+      data.holderData.totalHolders > 0; // Must have actual holder count
+
+    const hasRealDistribution = data.holderData &&
+      data.holderData.top1HolderPercent < 90 &&
+      data.holderData.top10NonLpHolderPercent >= 10;
+
+    // Only give credit if we have VERIFIED data AND real distribution
+    if (hasVerifiedData && hasRealDistribution) {
+      let goodIndicatorCredit = 0;
+
+      // Dev has completely exited (0% holdings)
+      // ONLY give credit if token has OTHER positive signals too
+      // A dev dumping on a no-socials, micro-cap, new-wallet token is NOT positive!
+      const hasSocials = hasTwitter || hasWebsite;
+      const hasDecentMarketCap = marketCapUsd >= 50000;
+      const creatorNotBrandNew = creator && creator.walletAge > 0;
+
+      if (devSelling && devSelling.currentHoldingsPercent === 0 && devSelling.hasSold) {
+        // Only give credit if token has positive fundamentals
+        if (hasSocials && hasDecentMarketCap) {
+          goodIndicatorCredit += 10;
+        } else if (hasSocials || hasDecentMarketCap) {
+          goodIndicatorCredit += 5; // Partial credit
+        }
+        // NO credit if no socials AND micro cap - dev just dumped and ran
+      }
+
+      // Excellent holder distribution (top non-LP holder < 5% AND there's real distribution)
+      if (data.holderData && data.holderData.top1NonLpHolderPercent < 5 && data.holderData.top10NonLpHolderPercent >= 10) {
+        goodIndicatorCredit += 5;
+        additionalFlags.push({
+          type: 'HOLDERS',
+          severity: 'LOW',
+          message: `Top 1 Non-LP Holder owns ${data.holderData.top1NonLpHolderPercent.toFixed(2)}% of supply`,
+        });
+      }
+
+      // No suspicious insiders detected
+      if (insiders && insiders.insiders.length === 0) {
+        goodIndicatorCredit += 5;
+      }
+
+      // Has socials (Twitter or website via DexScreener)
+      if (hasTwitter || hasWebsite) {
+        goodIndicatorCredit += 5;
+      }
+
+      // Both authorities revoked (mint and freeze)
+      if (!data.hasMintAuthority && !data.hasFreezeAuthority) {
+        goodIndicatorCredit += 5;
+      }
+
+      // Apply credit (cap reduction to keep minimum based on risk factors)
+      if (goodIndicatorCredit > 0) {
+        const maxCredit = Math.min(goodIndicatorCredit, 20); // Cap at 20 point reduction
+
+        // Floor depends on risk factors - no socials + micro cap = higher floor
+        let floor = 40;
+        if (ageInDays < 1) {
+          floor = 50; // New tokens minimum 50
+          if (!hasSocials && marketCapUsd < 50000) {
+            floor = 60; // No socials + micro cap = minimum 60
+          }
+        }
+
+        if (adjustedScore - maxCredit >= floor) {
+          adjustedScore -= maxCredit;
+          console.log(`[Rules] Pump.fun good fundamentals credit: -${maxCredit} points (new score: ${adjustedScore})`);
+        } else if (adjustedScore > floor) {
+          adjustedScore = floor;
+          console.log(`[Rules] Pump.fun good fundamentals credit: reduced to floor ${floor}`);
+        }
+      }
+    } else {
+      console.log(`[Rules] Skipping good fundamentals credit - insufficient verified data or distribution`);
+    }
+  }
+
+  // ============================================
+  // RULE 14: INCOMPLETE DATA PENALTY
+  // ============================================
+  // If we couldn't verify key data, score should be HIGHER not lower
+  // Missing data = can't verify safety = higher risk
+  const hasIncompleteData = result.confidence === 0 || // AI failed
+    (!creator && !data.hasUnknownDeployer) || // Creator known but analysis failed
+    (data.holderData && data.holderData.totalHolders === 0); // Holder data fetch failed
+
+  if (hasIncompleteData && isPumpFun && ageInDays < 1) {
+    // New pump.fun token with incomplete data = HIGH RISK
+    if (adjustedScore < 65) {
+      adjustedScore = 65;
+      if (result.confidence === 0) {
+        additionalFlags.push({
+          type: 'CONTRACT',
+          severity: 'HIGH',
+          message: 'Analysis incomplete - unable to fully verify token safety',
+        });
+      }
+      console.log(`[Rules] Incomplete data penalty applied - new score: ${adjustedScore}`);
     }
   }
 
@@ -462,6 +864,9 @@ analyzeRoutes.post('/', async (c) => {
       pumpFun: null,
       creator: null,
       devSelling: null,
+      insiders: null,
+      holderData: null,
+      bundleData: null,
       isPumpFun: isPumpFunToken(body.tokenAddress),
       ageInDays: 0,
       marketCapUsd: 0,
@@ -513,81 +918,117 @@ analyzeRoutes.post('/', async (c) => {
       analysisData.hasFreezeAuthority = !!heliusMetadata.freezeAuthority;
     }
 
+    // Build list of known LP addresses from multiple sources (used in multiple analyses)
+    const knownLpAddresses: string[] = [];
+    if (pumpFunResult?.bondingCurveAddress) {
+      knownLpAddresses.push(pumpFunResult.bondingCurveAddress);
+    }
+    if (dexScreenerResult?.pairAddress) {
+      knownLpAddresses.push(dexScreenerResult.pairAddress);
+      console.log(`[Analyze] Detected LP pair: ${dexScreenerResult.pairAddress}`);
+    }
+
     // ============================================
-    // PHASE 2: Creator/Deployer Analysis
+    // PHASE 2: Creator Detection (with caching)
     // ============================================
     let creatorAddress = pumpFunResult?.creator || heliusMetadata?.mintAuthority;
 
-    // Fallback: If we don't have the creator, find it from the first transaction
+    // Check creator cache first (creator never changes for a token)
+    const creatorCacheKey = `creator:${body.tokenAddress}`;
     if ((!creatorAddress || creatorAddress === 'unknown') && heliusApiKey) {
-      console.log(`[Analyze] Creator not found via API, searching transaction history...`);
-      const foundCreator = await findTokenCreator(body.tokenAddress, heliusApiKey).catch(err => {
-        console.warn('findTokenCreator failed:', err);
-        return null;
-      });
-      if (foundCreator) {
-        creatorAddress = foundCreator;
-        console.log(`[Analyze] Found creator via transaction history: ${creatorAddress}`);
+      // Try cache first
+      const cachedCreator = await c.env.SCAN_CACHE.get(creatorCacheKey);
+      if (cachedCreator) {
+        creatorAddress = cachedCreator;
+        console.log(`[Analyze] Creator from cache: ${creatorAddress}`);
+      } else {
+        console.log(`[Analyze] Creator not found via API, searching transaction history...`);
+        // Pass pre-fetched dexId and pairCreatedAt to avoid duplicate DexScreener calls
+        const dexId = dexScreenerResult?.dex?.toLowerCase();
+        const pairCreatedAt = dexScreenerResult?.pairCreatedAt;
+        const foundCreator = await findTokenCreator(body.tokenAddress, heliusApiKey, dexId, pairCreatedAt).catch(err => {
+          console.warn('findTokenCreator failed:', err);
+          return null;
+        });
+        if (foundCreator) {
+          creatorAddress = foundCreator;
+          // Cache creator permanently (it never changes)
+          await c.env.SCAN_CACHE.put(creatorCacheKey, foundCreator, { expirationTtl: 86400 * 365 });
+          console.log(`[Analyze] Found and cached creator: ${creatorAddress}`);
+        }
       }
     }
 
+    // ============================================
+    // PHASE 3: PARALLEL Analysis (creator, dev selling, insiders, tx, holders)
+    // ============================================
+    // Run all analyses in parallel for speed
+    let txAnalysis = null;
+    let holderData = null;
+
     if (creatorAddress && creatorAddress !== 'unknown' && heliusApiKey) {
-      console.log(`[Analyze] Analyzing creator wallet: ${creatorAddress}`);
+      console.log(`[Analyze] Running parallel analysis for creator: ${creatorAddress}`);
       analysisData.hasUnknownDeployer = false;
 
-      const creatorAnalysis = await analyzeCreatorWallet(
-        creatorAddress,
-        heliusApiKey
-      ).catch(err => {
-        console.warn('Creator analysis failed:', err);
-        return null;
-      });
+      // Check for cached creator analysis (includes tokensCreated, ruggedTokens)
+      const creatorAnalysisCacheKey = `creator-analysis:${creatorAddress}`;
+      const cachedCreatorAnalysis = await c.env.SCAN_CACHE.get(creatorAnalysisCacheKey, 'json') as CreatorAnalysis | null;
+
+      // Run ALL analyses in parallel
+      const [creatorAnalysis, devSellingAnalysis, insiderAnalysis, txResult, holderResult] = await Promise.all([
+        // Creator wallet analysis - use cache if available
+        cachedCreatorAnalysis ? Promise.resolve(cachedCreatorAnalysis) :
+          analyzeCreatorWallet(creatorAddress, heliusApiKey).catch(err => {
+            console.warn('Creator analysis failed:', err);
+            return null;
+          }),
+        // Dev selling analysis - CRITICAL
+        analyzeDevSelling(creatorAddress, body.tokenAddress, heliusApiKey).catch(err => {
+          console.warn('Dev selling analysis failed:', err);
+          return null;
+        }),
+        // Insider/sniper detection - PROACTIVE
+        analyzeInsiders(body.tokenAddress, creatorAddress, heliusApiKey, knownLpAddresses).catch(err => {
+          console.warn('Insider analysis failed:', err);
+          return null;
+        }),
+        // Transaction analysis (bundle detection)
+        analyzeTokenTransactions(body.tokenAddress, heliusApiKey).catch(err => {
+          console.warn('Transaction analysis failed:', err);
+          return null;
+        }),
+        // Holder data
+        fetchTokenData(body.tokenAddress, heliusApiKey, knownLpAddresses).catch(() => null),
+      ]);
 
       if (creatorAnalysis) {
         analysisData.creator = creatorAnalysis;
+        // Cache creator analysis for 24 hours (tokensCreated and ruggedTokens change slowly)
+        if (!cachedCreatorAnalysis) {
+          await c.env.SCAN_CACHE.put(creatorAnalysisCacheKey, JSON.stringify(creatorAnalysis), {
+            expirationTtl: 86400, // 24 hours
+          });
+          console.log(`[Analyze] Cached creator analysis for ${creatorAddress}`);
+        }
       }
-
-      // Analyze if the dev has sold their tokens - CRITICAL CHECK
-      const devSellingAnalysis = await analyzeDevSelling(
-        creatorAddress,
-        body.tokenAddress,
-        heliusApiKey
-      ).catch(err => {
-        console.warn('Dev selling analysis failed:', err);
-        return null;
-      });
-
-      if (devSellingAnalysis) {
-        analysisData.devSelling = devSellingAnalysis;
-      }
+      if (devSellingAnalysis) analysisData.devSelling = devSellingAnalysis;
+      if (insiderAnalysis) analysisData.insiders = insiderAnalysis;
+      txAnalysis = txResult;
+      holderData = holderResult;
+    } else {
+      // No creator found - still fetch holder data and tx analysis
+      console.log(`[Analyze] No creator found, running limited parallel analysis`);
+      const [txResult, holderResult] = await Promise.all([
+        heliusApiKey ? analyzeTokenTransactions(body.tokenAddress, heliusApiKey).catch(() => null) : null,
+        fetchTokenData(body.tokenAddress, heliusApiKey || undefined, knownLpAddresses).catch(() => null),
+      ]);
+      txAnalysis = txResult;
+      holderData = holderResult;
     }
 
-    // ============================================
-    // PHASE 3: Transaction Analysis (for bundle detection)
-    // ============================================
-    const txAnalysis = heliusApiKey
-      ? await analyzeTokenTransactions(
-          body.tokenAddress,
-          heliusApiKey
-        ).catch(err => {
-          console.warn('Transaction analysis failed:', err);
-          return null;
-        })
-      : null;
-
-    // ============================================
-    // PHASE 4: Fetch holder data
-    // ============================================
-    let holderData = null;
-    const knownLpAddresses = pumpFunResult?.bondingCurveAddress
-      ? [pumpFunResult.bondingCurveAddress]
-      : [];
-
-    holderData = await fetchTokenData(
-      body.tokenAddress,
-      heliusApiKey || undefined,
-      knownLpAddresses
-    ).catch(() => null);
+    // Update analysisData with holder data and bundle data for hardcoded rules
+    analysisData.holderData = holderData;
+    analysisData.bundleData = txAnalysis;
 
     // ============================================
     // PHASE 5: Build context string for AI
@@ -605,11 +1046,19 @@ analyzeRoutes.post('/', async (c) => {
     } else if (analysisData.isPumpFun) {
       combinedContext += `\nPUMP.FUN TOKEN NOTICE:\n`;
       combinedContext += `- This is a PUMP.FUN token (address ends in 'pump')\n`;
-      // Check if token graduated to pumpswap (bonding curve complete)
-      const isOnPumpswap = dexScreenerResult?.dex?.toLowerCase() === 'pumpswap';
-      if (isOnPumpswap) {
-        combinedContext += `- Bonding curve COMPLETE ✓ (graduated to Pumpswap)\n`;
-        combinedContext += `- Token has real liquidity pool on Raydium\n\n`;
+      // Check bonding curve status via DexScreener dexId
+      const dexId = dexScreenerResult?.dex?.toLowerCase();
+      const isOnPumpswap = dexId === 'pumpswap';
+      const isOnRaydium = dexId === 'raydium';
+      const isStillOnBondingCurve = dexId === 'pumpfun';
+
+      if (isOnPumpswap || isOnRaydium) {
+        combinedContext += `- Bonding curve COMPLETE ✓ (graduated to ${isOnPumpswap ? 'Pumpswap' : 'Raydium'})\n`;
+        combinedContext += `- Token has real liquidity pool\n\n`;
+      } else if (isStillOnBondingCurve) {
+        combinedContext += `- Token is STILL ON BONDING CURVE (not yet graduated)\n`;
+        combinedContext += `- Trading via pump.fun bonding curve mechanism\n`;
+        combinedContext += `- Note: Pump.fun API unavailable, status confirmed via DexScreener\n\n`;
       } else {
         combinedContext += `- Pump.fun API data unavailable\n`;
         combinedContext += `- ⚠️ Unable to verify bonding curve status\n\n`;
@@ -639,6 +1088,33 @@ analyzeRoutes.post('/', async (c) => {
       combinedContext += `\n\nDEV SELLING ANALYSIS:\n`;
       combinedContext += `- Dev Has Sold: NO ✓\n`;
       combinedContext += `- Status: Creator still holding\n`;
+    }
+
+    // Add proactive creator holdings warning
+    if (analysisData.devSelling && analysisData.devSelling.currentHoldingsPercent > 0) {
+      const holdingsPercent = analysisData.devSelling.currentHoldingsPercent;
+      combinedContext += `\n\n⚠️ PROACTIVE RISK - CREATOR HOLDINGS:\n`;
+      combinedContext += `- Creator Current Balance: ${holdingsPercent.toFixed(1)}% of total supply\n`;
+      if (holdingsPercent >= 50) {
+        combinedContext += `- CRITICAL: Creator holds majority of supply - CAN DUMP AT ANY TIME\n`;
+      } else if (holdingsPercent >= 30) {
+        combinedContext += `- HIGH RISK: Creator holds large portion - significant dump potential\n`;
+      } else if (holdingsPercent >= 20) {
+        combinedContext += `- MEDIUM RISK: Creator holds notable amount\n`;
+      }
+    }
+
+    // Add insider/sniper analysis - PROACTIVE
+    if (analysisData.insiders && analysisData.insiders.insiders.length > 0) {
+      combinedContext += `\n\n⚠️ INSIDER/SNIPER ANALYSIS:\n`;
+      combinedContext += `- Early Buyers Detected: ${analysisData.insiders.insiders.length}\n`;
+      combinedContext += `- High-Risk Insiders (5%+ each): ${analysisData.insiders.highRiskInsiderCount}\n`;
+      combinedContext += `- Total Insider Holdings: ${analysisData.insiders.totalInsiderHoldingsPercent.toFixed(1)}%\n`;
+      combinedContext += `- Severity: ${analysisData.insiders.severity}\n`;
+      combinedContext += `- Assessment: ${analysisData.insiders.message}\n`;
+      if (analysisData.insiders.severity === 'CRITICAL' || analysisData.insiders.severity === 'HIGH') {
+        combinedContext += `\n⚠️ WARNING: Multiple wallets bought early and hold significant amounts!\n`;
+      }
     }
 
     // Add on-chain holder data
@@ -681,15 +1157,6 @@ analyzeRoutes.post('/', async (c) => {
 
     console.log(`[Analyze] Final score: ${result.riskScore} (${result.riskLevel})`);
 
-    // Cache in KV
-    await c.env.SCAN_CACHE.put(cacheKey, JSON.stringify(result), {
-      expirationTtl: CACHE_TTL_SECONDS,
-    });
-
-    // Also cache in Supabase for persistence
-    const supabase = createSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_ANON_KEY);
-    await cacheScanResult(supabase, result);
-
     // Build comprehensive response with all valuable data
     const response = {
       ...result,
@@ -727,8 +1194,22 @@ analyzeRoutes.post('/', async (c) => {
         hasSold: analysisData.devSelling.hasSold,
         percentSold: analysisData.devSelling.percentSold,
         sellCount: analysisData.devSelling.sellCount,
+        currentHoldingsPercent: analysisData.devSelling.currentHoldingsPercent,
         severity: analysisData.devSelling.severity,
         message: analysisData.devSelling.message,
+      } : null,
+      // Insider/Sniper Analysis (PROACTIVE)
+      insiders: analysisData.insiders ? {
+        count: analysisData.insiders.insiders.length,
+        highRiskCount: analysisData.insiders.highRiskInsiderCount,
+        totalHoldingsPercent: analysisData.insiders.totalInsiderHoldingsPercent,
+        severity: analysisData.insiders.severity,
+        message: analysisData.insiders.message,
+        wallets: analysisData.insiders.insiders.map(i => ({
+          address: i.address,
+          holdingsPercent: i.currentHoldingsPercent,
+          isHighRisk: i.isHighRisk,
+        })),
       } : null,
       // Social Links
       socials: {
@@ -741,6 +1222,21 @@ analyzeRoutes.post('/', async (c) => {
         freezeRevoked: !analysisData.hasFreezeAuthority,
       },
     };
+
+    // Only cache if AI analysis succeeded (confidence > 0)
+    // Don't cache incomplete results - let them retry on next request
+    if (result.confidence > 0) {
+      // Cache the FULL response (including market data, holders, etc.) in KV
+      await c.env.SCAN_CACHE.put(cacheKey, JSON.stringify(response), {
+        expirationTtl: CACHE_TTL_SECONDS,
+      });
+
+      // Also cache in Supabase for persistence (just the core result)
+      const supabase = createSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_ANON_KEY);
+      await cacheScanResult(supabase, result);
+    } else {
+      console.log(`[Analyze] AI failed (confidence=0), NOT caching result for ${body.tokenAddress}`);
+    }
 
     return c.json(response);
   } catch (error) {
