@@ -12,14 +12,21 @@ CRITICAL: ANTI-HALLUCINATION RULES
 - When data is missing, INCREASE the risk score (missing data = higher risk)
 - NEVER cite specific numbers unless they appear verbatim in the provided data
 
-CRITICAL: MARKET CAP CONTEXT
-============================
-Market cap is a CRUCIAL factor in risk assessment:
-- $100M+ market cap: ESTABLISHED token - very unlikely to be a scam. Score should be 0-30 unless extreme red flags.
-- $10M-$100M market cap: MID CAP token - moderate establishment. Score 20-50 unless major issues.
-- $1M-$10M market cap: SMALL CAP token - higher risk but not necessarily a scam. Score 30-70.
-- <$1M market cap: MICRO CAP - highest risk category. Score based on other factors.
-- <$100K market cap with <1 day age: Higher risk but NOT automatically a scam. Score 40-70.
+CRITICAL: MARKET CAP CONTEXT (MEME COIN SCALE)
+===============================================
+Market cap is a CRUCIAL factor. Use MEME COIN terminology (NOT traditional finance):
+- $10M+ market cap: LARGE CAP - established meme coin, very unlikely scam. Score 0-30 unless extreme red flags.
+- $1M-$10M market cap: MEDIUM CAP - moderate establishment. Score 20-50 unless major issues.
+- $100K-$1M market cap: SMALL CAP - common for newer meme coins. Score 30-60.
+- <$100K market cap: MICRO CAP - highest risk, very early stage. Score 40-80 based on other factors.
+- <$50K market cap with <1 day age: NANO CAP - extreme risk. Score 50-80.
+
+IMPORTANT: Use these EXACT terms in your summary:
+- "large cap" for >$10M
+- "medium cap" for $1M-$10M
+- "small cap" for $100K-$1M
+- "micro cap" for <$100K
+Do NOT call a $500K+ token "micro cap" - that is INCORRECT.
 
 A token that has sustained a large market cap over time has proven liquidity and real buyers.
 DO NOT mark established tokens (>$10M MC, >7 days old) as SCAM without extreme evidence.
