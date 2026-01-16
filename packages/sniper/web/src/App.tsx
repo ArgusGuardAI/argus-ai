@@ -5,6 +5,7 @@ import { Positions } from './components/Positions';
 import { Controls } from './components/Controls';
 import { Stats } from './components/Stats';
 import { Settings } from './components/Settings';
+import { ManualSnipe } from './components/ManualSnipe';
 import { useWebSocket } from './hooks/useWebSocket';
 import type { SniperState, TokenEvent, Position, SniperConfig } from './types';
 
@@ -117,6 +118,12 @@ export default function App() {
     sendMessage({ type: 'UPDATE_CONFIG', config: updated });
   };
 
+  const handleManualSnipe = (tokenAddress: string) => {
+    sendMessage({ type: 'MANUAL_SNIPE', tokenAddress });
+  };
+
+  const isWatchOnly = !config.walletPrivateKey || config.walletPrivateKey === 'watch-only';
+
   return (
     <div className="min-h-screen bg-dark-950 tech-grid">
       <Header connected={connected} />
@@ -134,6 +141,15 @@ export default function App() {
             />
           </div>
           <Stats stats={stats} />
+        </div>
+
+        {/* Manual Token Input */}
+        <div className="mb-6">
+          <ManualSnipe
+            onSnipe={handleManualSnipe}
+            maxRiskScore={config.maxRiskScore}
+            isWatchOnly={isWatchOnly}
+          />
         </div>
 
         {/* Main content: Token Feed + Positions */}

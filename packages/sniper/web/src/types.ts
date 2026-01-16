@@ -1,4 +1,5 @@
 export interface SniperConfig {
+  walletPrivateKey?: string;
   buyAmountSol: number;
   maxSlippageBps: number;
   priorityFeeLamports: number;

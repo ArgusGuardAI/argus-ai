@@ -83,6 +83,39 @@ app.post('/api/sell/:tokenAddress', async (c) => {
   }
 });
 
+// Manual token analysis (calls WhaleShield API directly)
+const WHALESHIELD_API = process.env.WHALESHIELD_API_URL || 'https://whaleshield-api.hermosillo-jessie.workers.dev';
+
+app.post('/api/analyze', async (c) => {
+  try {
+    const { tokenAddress } = await c.req.json<{ tokenAddress: string }>();
+
+    if (!tokenAddress) {
+      return c.json({ error: 'tokenAddress required' }, 400);
+    }
+
+    console.log(`[API] Manual analysis request for ${tokenAddress}`);
+
+    const response = await fetch(`${WHALESHIELD_API}/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tokenAddress }),
+    });
+
+    if (!response.ok) {
+      return c.json({ error: 'Analysis failed' }, 500);
+    }
+
+    const result = await response.json();
+    console.log(`[API] Analysis complete: ${result.riskScore} (${result.riskLevel})`);
+
+    return c.json(result);
+  } catch (error) {
+    console.error('[API] Analysis error:', error);
+    return c.json({ error: String(error) }, 500);
+  }
+});
+
 function handleClientMessage(msg: any, _ws: WebSocket) {
   switch (msg.type) {
     case 'START':
@@ -103,6 +136,13 @@ function handleClientMessage(msg: any, _ws: WebSocket) {
 
     case 'SELL':
       sniper?.manualSell(msg.tokenAddress);
+      break;
+
+    case 'MANUAL_SNIPE':
+      if (sniper) {
+        console.log(`[WS] Manual snipe request for ${msg.tokenAddress}`);
+        sniper.manualBuy(msg.tokenAddress);
+      }
       break;
   }
 }

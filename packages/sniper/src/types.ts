@@ -89,7 +89,7 @@ export interface SniperState {
 export type WSMessage =
   | { type: 'NEW_TOKEN'; data: NewTokenEvent }
   | { type: 'ANALYSIS_RESULT'; data: SnipeDecision }
-  | { type: 'SNIPE_ATTEMPT'; data: { token: string; status: 'pending' | 'success' | 'failed'; txSignature?: string } }
+  | { type: 'SNIPE_ATTEMPT'; data: { token: string; status: 'pending' | 'success' | 'failed' | 'watch-only'; txSignature?: string } }
   | { type: 'POSITION_UPDATE'; data: Position }
   | { type: 'TRADE_EXECUTED'; data: TradeResult }
   | { type: 'STATUS_UPDATE'; data: SniperState };

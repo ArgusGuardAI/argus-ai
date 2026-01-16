@@ -223,6 +223,67 @@ export class SniperEngine extends EventEmitter {
     console.log(`[Sniper] Monitoring position: ${position.tokenSymbol}`);
   }
 
+  async manualBuy(tokenAddress: string) {
+    if (!this.executor) {
+      console.log(`[Sniper] 👀 WATCH-ONLY: Would buy ${tokenAddress}`);
+      this.emit('message', {
+        type: 'SNIPE_ATTEMPT',
+        data: { token: tokenAddress, status: 'watch-only' },
+      } as WSMessage);
+      return;
+    }
+
+    console.log(`[Sniper] 🎯 Manual snipe: ${tokenAddress}`);
+
+    this.emit('message', {
+      type: 'SNIPE_ATTEMPT',
+      data: { token: tokenAddress, status: 'pending' },
+    } as WSMessage);
+
+    const result = await this.executor.buy(tokenAddress);
+
+    if (result.success) {
+      this.state.tokensSniped++;
+
+      const position: Position = {
+        tokenAddress: tokenAddress,
+        tokenSymbol: 'MANUAL',
+        entryPrice: result.price,
+        currentPrice: result.price,
+        amountTokens: result.amountTokens,
+        costBasisSol: result.amountSol,
+        currentValueSol: result.amountSol,
+        pnlPercent: 0,
+        pnlSol: 0,
+        entryTime: Date.now(),
+        txSignature: result.txSignature!,
+      };
+
+      this.state.positions.push(position);
+
+      this.emit('message', {
+        type: 'SNIPE_ATTEMPT',
+        data: { token: tokenAddress, status: 'success', txSignature: result.txSignature },
+      } as WSMessage);
+
+      this.emit('message', {
+        type: 'TRADE_EXECUTED',
+        data: result,
+      } as WSMessage);
+
+      console.log(`[Sniper] ✅ Manual snipe success! TX: ${result.txSignature}`);
+      this.monitorPosition(position);
+    } else {
+      this.emit('message', {
+        type: 'SNIPE_ATTEMPT',
+        data: { token: tokenAddress, status: 'failed' },
+      } as WSMessage);
+      console.log(`[Sniper] ❌ Manual snipe failed: ${result.error}`);
+    }
+
+    this.emitStatusUpdate();
+  }
+
   async manualSell(tokenAddress: string) {
     if (!this.executor) {
       throw new Error('Executor not initialized');
