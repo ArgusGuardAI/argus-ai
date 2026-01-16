@@ -54,7 +54,7 @@ export function TokenFeed({ tokens }: TokenFeedProps) {
   return (
     <div className="bg-dark-800/50 cyber-border rounded-xl overflow-hidden">
       <div className="px-5 py-4 border-b border-cyber-blue/20 flex items-center justify-between">
-        <h2 className="font-cyber font-semibold gradient-text flex items-center gap-2">
+        <h2 className="font-cyber font-semibold text-white flex items-center gap-2">
           <Activity className="w-5 h-5 text-cyber-blue" />
           Token Feed
         </h2>
@@ -73,7 +73,7 @@ export function TokenFeed({ tokens }: TokenFeedProps) {
             {tokens.map((token) => (
               <div
                 key={`${token.address}-${token.timestamp}`}
-                className={`p-4 ${getStatusBg(token.status)} slide-in token-card`}
+                className={`p-4 ${getStatusBg(token.status)} slide-in hover:bg-dark-700/30 transition-colors`}
               >
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">

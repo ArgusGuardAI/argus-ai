@@ -19,7 +19,7 @@ export function Positions({ positions, onSell }: PositionsProps) {
   return (
     <div className="bg-dark-800/50 cyber-border rounded-xl overflow-hidden">
       <div className="px-5 py-4 border-b border-cyber-blue/20 flex items-center justify-between">
-        <h2 className="font-cyber font-semibold gradient-text flex items-center gap-2">
+        <h2 className="font-cyber font-semibold text-white flex items-center gap-2">
           <Wallet className="w-5 h-5 text-cyber-blue" />
           Open Positions
         </h2>
