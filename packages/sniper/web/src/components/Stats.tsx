@@ -15,7 +15,7 @@ export function Stats({ stats }: StatsProps) {
 
   return (
     <div className="bg-dark-800/50 cyber-border rounded-xl p-5 card-hover">
-      <h3 className="text-sm font-cyber font-medium text-cyber-blue mb-4">Session Stats</h3>
+      <h3 className="text-sm font-cyber font-medium gradient-text mb-4">Session Stats</h3>
 
       <div className="grid grid-cols-2 gap-4">
         <div className="flex items-center gap-3">

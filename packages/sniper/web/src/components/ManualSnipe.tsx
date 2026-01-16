@@ -158,6 +158,27 @@ export function ManualSnipe({ onSnipe, maxRiskScore, isWatchOnly }: ManualSnipeP
               </span>
             </div>
             <p className="text-gray-400 text-sm">{result.summary}</p>
+
+            {/* Risk Score Bar */}
+            <div className="mt-3">
+              <div className="flex justify-between text-xs text-gray-500 mb-1">
+                <span>Safe</span>
+                <span>Risky</span>
+              </div>
+              <div className="h-2 bg-dark-700 rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{
+                    width: `${result.riskScore}%`,
+                    background: result.riskScore < 40
+                      ? 'linear-gradient(90deg, #00d4ff, #00ff88)'
+                      : result.riskScore < 70
+                        ? 'linear-gradient(90deg, #00ff88, #ffcc00)'
+                        : 'linear-gradient(90deg, #ffcc00, #ff4444)'
+                  }}
+                />
+              </div>
+            </div>
           </div>
 
           {/* Flags */}
