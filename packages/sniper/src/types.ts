@@ -25,6 +25,9 @@ export interface SniperConfig {
   takeProfitPercent: number;
   stopLossPercent: number;
   maxHoldTimeMinutes: number;
+
+  // Manual mode - only analyze tokens manually, don't auto-scan feed
+  manualModeOnly: boolean;
 }
 
 export interface NewTokenEvent {

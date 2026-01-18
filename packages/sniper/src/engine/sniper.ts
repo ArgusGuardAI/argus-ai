@@ -32,6 +32,7 @@ const DEFAULT_CONFIG: SniperConfig = {
   takeProfitPercent: 100, // 2x
   stopLossPercent: 30,
   maxHoldTimeMinutes: 60,
+  manualModeOnly: true, // Only analyze tokens manually, no auto-scan
 };
 
 export class SniperEngine extends EventEmitter {
@@ -121,6 +122,11 @@ export class SniperEngine extends EventEmitter {
 
     // Skip if paused
     if (this.state.status !== 'running') {
+      return;
+    }
+
+    // Skip auto-analysis in manual mode
+    if (this.config.manualModeOnly) {
       return;
     }
 
