@@ -9,7 +9,7 @@ import type { NewTokenEvent, SnipeDecision, SniperConfig } from '../types';
 const WHALESHIELD_API = process.env.WHALESHIELD_API_URL || 'https://whaleshield-api.hermosillo-jessie.workers.dev';
 
 // Rate limiting config
-const MAX_ANALYSES_PER_MINUTE = 10; // Max API calls per minute
+const MAX_ANALYSES_PER_MINUTE = 15; // Max API calls per minute
 const RATE_LIMIT_WINDOW_MS = 60000; // 1 minute window
 
 // Spam filter - skip tokens with these patterns (case insensitive)
