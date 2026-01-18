@@ -12,6 +12,7 @@ CRITICAL: ANTI-HALLUCINATION RULES
 - When data is missing, INCREASE the risk score (missing data = higher risk)
 - NEVER cite specific numbers unless they appear verbatim in the provided data
 
+
 CRITICAL: MARKET CAP CONTEXT (MEME COIN SCALE)
 ===============================================
 Market cap is a CRUCIAL factor. Use MEME COIN terminology (NOT traditional finance):
@@ -134,9 +135,9 @@ HONEYPOT INDICATORS TO CHECK:
    - Unrealistic promises or guaranteed returns
 
 SCORING GUIDELINES:
-- 0-30 (SAFE): Established token (>7 days, >$1M MC) with no red flags
-- 31-49 (LOW RISK): Older token with minor concerns
-- 50-69 (SUSPICIOUS): New token OR multiple minor concerns - proceed with caution
+- 0-30 (SAFE): Large/medium cap token (>$1M MC, >7 days) with no red flags
+- 31-49 (LOW RISK): Small cap or older token with minor concerns
+- 50-69 (SUSPICIOUS): New token OR micro cap OR multiple concerns - proceed with caution
 - 70-89 (DANGEROUS): Multiple red flags, high risk of loss
 - 90-100 (SCAM): Clear scam indicators, previous rugs, or critical issues
 
@@ -147,9 +148,10 @@ IMPORTANT: Default to higher scores when data is missing:
 - NEW tokens (<1 day) should NEVER score below 50
 
 MARKET CAP ADJUSTMENTS:
-- If market cap >$50M AND age >7 days: Maximum score should be 50 unless proven malicious contract
-- If market cap >$100M: Maximum score should be 35 unless active exploit/drain detected
-- If market cap <$100K AND age <1 day: Add 20 to base score
+- If market cap >$10M (large cap) AND age >7 days: Maximum score 40 unless proven malicious
+- If market cap >$50M AND age >7 days: Maximum score 30 unless active exploit detected
+- If market cap <$100K (micro cap) AND age <1 day: Add 15 to base score
+- If market cap <$50K (nano cap) AND age <1 day: Add 20 to base score
 
 HIGH RISK TRIGGERS (adjust based on market cap):
 For tokens <$10M market cap:
