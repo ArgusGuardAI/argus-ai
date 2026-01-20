@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { GraffitiNote } from '@argusguard/shared';
-import { WHALESHIELD_TOKEN } from '@argusguard/shared';
+import { ARGUSGUARD_TOKEN } from '@argusguard/shared';
 import { getAuthMessage, createGraffitiNote, createTestGraffitiNote } from '~/lib/api';
 
 type NoteType = 'WARNING' | 'INFO' | 'POSITIVE';
@@ -15,7 +15,7 @@ interface CreateNoteFormProps {
   onNoteCreated: (note: GraffitiNote) => void;
 }
 
-const isTestMode = WHALESHIELD_TOKEN.mint === 'TBD_AFTER_LAUNCH';
+const isTestMode = ARGUSGUARD_TOKEN.mint === 'TBD_AFTER_LAUNCH';
 
 const noteTypeOptions: {
   type: NoteType;
@@ -141,7 +141,7 @@ export function CreateNoteForm({
       <div className="py-3 px-4 rounded-lg text-center" style={{ background: 'rgba(123, 44, 191, 0.1)', border: '1px solid rgba(123, 44, 191, 0.3)' }}>
         <p className="text-[11px] text-gray-400">
           <span className="text-purple-400 mr-1">🔒</span>
-          Hold <span className="text-cyan-400 font-bold">1,000 $WHALESHIELD</span> to spray
+          Hold <span className="text-cyan-400 font-bold">1,000 $ARGUSGUARD</span> to spray
         </p>
       </div>
     );

@@ -1,17 +1,17 @@
-# WhaleShield - Browser Extension Store Listings
+# ArgusGuard - Browser Extension Store Listings
 
 ## Chrome Web Store
 
 ### Short Description (max 132 characters)
 ```
-AI-powered security for Pump.fun. Detect honeypots, rug pulls, and scams before you trade. Protect your portfolio with WhaleShield.
+AI-powered security for Pump.fun. Detect honeypots, rug pulls, and scams before you trade. Protect your portfolio with ArgusGuard.
 ```
 
 ### Detailed Description
 ```
-🐋 WHALESHIELD - The First Whale Token With REAL Utility
+🐋 ARGUSGUARD - The First Whale Token With REAL Utility
 
-WhaleShield is an AI-powered browser extension that protects you from scams on Pump.fun and Crypto Twitter.
+ArgusGuard is an AI-powered browser extension that protects you from scams on Pump.fun and Crypto Twitter.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -39,7 +39,7 @@ Get instant risk scores on any Pump.fun token page.
 
 🎯 HOW IT WORKS
 
-1. Install WhaleShield
+1. Install ArgusGuard
 2. Visit any token on Pump.fun
 3. See instant risk analysis overlay
 4. Make informed trading decisions
@@ -55,9 +55,9 @@ Get instant risk scores on any Pump.fun token page.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-💎 $WHALESHIELD TOKEN
+💎 $ARGUSGUARD TOKEN
 
-Hold 1,000 $WHALESHIELD tokens to unlock premium features:
+Hold 1,000 $ARGUSGUARD tokens to unlock premium features:
 • Advanced AI analysis
 • Community notes access
 • Priority support
@@ -66,12 +66,12 @@ Hold 1,000 $WHALESHIELD tokens to unlock premium features:
 
 🌐 LINKS
 
-Website: https://whaleshield.io
-Twitter: https://twitter.com/WhaleShield
+Website: https://argusguard.io
+Twitter: https://twitter.com/ArgusGuard
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Stop getting rugged. Start trading smarter with WhaleShield.
+Stop getting rugged. Start trading smarter with ArgusGuard.
 ```
 
 ### Category
@@ -126,7 +126,7 @@ AI-powered security extension that protects you from honeypots and rug pulls on 
 Create 1280x800 or 640x400 screenshots showing:
 
 1. **Screenshot 1: Main Analysis View**
-   - Token page with WhaleShield overlay visible
+   - Token page with ArgusGuard overlay visible
    - Show a SCAM or DANGEROUS rating for impact
    - Caption: "Instant AI-powered risk analysis"
 
@@ -144,7 +144,7 @@ Create 1280x800 or 640x400 screenshots showing:
    - Caption: "Community-powered warnings"
 
 5. **Screenshot 5: Before/After**
-   - Side by side: Pump.fun without vs with WhaleShield
+   - Side by side: Pump.fun without vs with ArgusGuard
    - Caption: "Trade with confidence"
 
 ---
@@ -154,7 +154,7 @@ Create 1280x800 or 640x400 screenshots showing:
 ### Small Promo Tile (440x280)
 - Dark background (#0a0a0f)
 - Whale emoji or logo centered
-- "WHALESHIELD" text in Orbitron font
+- "ARGUSGUARD" text in Orbitron font
 - Tagline: "AI-Powered Rug Protection"
 
 ### Large Promo Tile (920x680)
@@ -204,11 +204,11 @@ Create 1280x800 or 640x400 screenshots showing:
 ## Privacy Policy URL
 
 You'll need a privacy policy. Create one at:
-`https://whaleshield.io/privacy`
+`https://argusguard.io/privacy`
 
 Key points to include:
 - No personal data collected
 - No tracking or analytics
 - Data stays in browser
-- Only communicates with WhaleShield API for token analysis
+- Only communicates with ArgusGuard API for token analysis
 - No data sold to third parties

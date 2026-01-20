@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { WHALESHIELD_TOKEN } from '@argusguard/shared';
+import { ARGUSGUARD_TOKEN } from '@argusguard/shared';
 import {
   getStoredWallet,
   setStoredWallet,
@@ -8,12 +8,12 @@ import {
 } from '~/lib/storage';
 import { getSubscriptionStatus } from '~/lib/api';
 
-export interface WhaleshieldWallet {
+export interface ArgusGuardWallet {
   address: string | null;
   connected: boolean;
   connecting: boolean;
   balance: number | null;
-  whaleshieldBalance: number;
+  argusguardBalance: number;
   isPremium: boolean;
   isSubscribed: boolean;
   hasTokens: boolean;
@@ -30,7 +30,7 @@ function sendWalletRequest(action: string, payload?: unknown): Promise<{ success
 
     const handler = (event: MessageEvent) => {
       if (event.source !== window) return;
-      if (event.data?.type !== 'WHALESHIELD_WALLET_RESPONSE') return;
+      if (event.data?.type !== 'ARGUSGUARD_WALLET_RESPONSE') return;
       if (event.data?.id !== id) return;
 
       window.removeEventListener('message', handler);
@@ -46,7 +46,7 @@ function sendWalletRequest(action: string, payload?: unknown): Promise<{ success
     }, 30000);
 
     window.postMessage({
-      type: 'WHALESHIELD_WALLET_REQUEST',
+      type: 'ARGUSGUARD_WALLET_REQUEST',
       action,
       id,
       payload,
@@ -54,12 +54,12 @@ function sendWalletRequest(action: string, payload?: unknown): Promise<{ success
   });
 }
 
-export function useWhaleshieldWallet(): WhaleshieldWallet {
+export function useArgusGuardWallet(): ArgusGuardWallet {
   const [address, setAddress] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [balance, setBalance] = useState<number | null>(null);
-  const [whaleshieldBalance, setWhaleshieldBalance] = useState(0);
+  const [argusguardBalance, setArgusguardBalance] = useState(0);
   const [isPremium, setIsPremium] = useState(false);
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [hasTokens, setHasTokens] = useState(false);
@@ -68,7 +68,7 @@ export function useWhaleshieldWallet(): WhaleshieldWallet {
   // Wait for wallet bridge to be ready
   useEffect(() => {
     const handler = (event: MessageEvent) => {
-      if (event.data?.type === 'WHALESHIELD_WALLET_BRIDGE_READY') {
+      if (event.data?.type === 'ARGUSGUARD_WALLET_BRIDGE_READY') {
         setBridgeReady(true);
       }
     };
@@ -94,9 +94,9 @@ export function useWhaleshieldWallet(): WhaleshieldWallet {
     if (!address) return;
 
     // For now, grant premium in test mode
-    const isTestMode = WHALESHIELD_TOKEN.mint === 'TBD_AFTER_LAUNCH';
+    const isTestMode = ARGUSGUARD_TOKEN.mint === 'TBD_AFTER_LAUNCH';
     if (isTestMode) {
-      setWhaleshieldBalance(0);
+      setArgusguardBalance(0);
       setHasTokens(false);
       setIsSubscribed(false);
       setIsPremium(true);
@@ -113,8 +113,8 @@ export function useWhaleshieldWallet(): WhaleshieldWallet {
       // TODO: Implement actual token balance fetching via API
       // For production, we'd call an API endpoint that checks the token balance
       const tokenBalance = 0; // Replace with actual balance check
-      setWhaleshieldBalance(tokenBalance);
-      const hasEnoughTokens = tokenBalance >= WHALESHIELD_TOKEN.requiredBalance;
+      setArgusguardBalance(tokenBalance);
+      const hasEnoughTokens = tokenBalance >= ARGUSGUARD_TOKEN.requiredBalance;
       setHasTokens(hasEnoughTokens);
 
       // Premium if they have tokens OR have active subscription
@@ -164,7 +164,7 @@ export function useWhaleshieldWallet(): WhaleshieldWallet {
     setAddress(null);
     setConnected(false);
     setBalance(null);
-    setWhaleshieldBalance(0);
+    setArgusguardBalance(0);
     setIsPremium(false);
     setIsSubscribed(false);
     setHasTokens(false);
@@ -233,7 +233,7 @@ export function useWhaleshieldWallet(): WhaleshieldWallet {
     connected,
     connecting,
     balance,
-    whaleshieldBalance,
+    argusguardBalance,
     isPremium,
     isSubscribed,
     hasTokens,

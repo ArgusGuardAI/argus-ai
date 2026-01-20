@@ -5,7 +5,7 @@
 @tailwind utilities;
 
 /* ============================================
-   WHALESHIELD PREMIUM CYBER THEME
+   ARGUSGUARD PREMIUM CYBER THEME
    ============================================ */
 
 :root {
@@ -25,7 +25,7 @@
   --ws-text-muted: #4a5568;
 }
 
-.whaleshield-paint {
+.argusguard-paint {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   color: var(--ws-text);
   background: var(--ws-bg-primary);
@@ -33,7 +33,7 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-.whaleshield-paint * {
+.argusguard-paint * {
   box-sizing: border-box;
 }
 
@@ -366,29 +366,29 @@
 }
 
 /* Reset host page styles */
-.whaleshield-paint h1,
-.whaleshield-paint h2,
-.whaleshield-paint h3,
-.whaleshield-paint h4,
-.whaleshield-paint p,
-.whaleshield-paint span,
-.whaleshield-paint div {
+.argusguard-paint h1,
+.argusguard-paint h2,
+.argusguard-paint h3,
+.argusguard-paint h4,
+.argusguard-paint p,
+.argusguard-paint span,
+.argusguard-paint div {
   margin: 0;
   padding: 0;
   line-height: 1.5;
 }
 
 /* Custom scrollbar */
-.whaleshield-paint ::-webkit-scrollbar {
+.argusguard-paint ::-webkit-scrollbar {
   width: 4px;
 }
 
-.whaleshield-paint ::-webkit-scrollbar-track {
+.argusguard-paint ::-webkit-scrollbar-track {
   background: rgba(0, 0, 0, 0.3);
   border-radius: 2px;
 }
 
-.whaleshield-paint ::-webkit-scrollbar-thumb {
+.argusguard-paint ::-webkit-scrollbar-thumb {
   background: linear-gradient(180deg, var(--ws-cyan) 0%, var(--ws-cyan-dim) 100%);
   border-radius: 2px;
 }

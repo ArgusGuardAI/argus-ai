@@ -15,7 +15,7 @@ export type Bindings = {
   SUPABASE_URL: string;
   SUPABASE_ANON_KEY: string;
   HELIUS_API_KEY?: string;
-  WHALESHIELD_MINT?: string; // Token mint address for token gating (optional until launch)
+  ARGUSGUARD_MINT?: string; // Token mint address for token gating (optional until launch)
   STRIPE_SECRET_KEY: string;
   STRIPE_WEBHOOK_SECRET: string;
   ENVIRONMENT: string;
@@ -33,9 +33,9 @@ app.use(
       if (origin?.startsWith('moz-extension://')) return origin;
       // Allow localhost for development
       if (origin?.startsWith('http://localhost')) return origin;
-      // Allow whaleshield.io website
-      if (origin?.includes('whaleshield.io')) return origin;
-      if (origin?.includes('whaleshield.pages.dev')) return origin;
+      // Allow argusguard.io website
+      if (origin?.includes('argusguard.io')) return origin;
+      if (origin?.includes('argusguard.pages.dev')) return origin;
       // Allow requests with no origin (e.g., direct API calls)
       if (!origin) return '*';
       // Default: allow all for public API
@@ -63,7 +63,7 @@ app.get('/privacy', (c) => {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Privacy Policy - WhaleShield</title>
+  <title>Privacy Policy - ArgusGuard</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0a0f; color: #e0e0e0; line-height: 1.7; padding: 40px 20px; }
@@ -84,10 +84,10 @@ app.get('/privacy', (c) => {
     <h1>Privacy Policy</h1>
     <p class="subtitle">Last updated: January 12, 2025</p>
     <div class="highlight">
-      <strong>TL;DR:</strong> WhaleShield does not collect, store, or sell your personal data. All analysis happens through our secure API, and we only process the minimum data needed to protect you from scams.
+      <strong>TL;DR:</strong> ArgusGuard does not collect, store, or sell your personal data. All analysis happens through our secure API, and we only process the minimum data needed to protect you from scams.
     </div>
     <h2>1. Introduction</h2>
-    <p>WhaleShield ("we", "our", or "us") is committed to protecting your privacy. This Privacy Policy explains how our browser extension handles information when you use our service to analyze tokens on Pump.fun and other supported platforms.</p>
+    <p>ArgusGuard ("we", "our", or "us") is committed to protecting your privacy. This Privacy Policy explains how our browser extension handles information when you use our service to analyze tokens on Pump.fun and other supported platforms.</p>
     <h2>2. Information We Do NOT Collect</h2>
     <ul>
       <li><strong>Personal Information:</strong> We do not collect your name, email, phone number, or any personally identifiable information.</li>
@@ -99,7 +99,7 @@ app.get('/privacy', (c) => {
     <p>To provide our service, we process the following information:</p>
     <ul>
       <li><strong>Token Addresses:</strong> When you visit a token page, we send the token's contract address to our API for analysis. This is necessary to check for honeypots and scams.</li>
-      <li><strong>Wallet Address (Token Gating):</strong> We check if your connected wallet holds the required $WHALESHIELD tokens. This check is performed locally and via RPC - we do not store your wallet address on our servers.</li>
+      <li><strong>Wallet Address (Token Gating):</strong> We check if your connected wallet holds the required $ARGUSGUARD tokens. This check is performed locally and via RPC - we do not store your wallet address on our servers.</li>
       <li><strong>Community Notes:</strong> If you submit a community note, we store the note content, your wallet address (as the author), and the associated token address. This is publicly visible to other users.</li>
       <li><strong>Subscription (Optional):</strong> If you subscribe via Stripe, we store your wallet address linked to your Stripe customer ID to verify your subscription status. Payment processing is handled entirely by Stripe.</li>
     </ul>
@@ -133,17 +133,17 @@ app.get('/privacy', (c) => {
       <li>Use the extension without connecting a wallet (with limited features)</li>
     </ul>
     <h2>8. Children's Privacy</h2>
-    <p>WhaleShield is not intended for use by anyone under the age of 18. We do not knowingly collect information from minors.</p>
+    <p>ArgusGuard is not intended for use by anyone under the age of 18. We do not knowingly collect information from minors.</p>
     <h2>9. Changes to This Policy</h2>
     <p>We may update this Privacy Policy from time to time. We will notify users of any material changes by updating the "Last updated" date at the top of this policy.</p>
     <h2>10. Contact Us</h2>
     <p>If you have any questions about this Privacy Policy, please contact us at:</p>
     <ul>
-      <li>Twitter: <a href="https://twitter.com/WhaleShield">@WhaleShield</a></li>
-      <li>Website: <a href="https://whaleshield.io">whaleshield.io</a></li>
+      <li>Twitter: <a href="https://twitter.com/ArgusGuard">@ArgusGuard</a></li>
+      <li>Website: <a href="https://argusguard.io">argusguard.io</a></li>
     </ul>
     <div class="footer">
-      <p>&copy; 2025 WhaleShield. All rights reserved.</p>
+      <p>&copy; 2025 ArgusGuard. All rights reserved.</p>
     </div>
   </div>
 </body>

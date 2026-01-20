@@ -1,5 +1,5 @@
 /**
- * WhaleShield Sniper
+ * ArgusGuard Sniper
  * AI-powered safe token sniping
  */
 

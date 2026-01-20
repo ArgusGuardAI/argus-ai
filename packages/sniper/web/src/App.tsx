@@ -109,7 +109,7 @@ function formatTime(ms: number): string {
 // Load positions from localStorage
 function loadPositions(): Position[] {
   try {
-    const saved = localStorage.getItem('whaleshield_positions');
+    const saved = localStorage.getItem('argusguard_positions');
     return saved ? JSON.parse(saved) : [];
   } catch {
     return [];
@@ -119,7 +119,7 @@ function loadPositions(): Position[] {
 // Save positions to localStorage
 function savePositions(positions: Position[]) {
   try {
-    localStorage.setItem('whaleshield_positions', JSON.stringify(positions));
+    localStorage.setItem('argusguard_positions', JSON.stringify(positions));
   } catch (e) {
     console.error('[UI] Failed to save positions:', e);
   }
@@ -534,7 +534,7 @@ export default function App() {
             <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-cyber-blue to-cyber-purple flex items-center justify-center">
               <Shield className="w-5 h-5 text-white" />
             </div>
-            <span className="text-lg font-bold font-cyber tracking-wider">WHALESHIELD</span>
+            <span className="text-lg font-bold font-cyber tracking-wider">ARGUSGUARD</span>
           </div>
 
           <div className="flex items-center gap-3">

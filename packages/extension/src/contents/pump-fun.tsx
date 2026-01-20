@@ -40,7 +40,7 @@ let currentTokenAddress: string | null = null;
 
 // Remove overlay when not on a token page
 function removeOverlay() {
-  const existing = document.getElementById('whaleshield-paint-container');
+  const existing = document.getElementById('argusguard-paint-container');
   if (existing) {
     if (currentRoot) {
       currentRoot.unmount();
@@ -48,7 +48,7 @@ function removeOverlay() {
     }
     existing.remove();
     currentTokenAddress = null;
-    console.log('[WhaleShield] Removed overlay (not on token page)');
+    console.log('[ArgusGuard] Removed overlay (not on token page)');
   }
 }
 
@@ -62,7 +62,7 @@ function injectOverlay() {
     return;
   }
 
-  const existingContainer = document.getElementById('whaleshield-paint-container');
+  const existingContainer = document.getElementById('argusguard-paint-container');
 
   // If same token, don't re-inject
   if (existingContainer && currentTokenAddress === tokenAddress) {
@@ -80,13 +80,13 @@ function injectOverlay() {
 
   const target = findTargetElement();
   if (!target) {
-    console.log('[WhaleShield] Target element not found, will retry...');
+    console.log('[ArgusGuard] Target element not found, will retry...');
     return;
   }
 
   // Create container
   const container = document.createElement('div');
-  container.id = 'whaleshield-paint-container';
+  container.id = 'argusguard-paint-container';
   container.style.cssText = `
     margin: 16px 0;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -100,7 +100,7 @@ function injectOverlay() {
   currentRoot.render(<Paint key={tokenAddress} tokenAddress={tokenAddress} />);
   currentTokenAddress = tokenAddress;
 
-  console.log(`[WhaleShield] Injected overlay for token: ${tokenAddress}`);
+  console.log(`[ArgusGuard] Injected overlay for token: ${tokenAddress}`);
 }
 
 // Initial injection
@@ -109,7 +109,7 @@ setTimeout(injectOverlay, 1000);
 // Observe for SPA navigation
 const observer = new MutationObserver(() => {
   const tokenAddress = extractTokenAddress();
-  const existing = document.getElementById('whaleshield-paint-container');
+  const existing = document.getElementById('argusguard-paint-container');
 
   // Not on token page - remove overlay
   if (!tokenAddress && existing) {

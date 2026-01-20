@@ -1,4 +1,4 @@
-# WhaleShield Browser Extension Submission Guide
+# ArgusGuard Browser Extension Submission Guide
 
 ## Quick Links
 
@@ -17,10 +17,10 @@
 - [x] `build/firefox-mv3-prod.zip` (0.19 MB)
 - [x] `build/edge-mv3-prod.zip` (0.19 MB)
 - [x] `assets/icon128.png` (128x128 store icon)
-- [x] `marketing/privacy-policy.html` (host at whaleshield.io/privacy)
+- [x] `marketing/privacy-policy.html` (host at argusguard.io/privacy)
 
 ### Required Before Submission
-- [ ] Host privacy policy at `https://whaleshield.io/privacy`
+- [ ] Host privacy policy at `https://argusguard.io/privacy`
 - [ ] Take 3-5 screenshots (1280x800 recommended)
 - [ ] Create promotional tile (440x280) - optional for Chrome
 
@@ -43,14 +43,14 @@
 
 **Short Description (max 132 chars):**
 ```
-AI-powered security for Pump.fun. Detect honeypots, rug pulls, and scams before you trade. Protect your portfolio with WhaleShield.
+AI-powered security for Pump.fun. Detect honeypots, rug pulls, and scams before you trade. Protect your portfolio with ArgusGuard.
 ```
 
 **Detailed Description:**
 ```
-WHALESHIELD - AI-Powered Rug Protection
+ARGUSGUARD - AI-Powered Rug Protection
 
-WhaleShield is an AI-powered browser extension that protects you from scams on Pump.fun and Crypto Twitter.
+ArgusGuard is an AI-powered browser extension that protects you from scams on Pump.fun and Crypto Twitter.
 
 FEATURES
 
@@ -63,7 +63,7 @@ FEATURES
 
 HOW IT WORKS
 
-1. Install WhaleShield
+1. Install ArgusGuard
 2. Visit any token on Pump.fun
 3. See instant risk analysis overlay
 4. Make informed trading decisions
@@ -75,11 +75,11 @@ PRIVACY
 - Works locally in your browser
 - Open source
 
-$WHALESHIELD TOKEN
+$ARGUSGUARD TOKEN
 
-Hold 1,000 $WHALESHIELD tokens to unlock premium features including advanced AI analysis, community notes access, and priority support.
+Hold 1,000 $ARGUSGUARD tokens to unlock premium features including advanced AI analysis, community notes access, and priority support.
 
-Stop getting rugged. Start trading smarter with WhaleShield.
+Stop getting rugged. Start trading smarter with ArgusGuard.
 ```
 
 **Category:** Productivity (or Finance if available)
@@ -92,7 +92,7 @@ Stop getting rugged. Start trading smarter with WhaleShield.
 - **Promotional Tile:** 440x280 (optional but recommended)
 
 ### 1.5 Privacy Tab
-- **Privacy Policy URL:** `https://whaleshield.io/privacy`
+- **Privacy Policy URL:** `https://argusguard.io/privacy`
 - **Single Purpose:** "Analyzes cryptocurrency tokens for scam indicators"
 - **Permissions Justification:**
   - `storage`: "Store user preferences locally"
@@ -121,7 +121,7 @@ Stop getting rugged. Start trading smarter with WhaleShield.
 
 ### 2.3 Fill Listing Details
 
-**Name:** WhaleShield
+**Name:** ArgusGuard
 
 **Summary (max 250 chars):**
 ```
@@ -138,7 +138,7 @@ AI-powered security for Pump.fun. Detect honeypots, rug pulls, and scams before 
 
 **Support Email:** your-email@example.com
 
-**Homepage:** `https://whaleshield.io`
+**Homepage:** `https://argusguard.io`
 
 ### 2.4 Submit
 1. Agree to policies
@@ -161,7 +161,7 @@ AI-powered security for Pump.fun. Detect honeypots, rug pulls, and scams before 
 
 ### 3.3 Fill Store Listing
 
-**Extension Name:** WhaleShield
+**Extension Name:** ArgusGuard
 
 **Short Description:**
 ```
@@ -172,7 +172,7 @@ AI-powered security extension that protects you from honeypots and rug pulls on 
 
 **Category:** Security
 
-**Privacy Policy URL:** `https://whaleshield.io/privacy`
+**Privacy Policy URL:** `https://argusguard.io/privacy`
 
 ### 3.4 Upload Assets
 - Screenshots (at least 1 required)
@@ -208,7 +208,7 @@ Take these 5 screenshots on pump.fun:
    - Caption: "Community-powered warnings"
 
 5. **Before/After**
-   - Side by side of pump.fun without and with WhaleShield
+   - Side by side of pump.fun without and with ArgusGuard
    - Caption: "Trade with confidence"
 
 ---
@@ -233,5 +233,5 @@ Take these 5 screenshots on pump.fun:
 
 ## Support
 
-- Twitter: [@WhaleShield](https://twitter.com/WhaleShield)
-- Website: [whaleshield.io](https://whaleshield.io)
+- Twitter: [@ArgusGuard](https://twitter.com/ArgusGuard)
+- Website: [argusguard.io](https://argusguard.io)

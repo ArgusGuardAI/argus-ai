@@ -1,6 +1,6 @@
-# WhaleShield Architecture
+# ArgusGuard Architecture
 
-Technical architecture documentation for the WhaleShield security platform.
+Technical architecture documentation for the ArgusGuard security platform.
 
 ---
 
@@ -10,7 +10,7 @@ Technical architecture documentation for the WhaleShield security platform.
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                              USER BROWSER                                    │
 │  ┌─────────────────────────────────────────────────────────────────────┐    │
-│  │                    WhaleShield Extension (Plasmo)                    │    │
+│  │                    ArgusGuard Extension (Plasmo)                    │    │
 │  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────────┐  │    │
 │  │  │Content Script│  │    Popup     │  │   Background Service     │  │    │
 │  │  │ (DOM Inject) │  │  (Wallet UI) │  │   (RPC, Storage)         │  │    │
@@ -367,7 +367,7 @@ Technical architecture documentation for the WhaleShield security platform.
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                          TOKEN GATING                                    │
 │                                                                          │
-│   User Wallet ────▶ RPC Balance Check ────▶ >= 1000 $WHALESHIELD?       │
+│   User Wallet ────▶ RPC Balance Check ────▶ >= 1000 $ARGUSGUARD?       │
 │                                                    │                     │
 │                                         ┌─────────┴─────────┐           │
 │                                         │                   │           │

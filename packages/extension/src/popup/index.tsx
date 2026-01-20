@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { useWhaleshieldWallet } from '~/hooks/useWhaleshieldWallet';
-import { WHALESHIELD_TOKEN } from '@argusguard/shared';
+import { useArgusGuardWallet } from '~/hooks/useArgusGuardWallet';
+import { ARGUSGUARD_TOKEN } from '@argusguard/shared';
 import { createCheckoutSession, createPortalSession } from '~/lib/api';
 import '~/styles/globals.css';
 
 function Popup() {
-  const wallet = useWhaleshieldWallet();
-  const isTestMode = WHALESHIELD_TOKEN.mint === 'TBD_AFTER_LAUNCH';
+  const wallet = useArgusGuardWallet();
+  const isTestMode = ARGUSGUARD_TOKEN.mint === 'TBD_AFTER_LAUNCH';
   const [isSubscribing, setIsSubscribing] = useState(false);
   const [isManaging, setIsManaging] = useState(false);
 
@@ -89,7 +89,7 @@ function Popup() {
                 WebkitTextFillColor: 'transparent',
               }}
             >
-              WHALESHIELD
+              ARGUSGUARD
             </h1>
             <p className="text-[10px] text-gray-500 tracking-wide" style={{ fontFamily: "'Orbitron', monospace" }}>
               AI SECURITY LAYER
@@ -103,7 +103,7 @@ function Popup() {
         {!wallet.connected ? (
           <div className="space-y-4">
             <p className="text-sm text-gray-400 leading-relaxed">
-              Connect your wallet to activate <span className="text-cyan-400">WhaleShield</span> protection.
+              Connect your wallet to activate <span className="text-cyan-400">ArgusGuard</span> protection.
             </p>
             <button
               onClick={wallet.connect}
@@ -205,7 +205,7 @@ function Popup() {
                       ? 'Premium Subscriber'
                       : wallet.hasTokens
                       ? 'Token Holder'
-                      : `${wallet.whaleshieldBalance.toLocaleString()} / ${WHALESHIELD_TOKEN.requiredBalance.toLocaleString()} tokens`}
+                      : `${wallet.argusguardBalance.toLocaleString()} / ${ARGUSGUARD_TOKEN.requiredBalance.toLocaleString()} tokens`}
                   </p>
                 </div>
               </div>
@@ -262,7 +262,7 @@ function Popup() {
                       color: '#00d4ff',
                     }}
                   >
-                    HOLD 1K $WHALESHIELD →
+                    HOLD 1K $ARGUSGUARD →
                   </a>
                 </div>
               )}

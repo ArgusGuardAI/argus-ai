@@ -20,13 +20,13 @@ function extractPairAddress(): string | null {
 // Fetch actual token address from DexScreener API using pair address
 async function fetchTokenAddress(pairAddress: string): Promise<string | null> {
   try {
-    console.log('[WhaleShield] Fetching token for pair:', pairAddress);
+    console.log('[ArgusGuard] Fetching token for pair:', pairAddress);
     const response = await fetch(
       `https://api.dexscreener.com/latest/dex/pairs/solana/${pairAddress}`
     );
 
     if (!response.ok) {
-      console.log('[WhaleShield] DexScreener API failed:', response.status);
+      console.log('[ArgusGuard] DexScreener API failed:', response.status);
       return null;
     }
 
@@ -34,13 +34,13 @@ async function fetchTokenAddress(pairAddress: string): Promise<string | null> {
     const tokenAddress = data?.pair?.baseToken?.address;
 
     if (tokenAddress) {
-      console.log('[WhaleShield] Got token address:', tokenAddress);
+      console.log('[ArgusGuard] Got token address:', tokenAddress);
       return tokenAddress;
     }
 
     return null;
   } catch (error) {
-    console.error('[WhaleShield] Error fetching token address:', error);
+    console.error('[ArgusGuard] Error fetching token address:', error);
     return null;
   }
 }
@@ -65,7 +65,7 @@ function findTargetElement(): Element | null {
   for (const selector of chartSelectors) {
     const element = document.querySelector(selector);
     if (element) {
-      console.log(`[WhaleShield] Found chart element: ${selector}`);
+      console.log(`[ArgusGuard] Found chart element: ${selector}`);
       // Return the parent to inject before the chart container
       return element;
     }
@@ -81,7 +81,7 @@ function findTargetElement(): Element | null {
     const children = mainContent.querySelectorAll(':scope > div');
     for (const child of children) {
       if (child.querySelector('canvas') || child.querySelector('iframe')) {
-        console.log('[WhaleShield] Found chart via canvas/iframe');
+        console.log('[ArgusGuard] Found chart via canvas/iframe');
         return child;
       }
     }
@@ -90,7 +90,7 @@ function findTargetElement(): Element | null {
   // Last resort: find the element containing the timeframe buttons (1m, 5m, etc)
   const timeframeBar = document.querySelector('[class*="custom-"][class*="flex"]');
   if (timeframeBar && timeframeBar.textContent?.includes('1m')) {
-    console.log('[WhaleShield] Found via timeframe bar');
+    console.log('[ArgusGuard] Found via timeframe bar');
     return timeframeBar.parentElement;
   }
 
@@ -103,7 +103,7 @@ let currentTokenAddress: string | null = null;
 
 // Remove overlay when not on a token page
 function removeOverlay() {
-  const existing = document.getElementById('whaleshield-paint-container');
+  const existing = document.getElementById('argusguard-paint-container');
   if (existing) {
     if (currentRoot) {
       currentRoot.unmount();
@@ -111,7 +111,7 @@ function removeOverlay() {
     }
     existing.remove();
     currentTokenAddress = null;
-    console.log('[WhaleShield] Removed overlay (not on token page)');
+    console.log('[ArgusGuard] Removed overlay (not on token page)');
   }
 }
 
@@ -130,7 +130,7 @@ async function injectOverlay() {
     return;
   }
 
-  const existingContainer = document.getElementById('whaleshield-paint-container');
+  const existingContainer = document.getElementById('argusguard-paint-container');
 
   // If same pair, don't re-inject
   if (existingContainer && currentPairAddress === pairAddress) {
@@ -154,7 +154,7 @@ async function injectOverlay() {
   const tokenAddress = await fetchTokenAddress(pairAddress);
 
   if (!tokenAddress) {
-    console.log('[WhaleShield] Could not get token address for pair:', pairAddress);
+    console.log('[ArgusGuard] Could not get token address for pair:', pairAddress);
     isLoading = false;
     return;
   }
@@ -162,14 +162,14 @@ async function injectOverlay() {
   // Find target element to inject before
   const target = findTargetElement();
   if (!target) {
-    console.log('[WhaleShield] Target element not found on DexScreener, will retry...');
+    console.log('[ArgusGuard] Target element not found on DexScreener, will retry...');
     isLoading = false;
     return;
   }
 
   // Create container - full width above chart
   const container = document.createElement('div');
-  container.id = 'whaleshield-paint-container';
+  container.id = 'argusguard-paint-container';
   container.style.cssText = `
     width: 100%;
     padding: 12px 16px;
@@ -181,7 +181,7 @@ async function injectOverlay() {
 
   // Insert before the target element (pushes chart down)
   target.parentNode?.insertBefore(container, target);
-  console.log('[WhaleShield] Container injected above chart');
+  console.log('[ArgusGuard] Container injected above chart');
 
   // Mount React with key to force fresh state
   currentRoot = createRoot(container);
@@ -190,7 +190,7 @@ async function injectOverlay() {
   currentPairAddress = pairAddress;
   isLoading = false;
 
-  console.log(`[WhaleShield] Injected overlay for token: ${tokenAddress} (pair: ${pairAddress})`);
+  console.log(`[ArgusGuard] Injected overlay for token: ${tokenAddress} (pair: ${pairAddress})`);
 }
 
 // Initial injection (wait longer for DexScreener's heavy React app)
@@ -199,7 +199,7 @@ setTimeout(injectOverlay, 1500);
 // Observe for SPA navigation
 const observer = new MutationObserver(() => {
   const pairAddress = extractPairAddress();
-  const existing = document.getElementById('whaleshield-paint-container');
+  const existing = document.getElementById('argusguard-paint-container');
 
   // Not on token page - remove overlay
   if (!pairAddress && existing) {

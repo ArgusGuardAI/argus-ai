@@ -37,7 +37,7 @@ async function fetchDexScreenerTrending(): Promise<TrendingToken[]> {
     // Get top boosted tokens
     const boostsResponse = await fetch(
       'https://api.dexscreener.com/token-boosts/top/v1',
-      { headers: { 'User-Agent': 'WhaleShield/1.0' } }
+      { headers: { 'User-Agent': 'ArgusGuard/1.0' } }
     );
 
     if (!boostsResponse.ok) {
@@ -59,7 +59,7 @@ async function fetchDexScreenerTrending(): Promise<TrendingToken[]> {
     const addresses = solanaBoosts.map((b: any) => b.tokenAddress).join(',');
     const tokensResponse = await fetch(
       `https://api.dexscreener.com/tokens/v1/solana/${addresses}`,
-      { headers: { 'User-Agent': 'WhaleShield/1.0' } }
+      { headers: { 'User-Agent': 'ArgusGuard/1.0' } }
     );
 
     if (!tokensResponse.ok) {
@@ -108,7 +108,7 @@ async function fetchLatestProfiles(): Promise<TrendingToken[]> {
   try {
     const response = await fetch(
       'https://api.dexscreener.com/token-profiles/latest/v1',
-      { headers: { 'User-Agent': 'WhaleShield/1.0' } }
+      { headers: { 'User-Agent': 'ArgusGuard/1.0' } }
     );
 
     if (!response.ok) {
@@ -127,7 +127,7 @@ async function fetchLatestProfiles(): Promise<TrendingToken[]> {
     const addresses = solanaProfiles.map((p: any) => p.tokenAddress).join(',');
     const tokensResponse = await fetch(
       `https://api.dexscreener.com/tokens/v1/solana/${addresses}`,
-      { headers: { 'User-Agent': 'WhaleShield/1.0' } }
+      { headers: { 'User-Agent': 'ArgusGuard/1.0' } }
     );
 
     if (!tokensResponse.ok) {

@@ -25,7 +25,7 @@ subscriptionRoutes.post('/create-checkout', async (c) => {
 
     // Check if customer already exists
     const existingCustomers = await stripe.customers.list({
-      email: `${body.walletAddress}@whaleshield.wallet`,
+      email: `${body.walletAddress}@argusguard.wallet`,
       limit: 1,
     });
 
@@ -36,7 +36,7 @@ subscriptionRoutes.post('/create-checkout', async (c) => {
     } else {
       // Create new customer with wallet address as identifier
       const customer = await stripe.customers.create({
-        email: `${body.walletAddress}@whaleshield.wallet`,
+        email: `${body.walletAddress}@argusguard.wallet`,
         metadata: {
           walletAddress: body.walletAddress,
         },
@@ -53,7 +53,7 @@ subscriptionRoutes.post('/create-checkout', async (c) => {
           price_data: {
             currency: 'usd',
             product_data: {
-              name: 'WhaleShield Premium',
+              name: 'ArgusGuard Premium',
               description: 'AI-powered crypto scam protection',
             },
             unit_amount: SUBSCRIPTION_PRICE,
@@ -65,8 +65,8 @@ subscriptionRoutes.post('/create-checkout', async (c) => {
         },
       ],
       mode: 'subscription',
-      success_url: body.successUrl || 'https://whaleshield.io/success?session_id={CHECKOUT_SESSION_ID}',
-      cancel_url: body.cancelUrl || 'https://whaleshield.io/cancel',
+      success_url: body.successUrl || 'https://argusguard.io/success?session_id={CHECKOUT_SESSION_ID}',
+      cancel_url: body.cancelUrl || 'https://argusguard.io/cancel',
       metadata: {
         walletAddress: body.walletAddress,
       },
@@ -269,7 +269,7 @@ subscriptionRoutes.post('/portal', async (c) => {
 
     const session = await stripe.billingPortal.sessions.create({
       customer: subscriber.stripe_customer_id,
-      return_url: body.returnUrl || 'https://whaleshield.io',
+      return_url: body.returnUrl || 'https://argusguard.io',
     });
 
     return c.json({

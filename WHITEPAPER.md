@@ -1,4 +1,4 @@
-# WhaleShield: The Graffiti Protocol
+# ArgusGuard: The Graffiti Protocol
 
 **Version:** 2.0
 **Date:** January 2026
@@ -12,7 +12,7 @@ The Solana memecoin ecosystem—driven largely by platforms like Pump.fun—repr
 
 Retail investors navigate a minefield of sophisticated smart contract scams, "honeypots," and anonymous serial rug-pullers. Traditional due diligence tools (block explorers, code auditors) are too slow and complex for the high-velocity trading environment of 2026.
 
-**WhaleShield** fills this vacuum by providing instant, AI-powered contract analysis combined with community-driven intelligence—all delivered as a browser overlay before you click "Buy."
+**ArgusGuard** fills this vacuum by providing instant, AI-powered contract analysis combined with community-driven intelligence—all delivered as a browser overlay before you click "Buy."
 
 ---
 
@@ -41,11 +41,11 @@ In 2026, the memecoin market is no longer a niche; it is the primary onboarding 
 - **Velocity vs. Accuracy:** By the time a scam is exposed on Twitter, the liquidity has already been drained.
 - **The "Rug" Cycle:** Malicious actors deploy, drain, and redeploy with impunity. There is no "reputation cost" in anonymous memecoins.
 
-### 1.2 The WhaleShield Thesis
+### 1.2 The ArgusGuard Thesis
 
 We posit that **Context is Currency.**
 
-WhaleShield does not block access; it *enriches* access. By overlaying "Graffiti" (social proof) and "AI Insight" (contract analysis) directly onto the UI of Pump.fun and Twitter, we restore the trust layer missing from Web3.
+ArgusGuard does not block access; it *enriches* access. By overlaying "Graffiti" (social proof) and "AI Insight" (contract analysis) directly onto the UI of Pump.fun and Twitter, we restore the trust layer missing from Web3.
 
 ---
 
@@ -87,7 +87,7 @@ Even "legitimate" tokens can be dangerous:
 
 ## 3. The Solution: The Triple-Layer Shield
 
-WhaleShield mitigates these threats through three simultaneous layers of defense.
+ArgusGuard mitigates these threats through three simultaneous layers of defense.
 
 ### 3.1 Layer 1: The AI Sentinel (The Guard)
 
@@ -111,7 +111,7 @@ A "Crew-Based" annotation system that sits on top of the browser DOM.
 - **Whale Notes:** High-net-worth individuals leave notes on tokens
 - **Scam Flags:** Community-driven warnings with vote weighting
 - **Context:** Historical information about developers and tokens
-- **Privacy:** Notes encrypted, only $WHALESHIELD holders can decrypt
+- **Privacy:** Notes encrypted, only $ARGUSGUARD holders can decrypt
 
 ### 3.3 Layer 3: The Identity Layer (History)
 
@@ -174,11 +174,11 @@ The AI engine includes strict guardrails:
 
 ## 5. The "Hold-to-Use" Gate
 
-WhaleShield is free to download, but protected by a **Web3 Access Key**.
+ArgusGuard is free to download, but protected by a **Web3 Access Key**.
 
 ### 5.1 The Barrier
 
-To unlock the **Triple-Layer Shield**, users must hold **1,000 $WHALESHIELD** tokens.
+To unlock the **Triple-Layer Shield**, users must hold **1,000 $ARGUSGUARD** tokens.
 
 - **No Staking:** No locking period, no gas fees, no smart contract vaults
 - **Balance Verification:** Client-side RPC check (read-only)
@@ -215,7 +215,7 @@ User visits Pump.fun
 Extension detects token address
        │
        ▼
-Check wallet for 1,000 $WHALESHIELD
+Check wallet for 1,000 $ARGUSGUARD
        │
        ▼
 ┌──────┴──────┐
@@ -250,7 +250,7 @@ Graffiti  KV   Fresh
 
 ### 7.1 Token Details
 
-- **Name:** WHALESHIELD
+- **Name:** ARGUSGUARD
 - **Chain:** Solana (SPL)
 - **Launchpad:** Pump.fun
 - **Total Supply:** 1,000,000,000
@@ -274,7 +274,7 @@ The token has **one purpose: Access.**
 ## 8. Roadmap
 
 ### Phase 1: The Pump.fun Shield (Q1 2026) - COMPLETE
-- Launch $WHALESHIELD on Pump.fun
+- Launch $ARGUSGUARD on Pump.fun
 - Chrome/Brave/Arc extension release
 - AI honeypot detection + Basic Graffiti
 
@@ -300,16 +300,16 @@ The token has **one purpose: Access.**
 
 The Solana ecosystem is a financial engine room, but it operates in the dark. Investors fumble through, hoping not to touch the live wire.
 
-**WhaleShield turns on the lights.**
+**ArgusGuard turns on the lights.**
 
 By combining AI-powered analysis with community intelligence, we don't just protect capital—we restore trust to the memecoin economy.
 
-**$WHALESHIELD is not a token. It is the key to the safe room.**
+**$ARGUSGUARD is not a token. It is the key to the safe room.**
 
 ---
 
 ## Disclaimer
 
-*WhaleShield is a software tool designed for educational and informational purposes only. It does not guarantee safety, and users should always perform their own due diligence (DYOR). WhaleShield is not responsible for any financial losses incurred while trading. The $WHALESHIELD token is a utility token with no implied promise of profit or financial return.*
+*ArgusGuard is a software tool designed for educational and informational purposes only. It does not guarantee safety, and users should always perform their own due diligence (DYOR). ArgusGuard is not responsible for any financial losses incurred while trading. The $ARGUSGUARD token is a utility token with no implied promise of profit or financial return.*
 
-**Copyright 2026 WhaleShield Protocol.**
+**Copyright 2026 ArgusGuard Protocol.**

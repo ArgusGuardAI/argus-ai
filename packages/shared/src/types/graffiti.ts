@@ -9,7 +9,7 @@ export interface GraffitiNote {
   upvotes: number;
   downvotes: number;
   createdAt: number;
-  verified: boolean; // Author holds WHALESHIELD token
+  verified: boolean; // Author holds ARGUSGUARD token
 }
 
 export interface GraffitiCreateRequest {

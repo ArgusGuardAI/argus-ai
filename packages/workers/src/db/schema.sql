@@ -1,4 +1,4 @@
--- WhaleShield Database Schema for Supabase
+-- ArgusGuard Database Schema for Supabase
 -- Run this in your Supabase SQL Editor
 
 -- ============================================

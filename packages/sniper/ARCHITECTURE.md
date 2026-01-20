@@ -1,13 +1,13 @@
-# WhaleShield Sniper Bot Architecture
+# ArgusGuard Sniper Bot Architecture
 
 ## Overview
 
-A web-based "smart sniper" that combines WhaleShield's AI safety analysis with automated trading. Only snipes tokens that pass honeypot detection.
+A web-based "smart sniper" that combines ArgusGuard's AI safety analysis with automated trading. Only snipes tokens that pass honeypot detection.
 
 ## Core Differentiator
 
 **Traditional Sniper:** Buys blindly → Gets rugged
-**WhaleShield Sniper:** Analyze first → Buy only if SAFE → Avoid rugs
+**ArgusGuard Sniper:** Analyze first → Buy only if SAFE → Avoid rugs
 
 ---
 
@@ -28,7 +28,7 @@ A web-based "smart sniper" that combines WhaleShield's AI safety analysis with a
 │                                                                  │
 │  ┌────────────────┐    ┌────────────────┐    ┌───────────────┐ │
 │  │ Token Listener │───▶│ Safety Filter  │───▶│ Trade Executor│ │
-│  │                │    │ (WhaleShield)  │    │               │ │
+│  │                │    │ (ArgusGuard)  │    │               │ │
 │  │ • New pools    │    │ • AI Analysis  │    │ • Jupiter SDK │ │
 │  │ • Pump.fun     │    │ • Liquidity    │    │ • Priority tx │ │
 │  │ • Raydium      │    │ • Holder check │    │ • Jito bundles│ │
@@ -67,7 +67,7 @@ packages/
 │   │   │   ├── raydium.ts     # Listen for new Raydium pools
 │   │   │   └── token-stream.ts# Unified token stream
 │   │   ├── engine/
-│   │   │   ├── analyzer.ts    # Calls WhaleShield API
+│   │   │   ├── analyzer.ts    # Calls ArgusGuard API
 │   │   │   ├── decision.ts    # Buy/pass logic
 │   │   │   └── executor.ts    # Trade execution
 │   │   ├── trading/
@@ -101,7 +101,7 @@ Raydium Events ──────┘
 
 ### 2. Safety Analysis (< 2 seconds)
 ```
-New Token ──▶ WhaleShield API ──▶ Risk Score + Flags
+New Token ──▶ ArgusGuard API ──▶ Risk Score + Flags
                                         │
                     ┌───────────────────┴───────────────────┐
                     ▼                                       ▼
@@ -128,7 +128,7 @@ Open Position ──▶ Monitor ──▶ Exit conditions met? ──▶ Sell
                      ├── Take profit (e.g., 2x)
                      ├── Stop loss (e.g., -30%)
                      ├── Time limit (e.g., 1 hour)
-                     └── WhaleShield re-scan (risk increased?)
+                     └── ArgusGuard re-scan (risk increased?)
 ```
 
 ---
@@ -146,7 +146,7 @@ interface SniperConfig {
   priorityFeeLamports: number;   // e.g., 100000 = 0.0001 SOL
   useJito: boolean;              // Use Jito bundles for speed
 
-  // Safety filters (WhaleShield)
+  // Safety filters (ArgusGuard)
   maxRiskScore: number;          // e.g., 40 = only buy if score < 40
   requireLiquidity: number;      // e.g., 5000 = min $5k liquidity
 
@@ -233,7 +233,7 @@ PUT    /api/sniper/config        # Update settings
 
 ### Phase 1: Core Engine
 - [ ] Pump.fun token listener
-- [ ] WhaleShield analysis integration
+- [ ] ArgusGuard analysis integration
 - [ ] Jupiter swap execution
 - [ ] Basic CLI interface
 
@@ -252,7 +252,7 @@ PUT    /api/sniper/config        # Update settings
 
 ## Revenue Model Options
 
-1. **$WHALESHIELD token gate** - Hold X tokens to access sniper
+1. **$ARGUSGUARD token gate** - Hold X tokens to access sniper
 2. **Subscription** - Monthly fee for sniper access
 3. **Performance fee** - Small % of profitable trades
 4. **Freemium** - Free manual mode, paid auto-snipe

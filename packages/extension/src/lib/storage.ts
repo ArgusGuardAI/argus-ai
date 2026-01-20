@@ -14,9 +14,9 @@ export interface StoredSettings {
 }
 
 const KEYS = {
-  WALLET: 'whaleshield_wallet',
-  SETTINGS: 'whaleshield_settings',
-  PREMIUM_STATUS: 'whaleshield_premium',
+  WALLET: 'argusguard_wallet',
+  SETTINGS: 'argusguard_settings',
+  PREMIUM_STATUS: 'argusguard_premium',
 } as const;
 
 // Wallet storage

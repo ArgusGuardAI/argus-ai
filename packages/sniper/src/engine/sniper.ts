@@ -1,5 +1,5 @@
 /**
- * WhaleShield Sniper Engine
+ * ArgusGuard Sniper Engine
  * Main orchestrator that combines token discovery, analysis, and trading
  */
 
@@ -230,7 +230,7 @@ export class SniperEngine extends EventEmitter {
     // - Check price periodically
     // - Auto-sell on take profit / stop loss
     // - Auto-sell on max hold time
-    // - Re-check WhaleShield analysis if risk increases
+    // - Re-check ArgusGuard analysis if risk increases
     console.log(`[Sniper] Monitoring position: ${position.tokenSymbol}`);
   }
 

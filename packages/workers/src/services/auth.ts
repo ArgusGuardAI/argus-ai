@@ -1,6 +1,6 @@
 /**
  * Authentication & Token Gating Service
- * Verifies wallet signatures and checks $WHALESHIELD token balance
+ * Verifies wallet signatures and checks $ARGUSGUARD token balance
  *
  * Uses lightweight libraries compatible with Cloudflare Workers
  */
@@ -8,7 +8,7 @@
 import nacl from 'tweetnacl';
 import bs58 from 'bs58';
 
-// WhaleShield token configuration
+// ArgusGuard token configuration
 const REQUIRED_BALANCE = 1000; // Minimum tokens required for premium features
 const SOLANA_RPC_URL = 'https://api.mainnet-beta.solana.com';
 
@@ -49,7 +49,7 @@ export function verifySignature(
  */
 export function generateSignMessage(action: string, tokenAddress?: string): string {
   const timestamp = Math.floor(Date.now() / 1000);
-  const parts = ['WhaleShield', action];
+  const parts = ['ArgusGuard', action];
   if (tokenAddress) {
     parts.push(tokenAddress);
   }
@@ -73,7 +73,7 @@ export function isMessageRecent(message: string, maxAgeSeconds = 300): boolean {
 }
 
 /**
- * Check if a wallet holds the required $WHALESHIELD tokens
+ * Check if a wallet holds the required $ARGUSGUARD tokens
  */
 export async function checkTokenBalance(
   walletAddress: string,
@@ -213,7 +213,7 @@ export async function authenticateUser(
         verified: true,
         hasTokens: false,
         tokenBalance: balance,
-        error: `Requires ${requiredBalance.toLocaleString()} $WHALESHIELD tokens. You have ${balance.toLocaleString()}.`,
+        error: `Requires ${requiredBalance.toLocaleString()} $ARGUSGUARD tokens. You have ${balance.toLocaleString()}.`,
       };
     }
 

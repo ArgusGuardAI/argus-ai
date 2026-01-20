@@ -47,7 +47,7 @@ graffitiRoutes.post('/auth/check', async (c) => {
       body.signature,
       {
         requireTokens: true,
-        mintAddress: c.env.WHALESHIELD_MINT,
+        mintAddress: c.env.ARGUSGUARD_MINT,
         requiredBalance: 1000,
         heliusApiKey: c.env.HELIUS_API_KEY,
       }
@@ -108,8 +108,8 @@ graffitiRoutes.post('/', async (c) => {
       body.message,
       body.signature,
       {
-        requireTokens: !!c.env.WHALESHIELD_MINT, // Only require tokens if mint is set
-        mintAddress: c.env.WHALESHIELD_MINT,
+        requireTokens: !!c.env.ARGUSGUARD_MINT, // Only require tokens if mint is set
+        mintAddress: c.env.ARGUSGUARD_MINT,
         requiredBalance: 1000,
         heliusApiKey: c.env.HELIUS_API_KEY,
       }

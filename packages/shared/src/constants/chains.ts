@@ -29,15 +29,10 @@ export const DEX_PROGRAMS = {
 
 export const JUPITER_API_URL = 'https://quote-api.jup.ag/v6';
 
-// WhaleShield Token Configuration
-export const WHALESHIELD_TOKEN = {
+// ArgusGuard Token Configuration
+export const ARGUSGUARD_TOKEN = {
   mint: 'TBD_AFTER_LAUNCH', // Will be updated after Pump.fun launch
-  symbol: '$WHALESHIELD',
+  symbol: '$ARGUSGUARD',
   decimals: 9,
   requiredBalance: 1000, // Minimum tokens required to unlock features
 } as const;
-
-// URL Patterns for content script matching
-export const PUMP_FUN_URL_PATTERN = /pump\.fun\/coin\/([A-Za-z0-9]+)/;
-export const BIRDEYE_URL_PATTERN = /birdeye\.so\/token\/([A-Za-z0-9]+)/;
-export const DEXSCREENER_URL_PATTERN = /dexscreener\.com\/solana\/([A-Za-z0-9]+)/;

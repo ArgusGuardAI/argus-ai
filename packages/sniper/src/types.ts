@@ -1,5 +1,5 @@
 /**
- * WhaleShield Sniper Types
+ * ArgusGuard Sniper Types
  */
 
 export interface SniperConfig {
@@ -12,7 +12,7 @@ export interface SniperConfig {
   priorityFeeLamports: number;
   useJito: boolean;
 
-  // Safety filters (WhaleShield)
+  // Safety filters (ArgusGuard)
   maxRiskScore: number;
   minLiquidityUsd: number;
 

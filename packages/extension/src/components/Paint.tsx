@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import type { HoneypotResult, GraffitiNote as GraffitiNoteType } from '@argusguard/shared';
-import { WHALESHIELD_TOKEN } from '@argusguard/shared';
+import { ARGUSGUARD_TOKEN } from '@argusguard/shared';
 import { RiskBadge } from './RiskBadge';
 import { GraffitiNote } from './GraffitiNote';
 import { CreateNoteForm } from './CreateNoteForm';
 import { analyzeToken, getGraffitiNotes, voteOnNote, getAuthMessage } from '~/lib/api';
-import { useWhaleshieldWallet } from '~/hooks/useWhaleshieldWallet';
+import { useArgusGuardWallet } from '~/hooks/useArgusGuardWallet';
 
 interface PaintProps {
   tokenAddress: string;
@@ -45,7 +45,7 @@ function getCacheAge(timestamp: number): string {
 }
 
 export function Paint({ tokenAddress }: PaintProps) {
-  const wallet = useWhaleshieldWallet();
+  const wallet = useArgusGuardWallet();
   const [state, setState] = useState<LoadingState>('loading');
   const [result, setResult] = useState<HoneypotResult | null>(null);
   const [notes, setNotes] = useState<GraffitiNoteType[]>([]);
@@ -61,7 +61,7 @@ export function Paint({ tokenAddress }: PaintProps) {
       setState('loading');
     }
 
-    const isTestMode = WHALESHIELD_TOKEN.mint === 'TBD_AFTER_LAUNCH';
+    const isTestMode = ARGUSGUARD_TOKEN.mint === 'TBD_AFTER_LAUNCH';
     const isPremium = isTestMode || wallet.isPremium;
 
     if (!isPremium && wallet.connected) {
@@ -141,14 +141,14 @@ export function Paint({ tokenAddress }: PaintProps) {
   // Loading state
   if (state === 'loading') {
     return (
-      <div className="whaleshield-paint glass-card corner-deco rounded-xl p-4 scan-line">
+      <div className="argusguard-paint glass-card corner-deco rounded-xl p-4 scan-line">
         <div className="flex items-center gap-4">
           <div className="w-16 h-16 rounded-lg bg-gradient-to-br from-cyan-500/20 to-blue-600/20 flex items-center justify-center pulse-glow">
             <span className="text-2xl">🐋</span>
           </div>
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-2">
-              <span className="font-cyber text-cyan-400 text-xs tracking-widest">WHALESHIELD</span>
+              <span className="font-cyber text-cyan-400 text-xs tracking-widest">ARGUSGUARD</span>
               <span className="text-cyan-500/50 text-[10px] font-mono">v1.0</span>
             </div>
             <div className="h-2 bg-white/5 rounded-full overflow-hidden">
@@ -164,7 +164,7 @@ export function Paint({ tokenAddress }: PaintProps) {
   // Locked state
   if (state === 'locked') {
     return (
-      <div className="whaleshield-paint glass-card corner-deco rounded-xl p-4">
+      <div className="argusguard-paint glass-card corner-deco rounded-xl p-4">
         <div className="flex items-center gap-4">
           <div className="w-16 h-16 rounded-lg bg-gradient-to-br from-purple-500/20 to-pink-600/20 flex items-center justify-center">
             <span className="text-3xl">🔒</span>
@@ -172,7 +172,7 @@ export function Paint({ tokenAddress }: PaintProps) {
           <div>
             <p className="font-cyber text-purple-400 text-sm tracking-wider">SHIELD LOCKED</p>
             <p className="text-gray-500 text-xs mt-1">
-              Hold <span className="text-cyan-400 font-bold">1,000 $WHALESHIELD</span> to unlock
+              Hold <span className="text-cyan-400 font-bold">1,000 $ARGUSGUARD</span> to unlock
             </p>
           </div>
         </div>
@@ -183,7 +183,7 @@ export function Paint({ tokenAddress }: PaintProps) {
   // Error state
   if (state === 'error' || !result) {
     return (
-      <div className="whaleshield-paint glass-card cyber-border-danger corner-deco rounded-xl p-4">
+      <div className="argusguard-paint glass-card cyber-border-danger corner-deco rounded-xl p-4">
         <div className="flex items-center gap-4">
           <div className="w-16 h-16 rounded-lg bg-gradient-to-br from-red-500/20 to-pink-600/20 flex items-center justify-center">
             <span className="text-3xl">⚠</span>
@@ -198,11 +198,11 @@ export function Paint({ tokenAddress }: PaintProps) {
   }
 
   const config = riskConfig[result.riskLevel];
-  const isTestMode = WHALESHIELD_TOKEN.mint === 'TBD_AFTER_LAUNCH';
+  const isTestMode = ARGUSGUARD_TOKEN.mint === 'TBD_AFTER_LAUNCH';
   const isPremium = isTestMode || wallet.isPremium;
 
   return (
-    <div className={`whaleshield-paint glass-card ${config.borderClass} corner-deco rounded-xl overflow-hidden`}>
+    <div className={`argusguard-paint glass-card ${config.borderClass} corner-deco rounded-xl overflow-hidden`}>
       {/* Header */}
       <div className="p-4 tech-grid-dense">
         <div className="flex items-start gap-4">
@@ -214,7 +214,7 @@ export function Paint({ tokenAddress }: PaintProps) {
             {/* Top bar */}
             <div className="flex items-center gap-2 mb-2">
               <span className="text-xl">🐋</span>
-              <span className="font-cyber gradient-text text-sm tracking-widest font-bold">WHALESHIELD</span>
+              <span className="font-cyber gradient-text text-sm tracking-widest font-bold">ARGUSGUARD</span>
               <span className="text-[9px] text-gray-600 font-mono ml-auto">{config.statusIcon}</span>
             </div>
 

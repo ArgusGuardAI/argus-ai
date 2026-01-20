@@ -15,7 +15,7 @@ export function Header({ connected }: HeaderProps) {
             <Shield className="w-7 h-7 text-cyber-blue" />
           </div>
           <div>
-            <h1 className="text-2xl font-cyber font-bold gradient-text">WhaleShield Sniper</h1>
+            <h1 className="text-2xl font-cyber font-bold gradient-text">ArgusGuard Sniper</h1>
             <p className="text-xs text-gray-500">AI-Powered Smart Sniping</p>
           </div>
         </div>

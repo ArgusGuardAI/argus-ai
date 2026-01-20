@@ -7,7 +7,7 @@ export const config: PlasmoCSConfig = {
 };
 
 // Twitter/X content script
-// This will scan tweets for Solana token mentions and add WhaleShield badges
+// This will scan tweets for Solana token mentions and add ArgusGuard badges
 
 const SOLANA_ADDRESS_REGEX = /[1-9A-HJ-NP-Za-km-z]{32,44}/g;
 
@@ -19,8 +19,8 @@ function findTokenMentions(text: string): string[] {
 
 function processtweet(tweetElement: Element) {
   // Skip if already processed
-  if (tweetElement.hasAttribute('data-whaleshield-processed')) return;
-  tweetElement.setAttribute('data-whaleshield-processed', 'true');
+  if (tweetElement.hasAttribute('data-argusguard-processed')) return;
+  tweetElement.setAttribute('data-argusguard-processed', 'true');
 
   const tweetText = tweetElement.textContent || '';
   const tokenAddresses = findTokenMentions(tweetText);
@@ -31,11 +31,11 @@ function processtweet(tweetElement: Element) {
   const links = tweetElement.querySelectorAll('a[href*="pump.fun"], a[href*="dexscreener"]');
 
   links.forEach((link) => {
-    // Add a small WhaleShield indicator next to the link
+    // Add a small ArgusGuard indicator next to the link
     const indicator = document.createElement('span');
-    indicator.className = 'whaleshield-twitter-badge';
+    indicator.className = 'argusguard-twitter-badge';
     indicator.innerHTML = '🐋🛡️';
-    indicator.title = 'Click to check with WhaleShield';
+    indicator.title = 'Click to check with ArgusGuard';
     indicator.style.cssText = `
       cursor: pointer;
       margin-left: 4px;
@@ -53,7 +53,7 @@ function processtweet(tweetElement: Element) {
       const tokenAddress = pumpMatch?.[1] || dexMatch?.[1];
 
       if (tokenAddress) {
-        // Open pump.fun with WhaleShield active
+        // Open pump.fun with ArgusGuard active
         window.open(`https://pump.fun/coin/${tokenAddress}`, '_blank');
       }
     });

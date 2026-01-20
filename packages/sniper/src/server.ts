@@ -1,5 +1,5 @@
 /**
- * WhaleShield Sniper API Server
+ * ArgusGuard Sniper API Server
  * Serves the web dashboard and WebSocket connections
  */
 
@@ -320,7 +320,7 @@ function broadcast(msg: any) {
 
 // Start server
 console.log('╔═══════════════════════════════════════════════════╗');
-console.log('║      WhaleShield Sniper API Server v0.1.0         ║');
+console.log('║       ArgusGuard Sniper API Server v0.1.0         ║');
 console.log('╚═══════════════════════════════════════════════════╝');
 console.log('');
 

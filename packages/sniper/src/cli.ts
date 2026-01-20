@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * WhaleShield Sniper CLI
+ * ArgusGuard Sniper CLI
  * Quick way to test the sniper engine
  *
  * Usage:
@@ -18,7 +18,7 @@ const WATCH_ONLY = process.argv.includes('--watch-only');
 
 async function main() {
   console.log('╔═══════════════════════════════════════════════════╗');
-  console.log('║         WhaleShield Smart Sniper v0.1.0           ║');
+  console.log('║         ArgusGuard Smart Sniper v0.1.0            ║');
   console.log('║   AI-powered safe token sniping on Solana         ║');
   console.log('╚═══════════════════════════════════════════════════╝');
   console.log('');
@@ -31,7 +31,7 @@ async function main() {
   const sniper = new SniperEngine(RPC_URL, {
     walletPrivateKey: WATCH_ONLY ? 'watch-only' : WALLET_KEY,
     buyAmountSol: 0.05, // Small amount for testing
-    maxRiskScore: 40, // Only snipe if WhaleShield score < 40
+    maxRiskScore: 40, // Only snipe if ArgusGuard score < 40
     minLiquidityUsd: 500,
     allowPumpFun: true,
     allowRaydium: false, // Start with just pump.fun

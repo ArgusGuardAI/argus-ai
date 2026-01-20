@@ -1,6 +1,6 @@
-# WhaleShield Website
+# ArgusGuard Website
 
-Landing page for WhaleShield - The First Whale Token With REAL Utility.
+Landing page for ArgusGuard - The First Whale Token With REAL Utility.
 
 ## Preview Locally
 

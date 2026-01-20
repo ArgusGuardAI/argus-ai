@@ -4,7 +4,7 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // WhaleShield brand colors (matching website)
+        // ArgusGuard brand colors (matching website)
         whale: {
           50: '#e6f9ff',
           100: '#b3ecff',
