@@ -1,11 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#00ff88">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#f97316">
   <!-- Main central eye -->
   <ellipse cx="12" cy="8" rx="7" ry="4.5" stroke-width="2.2"/>
-  <circle cx="12" cy="8" r="2.5" fill="#00ff88"/>
+  <circle cx="12" cy="8" r="2.5" fill="#f97316"/>
   <!-- Lower left eye -->
   <ellipse cx="5" cy="17" rx="4" ry="2.5" stroke-width="1.8"/>
-  <circle cx="5" cy="17" r="1.5" fill="#00ff88"/>
+  <circle cx="5" cy="17" r="1.5" fill="#f97316"/>
   <!-- Lower right eye -->
   <ellipse cx="19" cy="17" rx="4" ry="2.5" stroke-width="1.8"/>
-  <circle cx="19" cy="17" r="1.5" fill="#00ff88"/>
+  <circle cx="19" cy="17" r="1.5" fill="#f97316"/>
 </svg>

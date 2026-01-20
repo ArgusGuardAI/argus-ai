@@ -11,7 +11,7 @@ type SimNode = WalletNode & d3.SimulationNodeDatum;
 type SimLink = d3.SimulationLinkDatum<SimNode> & WalletLink;
 
 const nodeColors: Record<WalletNode['type'], string> = {
-  token: '#00ff88',
+  token: '#f97316',
   creator: '#ff9500',
   whale: '#ff4444',
   insider: '#ff6b6b',
@@ -31,7 +31,7 @@ const nodeIcons: Record<WalletNode['type'], string> = {
 
 const linkColors: Record<WalletLink['type'], string> = {
   created: '#ff9500',
-  holds: '#00ff88',
+  holds: '#f97316',
   funded: '#ff4444',
   coordinated: '#ff6b6b',
 };
@@ -258,10 +258,10 @@ export function NetworkGraph({ data }: Props) {
     <div ref={containerRef} className="w-full h-full relative">
       <svg ref={svgRef} className="w-full h-full" />
       {/* Legend - Centered with Font Awesome icons */}
-      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-sentinel-bg/95 border border-sentinel-border rounded-lg px-4 py-2.5 text-xs backdrop-blur-sm">
+      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-argus-bg/95 border border-argus-border rounded-lg px-4 py-2.5 text-xs backdrop-blur-sm">
         <div className="flex items-center gap-5">
           <div className="flex items-center gap-2">
-            <i className="fa-solid fa-coins text-sentinel-accent"></i>
+            <i className="fa-solid fa-coins text-argus-accent"></i>
             <span className="text-zinc-400">Token</span>
           </div>
           <div className="flex items-center gap-2">

@@ -99,7 +99,7 @@ function HolderChart({ holders }: { holders: HolderDistribution[] }) {
       {holders.map((holder, i) => (
         <div key={holder.address} className="flex items-center gap-2">
           <span className="text-[10px] text-zinc-500 w-4">{i + 1}</span>
-          <div className="flex-1 h-5 bg-sentinel-bg rounded overflow-hidden relative">
+          <div className="flex-1 h-5 bg-argus-bg rounded overflow-hidden relative">
             <div
               className="h-full rounded transition-all"
               style={{
@@ -153,7 +153,7 @@ export function AnalysisPanel({ result }: Props) {
   return (
     <>
       {/* Token Info */}
-      <div className="bg-sentinel-card border border-sentinel-border rounded-xl p-4">
+      <div className="bg-argus-card border border-argus-border rounded-xl p-4">
         <div className="flex items-start justify-between mb-4">
           <div>
             <h3 className="font-semibold text-white text-lg">
@@ -237,7 +237,7 @@ export function AnalysisPanel({ result }: Props) {
       </div>
 
       {/* Risk Score */}
-      <div className="bg-sentinel-card border border-sentinel-border rounded-xl p-4">
+      <div className="bg-argus-card border border-argus-border rounded-xl p-4">
         <h3 className="font-semibold text-white mb-4">Risk Assessment</h3>
         <RiskMeter score={analysis.riskScore} />
 
@@ -251,13 +251,13 @@ export function AnalysisPanel({ result }: Props) {
 
       {/* Holder Distribution */}
       {holderDistribution && holderDistribution.length > 0 && (
-        <div className="bg-sentinel-card border border-sentinel-border rounded-xl p-4">
+        <div className="bg-argus-card border border-argus-border rounded-xl p-4">
           <h3 className="font-semibold text-white mb-3 flex items-center gap-2">
-            <i className="fa-solid fa-chart-bar text-sentinel-accent"></i>
+            <i className="fa-solid fa-chart-bar text-argus-accent"></i>
             Top Holders
           </h3>
           <HolderChart holders={holderDistribution} />
-          <div className="flex items-center gap-4 mt-3 pt-3 border-t border-sentinel-border text-[10px]">
+          <div className="flex items-center gap-4 mt-3 pt-3 border-t border-argus-border text-[10px]">
             <span className="flex items-center gap-1">
               <span className="w-2 h-2 rounded-full bg-orange-500"></span>
               Creator
@@ -279,17 +279,17 @@ export function AnalysisPanel({ result }: Props) {
       )}
 
       {/* AI Prediction */}
-      <div className="bg-sentinel-card border border-sentinel-border rounded-xl p-4">
+      <div className="bg-argus-card border border-argus-border rounded-xl p-4">
         <h3 className="font-semibold text-white mb-2">AI Prediction</h3>
         <p className="text-sm text-zinc-300">{analysis.prediction}</p>
 
         {analysis.networkInsights.length > 0 && (
-          <div className="mt-3 pt-3 border-t border-sentinel-border">
+          <div className="mt-3 pt-3 border-t border-argus-border">
             <p className="text-xs text-zinc-500 mb-2">Network Insights</p>
             <ul className="space-y-1">
               {analysis.networkInsights.map((insight, i) => (
                 <li key={i} className="text-sm text-zinc-400 flex items-start gap-2">
-                  <span className="text-sentinel-accent">-</span>
+                  <span className="text-argus-accent">-</span>
                   {insight}
                 </li>
               ))}
@@ -300,7 +300,7 @@ export function AnalysisPanel({ result }: Props) {
 
       {/* Creator Info */}
       {creatorInfo && (
-        <div className="bg-sentinel-card border border-sentinel-border rounded-xl p-4">
+        <div className="bg-argus-card border border-argus-border rounded-xl p-4">
           <h3 className="font-semibold text-white mb-3">Creator Analysis</h3>
           <div className="grid grid-cols-2 gap-3 text-sm">
             <div>
@@ -332,7 +332,7 @@ export function AnalysisPanel({ result }: Props) {
 
       {/* Risk Flags */}
       {analysis.flags.length > 0 && (
-        <div className="bg-sentinel-card border border-sentinel-border rounded-xl p-4">
+        <div className="bg-argus-card border border-argus-border rounded-xl p-4">
           <h3 className="font-semibold text-white mb-3">
             Risk Flags ({analysis.flags.length})
           </h3>
