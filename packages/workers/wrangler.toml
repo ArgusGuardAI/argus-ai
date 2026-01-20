@@ -1,7 +1,7 @@
-# WhaleShield API - Cloudflare Workers Configuration
+# ArgusGuard API - Cloudflare Workers Configuration
 # Documentation: https://developers.cloudflare.com/workers/wrangler/configuration/
 
-name = "whaleshield-api"
+name = "argusguard-api"
 main = "src/index.ts"
 compatibility_date = "2024-01-01"
 
@@ -44,14 +44,14 @@ preview_id = "3fd64db66b4f49f3b56d77f64d8138b3"
 
 # Development environment
 [env.dev]
-name = "whaleshield-api-dev"
+name = "argusguard-api-dev"
 
 [env.dev.vars]
 ENVIRONMENT = "development"
 
 # Staging environment (optional)
 [env.staging]
-name = "whaleshield-api-staging"
+name = "argusguard-api-staging"
 
 [env.staging.vars]
 ENVIRONMENT = "staging"
