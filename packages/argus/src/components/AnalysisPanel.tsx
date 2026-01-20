@@ -242,6 +242,17 @@ export function AnalysisPanel({ result }: Props) {
         <RiskMeter score={analysis.riskScore} />
 
         <p className="text-sm text-zinc-300 mt-4 text-center">{analysis.summary}</p>
+
+        {/* Recommendation */}
+        {analysis.recommendation && (
+          <div className={`mt-4 px-3 py-2 rounded-lg text-sm font-medium ${
+            analysis.riskScore >= 70 ? 'bg-red-500/10 text-red-400 border border-red-500/30' :
+            analysis.riskScore >= 40 ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/30' :
+            'bg-green-500/10 text-green-400 border border-green-500/30'
+          }`}>
+            {analysis.recommendation}
+          </div>
+        )}
       </div>
 
       {/* Bundle Detection Warning */}

@@ -68,6 +68,71 @@ export function NetworkGraph({ data }: Props) {
 
     svg.call(zoom);
 
+    // Detect bundle wallets (holdings within 0.5%, 4+ wallets)
+    const bundleWallets = new Set<string>();
+    const clusters: Map<string, string[]> = new Map();
+
+    data.nodes.filter(n => n.type !== 'token' && n.type !== 'lp' && n.type !== 'creator' && (n.holdingsPercent || 0) > 0.5).forEach(node => {
+      const holdings = node.holdingsPercent || 0;
+      const clusterKey = (Math.round(holdings / 0.5) * 0.5).toFixed(1);
+      if (!clusters.has(clusterKey)) clusters.set(clusterKey, []);
+      clusters.get(clusterKey)!.push(node.id);
+    });
+
+    clusters.forEach((walletIds) => {
+      if (walletIds.length >= 4) {
+        walletIds.forEach(id => bundleWallets.add(id));
+      }
+    });
+
+    // Calculate summaries
+    const highRiskCount = data.nodes.filter(n => n.isHighRisk).length;
+    const bundleCount = bundleWallets.size;
+
+    // Add summary badges at top
+    if (bundleCount >= 4) {
+      svg.append('rect')
+        .attr('x', 10)
+        .attr('y', 8)
+        .attr('width', 140)
+        .attr('height', 24)
+        .attr('fill', 'rgba(168, 85, 247, 0.15)')
+        .attr('stroke', '#a855f7')
+        .attr('stroke-width', 1)
+        .attr('rx', 4);
+
+      svg.append('text')
+        .attr('x', 80)
+        .attr('y', 24)
+        .attr('text-anchor', 'middle')
+        .attr('fill', '#a855f7')
+        .attr('font-size', '11px')
+        .attr('font-weight', '600')
+        .text(`⚠ ${bundleCount} bundled wallets`);
+    }
+
+    if (highRiskCount > 0) {
+      const riskBadgeX = bundleCount >= 4 ? 160 : 10;
+      svg.append('rect')
+        .attr('x', riskBadgeX)
+        .attr('y', 8)
+        .attr('width', 110)
+        .attr('height', 24)
+        .attr('fill', 'rgba(255, 68, 68, 0.15)')
+        .attr('stroke', '#ff4444')
+        .attr('stroke-width', 1)
+        .attr('rx', 4);
+
+      svg.append('text')
+        .attr('x', riskBadgeX + 55)
+        .attr('y', 24)
+        .attr('text-anchor', 'middle')
+        .attr('fill', '#ff4444')
+        .attr('font-size', '11px')
+        .attr('font-weight', '600')
+        .text(`⚠ ${highRiskCount} high-risk`);
+    }
+
     // Create nodes and links with proper typing
     const nodes: SimNode[] = data.nodes.map(d => ({ ...d }));
     const links: SimLink[] = data.links.map(d => ({ ...d }));
@@ -123,17 +188,32 @@ export function NetworkGraph({ data }: Props) {
           })
       );
 
+    // Get dynamic node radius based on holdings
+    const getNodeRadius = (d: SimNode) => {
+      if (d.type === 'token') return 22;
+      if (d.type === 'creator') return 16;
+      if (d.type === 'lp') return 12;
+      // Dynamic sizing based on holdings (8-18px)
+      const holdings = d.holdingsPercent || 0;
+      return Math.max(8, Math.min(18, 8 + holdings * 0.8));
+    };
+
+    // Bundle glow ring (purple) - render first
+    node
+      .filter((d) => bundleWallets.has(d.id))
+      .append('circle')
+      .attr('r', (d) => getNodeRadius(d) + 6)
+      .attr('fill', 'none')
+      .attr('stroke', '#a855f7')
+      .attr('stroke-width', 3)
+      .attr('stroke-opacity', 0.6);
+
     // Node circles (background)
     node
       .append('circle')
-      .attr('r', (d) => {
-        if (d.type === 'token') return 22;
-        if (d.type === 'creator') return 16;
-        if (d.type === 'whale') return 14;
-        return 10;
-      })
-      .attr('fill', (d) => nodeColors[d.type])
-      .attr('stroke', '#1e1e2e')
+      .attr('r', (d) => getNodeRadius(d))
+      .attr('fill', (d) => bundleWallets.has(d.id) ? '#a855f7' : nodeColors[d.type])
+      .attr('stroke', (d) => bundleWallets.has(d.id) ? '#a855f7' : '#1e1e2e')
       .attr('stroke-width', 2);
 
     // Add Font Awesome icons inside nodes using foreignObject
@@ -174,14 +254,11 @@ export function NetworkGraph({ data }: Props) {
     node
       .filter((d) => d.isHighRisk === true)
       .append('circle')
-      .attr('r', (d) => {
-        if (d.type === 'token') return 26;
-        if (d.type === 'creator') return 20;
-        return 14;
-      })
+      .attr('r', (d) => getNodeRadius(d) + 4)
       .attr('fill', 'none')
       .attr('stroke', '#ff4444')
-      .attr('stroke-width', 2)
+      .attr('stroke-width', 3)
+      .attr('stroke-opacity', 0.8)
       .attr('stroke-dasharray', '4,2');
 
     // Node labels

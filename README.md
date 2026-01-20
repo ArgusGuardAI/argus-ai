@@ -1,8 +1,8 @@
-# WhaleShield
+# ArgusGuard
 
 **AI-Powered Security Layer for Solana Memecoins**
 
-WhaleShield is a browser extension that protects traders from honeypots, rug pulls, and scams on Pump.fun and DexScreener. It combines real-time AI analysis with community-driven intelligence to provide instant risk assessment before you trade.
+ArgusGuard is a browser extension that protects traders from honeypots, rug pulls, and scams on Pump.fun and DexScreener. It combines real-time AI analysis with community-driven intelligence to provide instant risk assessment before you trade.
 
 ---
 
@@ -33,9 +33,10 @@ WhaleShield is a browser extension that protects traders from honeypots, rug pul
 
 ```
 packages/
-├── extension/     # @whaleshield/extension - Plasmo browser extension
-├── workers/       # @whaleshield/workers - Cloudflare Workers API
-├── shared/        # @whaleshield/shared - Types and constants
+├── extension/     # @argusguard/extension - Plasmo browser extension
+├── workers/       # @argusguard/workers - Cloudflare Workers API
+├── shared/        # @argusguard/shared - Types and constants
+├── argus/         # Network visualization dashboard
 └── sniper/        # Trading bot dashboard (experimental)
 ```
 
@@ -53,8 +54,8 @@ packages/
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/whaleshield.git
-cd whaleshield
+git clone https://github.com/your-org/argusguard.git
+cd argusguard
 
 # Install dependencies
 pnpm install
@@ -232,7 +233,7 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for detailed system diagrams.
 - Never commit API keys or secrets
 - Use `.dev.vars` for local development (gitignored)
 - Use `wrangler secret` for production secrets
-- Report vulnerabilities to security@whaleshield.io
+- Report vulnerabilities to security@argusguard.io
 
 ---
 
@@ -248,4 +249,4 @@ MIT License - see [LICENSE](./LICENSE) for details.
 - [Architecture](./ARCHITECTURE.md)
 - [Development Guide](./CLAUDE.md)
 
-**Built by the WhaleShield Protocol**
+**Built by ArgusGuard**

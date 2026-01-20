@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { WHALESHIELD_TOKEN } from '@whaleshield/shared';
+import { WHALESHIELD_TOKEN } from '@argusguard/shared';
 import {
   getStoredWallet,
   setStoredWallet,

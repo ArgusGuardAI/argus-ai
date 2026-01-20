@@ -1,4 +1,4 @@
-import type { HoneypotRiskLevel } from '@whaleshield/shared';
+import type { HoneypotRiskLevel } from '@argusguard/shared';
 
 interface RiskBadgeProps {
   riskLevel: HoneypotRiskLevel;

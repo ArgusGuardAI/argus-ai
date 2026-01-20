@@ -1,8 +1,8 @@
 {
-  "name": "@whaleshield/sniper",
+  "name": "@argusguard/sniper",
   "version": "0.1.0",
   "private": true,
-  "description": "WhaleShield Smart Sniper - AI-powered safe token sniping",
+  "description": "ArgusGuard Smart Sniper - AI-powered safe token sniping",
   "main": "dist/index.js",
   "scripts": {
     "dev": "concurrently \"pnpm dev:server\" \"pnpm dev:web\"",
@@ -17,7 +17,7 @@
     "@hono/node-ws": "^1.0.0",
     "@jup-ag/api": "^6.0.0",
     "@solana/web3.js": "^1.95.0",
-    "@whaleshield/shared": "workspace:*",
+    "@argusguard/shared": "workspace:*",
     "hono": "^4.0.0",
     "ws": "^8.16.0"
   },

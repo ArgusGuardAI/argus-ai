@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import type { HoneypotResult, GraffitiNote as GraffitiNoteType } from '@whaleshield/shared';
-import { WHALESHIELD_TOKEN } from '@whaleshield/shared';
+import type { HoneypotResult, GraffitiNote as GraffitiNoteType } from '@argusguard/shared';
+import { WHALESHIELD_TOKEN } from '@argusguard/shared';
 import { RiskBadge } from './RiskBadge';
 import { GraffitiNote } from './GraffitiNote';
 import { CreateNoteForm } from './CreateNoteForm';

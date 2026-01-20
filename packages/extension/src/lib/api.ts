@@ -6,10 +6,10 @@ import type {
   SubscriptionStatus,
   CheckoutSession,
   PortalSession,
-} from '@whaleshield/shared';
+} from '@argusguard/shared';
 
 const API_BASE =
-  process.env.PLASMO_PUBLIC_API_URL || 'https://whaleshield-api.hermosillo-jessie.workers.dev';
+  process.env.PLASMO_PUBLIC_API_URL || 'https://api.argusguard.io';
 
 // ============================================
 // Token Analysis
@@ -29,7 +29,7 @@ export async function analyzeToken(
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
-      console.log(`[WhaleShield] Analyze attempt ${attempt + 1}/${maxRetries} for ${tokenAddress.slice(0, 8)}...`);
+      console.log(`[ArgusGuard] Analyze attempt ${attempt + 1}/${maxRetries} for ${tokenAddress.slice(0, 8)}...`);
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -48,19 +48,19 @@ export async function analyzeToken(
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        console.error(`[WhaleShield] API error: ${response.status}`);
+        console.error(`[ArgusGuard] API error: ${response.status}`);
         if (attempt < maxRetries - 1) continue; // Retry
         return null;
       }
 
       const data = await response.json();
-      console.log(`[WhaleShield] Analysis complete for ${tokenAddress.slice(0, 8)}: ${data.riskLevel}`);
+      console.log(`[ArgusGuard] Analysis complete for ${tokenAddress.slice(0, 8)}: ${data.riskLevel}`);
       return data;
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
-        console.error(`[WhaleShield] Request timed out (${timeoutMs}ms), attempt ${attempt + 1}/${maxRetries}`);
+        console.error(`[ArgusGuard] Request timed out (${timeoutMs}ms), attempt ${attempt + 1}/${maxRetries}`);
       } else {
-        console.error(`[WhaleShield] Request failed:`, error);
+        console.error(`[ArgusGuard] Request failed:`, error);
       }
       if (attempt < maxRetries - 1) {
         await new Promise(r => setTimeout(r, 1000)); // Wait 1s before retry
@@ -69,7 +69,7 @@ export async function analyzeToken(
     }
   }
 
-  console.error(`[WhaleShield] All ${maxRetries} attempts failed for ${tokenAddress.slice(0, 8)}`);
+  console.error(`[ArgusGuard] All ${maxRetries} attempts failed for ${tokenAddress.slice(0, 8)}`);
   return null;
 }
 

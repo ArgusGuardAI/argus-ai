@@ -1,12 +1,12 @@
 # CLAUDE.md
 
-Development guidance for AI assistants working on the WhaleShield codebase.
+Development guidance for AI assistants working on the ArgusGuard codebase.
 
 ---
 
 ## Project Overview
 
-**WhaleShield** is an AI-powered browser extension that provides security analysis for Solana tokens on Pump.fun and DexScreener. It detects honeypots, rug pulls, and scam indicators using Together AI for analysis and Helius for on-chain data.
+**ArgusGuard** is an AI-powered browser extension that provides security analysis for Solana tokens on Pump.fun and DexScreener. It detects honeypots, rug pulls, and scam indicators using Together AI for analysis and Helius for on-chain data.
 
 ### Core Value Proposition
 - Instant risk scoring (0-100) for any Solana token

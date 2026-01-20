@@ -1374,6 +1374,9 @@ export async function analyzeInsiders(
     // Add common Raydium LP authority
     lpAddressSet.add('5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1');
 
+    // Known LP pool authority prefixes (Raydium, Pumpswap, Meteora, etc.)
+    const lpPrefixes = ['5Q544', 'HWy1', 'Gnt2', 'BVCh', 'DQyr', 'BDc8', '39azU', 'FoSD'];
+
     for (const tx of parsedTxs) {
       if (!tx.tokenTransfers) continue;
 
@@ -1386,6 +1389,8 @@ export async function analyzeInsiders(
         if (receiver === creatorAddress) continue;
         if (lpAddressSet.has(receiver)) continue;
         if (receiver.includes('pump')) continue; // Bonding curve addresses
+        // Skip LP authority addresses by prefix
+        if (lpPrefixes.some(prefix => receiver.startsWith(prefix))) continue;
 
         // Track this early buyer
         const existing = earlyBuyers.get(receiver);
@@ -1430,10 +1435,10 @@ export async function analyzeInsiders(
       return analysis;
     }
 
-    // Step 5: Check current holdings of early buyers (sample top 10)
+    // Step 5: Check current holdings of early buyers (sample top 30 to catch hidden whales)
     const earlyBuyerEntries = Array.from(earlyBuyers.entries())
       .sort((a, b) => a[1].slot - b[1].slot)
-      .slice(0, 10);
+      .slice(0, 30);
 
     for (const [wallet, data] of earlyBuyerEntries) {
       try {
@@ -1480,9 +1485,9 @@ export async function analyzeInsiders(
 
         const holdingsPercent = (currentBalance / totalSupply) * 100;
 
-        // Only track if they still hold meaningful amount (>1%)
-        if (holdingsPercent > 1) {
-          const isHighRisk = holdingsPercent >= 5; // 5%+ is high risk
+        // Track if they hold any meaningful amount (>0.5% to catch hidden whales)
+        if (holdingsPercent > 0.5) {
+          const isHighRisk = holdingsPercent >= 3; // 3%+ is high risk (lowered from 5%)
 
           analysis.insiders.push({
             address: wallet,

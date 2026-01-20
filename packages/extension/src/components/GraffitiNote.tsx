@@ -1,4 +1,4 @@
-import type { GraffitiNote as GraffitiNoteType } from '@whaleshield/shared';
+import type { GraffitiNote as GraffitiNoteType } from '@argusguard/shared';
 
 interface GraffitiNoteProps {
   note: GraffitiNoteType;

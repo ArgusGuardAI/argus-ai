@@ -322,9 +322,18 @@ async function fetchTopHolders(
         }
         // Raydium CLMM and Pumpswap pool patterns
         // Pool authorities are PDAs that often have specific patterns
-        // Check for common Raydium pool authority prefixes
-        const raydiumPoolPrefixes = ['5Q544', 'HWy1', 'Gnt2', 'BVCh', 'DQyr'];
-        if (raydiumPoolPrefixes.some(prefix => acc.owner!.startsWith(prefix))) {
+        // Check for common Raydium/Pumpswap pool authority prefixes
+        const lpPoolPrefixes = [
+          '5Q544',  // Raydium AMM
+          'HWy1',   // Raydium
+          'Gnt2',   // Raydium
+          'BVCh',   // Raydium
+          'DQyr',   // Raydium
+          'BDc8',   // Pumpswap LP
+          '39azU',  // Meteora
+          'FoSD',   // Common LP pattern
+        ];
+        if (lpPoolPrefixes.some(prefix => acc.owner!.startsWith(prefix))) {
           isLp = true;
         }
       }

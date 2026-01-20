@@ -84,8 +84,13 @@ export class SniperEngine extends EventEmitter {
       console.log('[Sniper] Watch-only mode - no trades will be executed');
     }
 
-    // Start listening for new tokens
-    this.pumpFunListener.start();
+    // Only start token discovery if NOT in manual mode
+    if (!this.config.manualModeOnly) {
+      this.pumpFunListener.start();
+      console.log('[Sniper] Token discovery started');
+    } else {
+      console.log('[Sniper] Manual mode - token discovery disabled');
+    }
 
     this.state.status = 'running';
     this.state.startedAt = Date.now();

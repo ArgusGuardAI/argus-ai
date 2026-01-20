@@ -1,7 +1,7 @@
 import type { PlasmoCSConfig } from 'plasmo';
 import { createRoot } from 'react-dom/client';
 import { Paint } from '~/components/Paint';
-import { PUMP_FUN_URL_PATTERN } from '@whaleshield/shared';
+import { PUMP_FUN_URL_PATTERN } from '@argusguard/shared';
 import '~/styles/globals.css';
 
 export const config: PlasmoCSConfig = {

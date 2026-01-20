@@ -14,6 +14,18 @@ export default defineConfig({
         target: 'ws://localhost:8787',
         ws: true,
       },
+      '/jupiter': {
+        target: 'https://quote-api.jup.ag',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/jupiter/, ''),
+        secure: true,
+      },
+      '/pumpfun': {
+        target: 'https://pumpportal.fun',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/pumpfun/, ''),
+        secure: true,
+      },
     },
   },
 });

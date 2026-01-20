@@ -6,6 +6,13 @@ export interface WalletNode {
   holdingsPercent?: number;
   isHighRisk?: boolean;
   txCount?: number;
+  // Timeline data
+  firstTxTime?: number; // Unix timestamp of first transaction
+  lastTxTime?: number; // Unix timestamp of last transaction
+  buyTime?: number; // When they bought
+  sellTime?: number; // When they sold (if applicable)
+  fundedBy?: string; // Address that funded this wallet
+  solReceived?: number; // Amount of SOL received from funder
 }
 
 export interface WalletLink {
@@ -60,6 +67,7 @@ export interface AIAnalysis {
   riskLevel: 'SAFE' | 'SUSPICIOUS' | 'DANGEROUS' | 'SCAM';
   summary: string;
   prediction: string;
+  recommendation?: string;
   flags: RiskFlag[];
   networkInsights: string[];
 }

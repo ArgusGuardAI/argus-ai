@@ -13,6 +13,16 @@ import type { SniperConfig } from './types';
 const PORT = parseInt(process.env.PORT || '8787');
 const RPC_URL = process.env.HELIUS_RPC_URL || 'https://api.mainnet-beta.solana.com';
 
+// Extract Helius API key from RPC URL if available
+function getHeliusApiKey(): string {
+  const rpcUrl = process.env.HELIUS_RPC_URL || '';
+  const match = rpcUrl.match(/api-key=([a-f0-9-]+)/i) || rpcUrl.match(/helius-rpc\.com\/\?api-key=([a-f0-9-]+)/i);
+  if (match) return match[1];
+
+  // Also check for explicit API key env var
+  return process.env.HELIUS_API_KEY || '';
+}
+
 // Initialize sniper engine
 let sniper: SniperEngine | null = null;
 const clients = new Set<WebSocket>();
@@ -83,8 +93,8 @@ app.post('/api/sell/:tokenAddress', async (c) => {
   }
 });
 
-// Manual token analysis (calls WhaleShield API directly)
-const WHALESHIELD_API = process.env.WHALESHIELD_API_URL || 'https://whaleshield-api.hermosillo-jessie.workers.dev';
+// Manual token analysis (calls ArgusGuard API directly)
+const ARGUSGUARD_API = process.env.ARGUSGUARD_API_URL || 'https://api.argusguard.io';
 
 app.post('/api/analyze', async (c) => {
   try {
@@ -96,7 +106,7 @@ app.post('/api/analyze', async (c) => {
 
     console.log(`[API] Manual analysis request for ${tokenAddress}`);
 
-    const response = await fetch(`${WHALESHIELD_API}/analyze`, {
+    const response = await fetch(`${ARGUSGUARD_API}/analyze`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tokenAddress }),
@@ -112,6 +122,154 @@ app.post('/api/analyze', async (c) => {
     return c.json(result);
   } catch (error) {
     console.error('[API] Analysis error:', error);
+    return c.json({ error: String(error) }, 500);
+  }
+});
+
+// Jupiter API key (from sol-bot config)
+const JUPITER_API_KEY = process.env.JUPITER_API_KEY || '057a176a-d2af-4ff6-a35d-84ed54fcd4b4';
+const JUPITER_API_URL = 'https://api.jup.ag';
+
+// Jupiter API proxy (using api.jup.ag v1 with API key)
+app.get('/api/jupiter/quote', async (c) => {
+  try {
+    const url = new URL(c.req.url);
+    const jupiterUrl = `${JUPITER_API_URL}/swap/v1/quote${url.search}`;
+
+    console.log(`[API] Jupiter quote: ${url.search.slice(0, 60)}...`);
+
+    const response = await fetch(jupiterUrl, {
+      headers: {
+        'x-api-key': JUPITER_API_KEY,
+        'Accept': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[API] Quote failed:', response.status, errorText);
+      return c.json({ error: errorText }, response.status);
+    }
+
+    const data = await response.json();
+    console.log(`[API] Quote success: ${data.inAmount} -> ${data.outAmount}`);
+    return c.json(data);
+  } catch (error) {
+    console.error('[API] Jupiter quote error:', error);
+    return c.json({ error: String(error) }, 500);
+  }
+});
+
+app.post('/api/jupiter/swap', async (c) => {
+  try {
+    const body = await c.req.json();
+    const swapUrl = `${JUPITER_API_URL}/swap/v1/swap`;
+
+    console.log('[API] Jupiter swap request');
+
+    const response = await fetch(swapUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': JUPITER_API_KEY,
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[API] Swap failed:', response.status, errorText);
+      return c.json({ error: errorText }, response.status);
+    }
+
+    const data = await response.json();
+    console.log('[API] Swap transaction built successfully');
+    return c.json(data);
+  } catch (error) {
+    console.error('[API] Jupiter swap error:', error);
+    return c.json({ error: String(error) }, 500);
+  }
+});
+
+// Get current price for a token (in SOL)
+const SOL_MINT = 'So11111111111111111111111111111111111111112';
+
+app.get('/api/price/:tokenMint', async (c) => {
+  try {
+    const tokenMint = c.req.param('tokenMint');
+
+    // Get quote for 1M tokens -> SOL to determine price
+    const amount = 1_000_000_000_000; // 1M tokens with 6 decimals
+    const quoteUrl = `${JUPITER_API_URL}/swap/v1/quote?inputMint=${tokenMint}&outputMint=${SOL_MINT}&amount=${amount}&slippageBps=100`;
+
+    const response = await fetch(quoteUrl, {
+      headers: {
+        'x-api-key': JUPITER_API_KEY,
+        'Accept': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      // Token might not be on Jupiter yet (still on bonding curve)
+      return c.json({ price: null, error: 'No route' }, 200);
+    }
+
+    const data = await response.json();
+
+    // Price = outAmount (in lamports) / inAmount (tokens)
+    const priceInSol = parseFloat(data.outAmount) / 1e9 / (parseFloat(data.inAmount) / 1e6);
+
+    return c.json({
+      price: priceInSol,
+      inAmount: data.inAmount,
+      outAmount: data.outAmount,
+    });
+  } catch (error) {
+    console.error('[API] Price error:', error);
+    return c.json({ price: null, error: String(error) }, 200);
+  }
+});
+
+// Batch price lookup for multiple tokens
+app.post('/api/prices', async (c) => {
+  try {
+    const { tokens } = await c.req.json<{ tokens: string[] }>();
+
+    if (!tokens || !Array.isArray(tokens)) {
+      return c.json({ error: 'tokens array required' }, 400);
+    }
+
+    const prices: Record<string, number | null> = {};
+
+    // Fetch prices in parallel
+    await Promise.all(
+      tokens.map(async (tokenMint) => {
+        try {
+          const amount = 1_000_000_000_000; // 1M tokens
+          const quoteUrl = `${JUPITER_API_URL}/swap/v1/quote?inputMint=${tokenMint}&outputMint=${SOL_MINT}&amount=${amount}&slippageBps=100`;
+
+          const response = await fetch(quoteUrl, {
+            headers: {
+              'x-api-key': JUPITER_API_KEY,
+              'Accept': 'application/json',
+            },
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            prices[tokenMint] = parseFloat(data.outAmount) / 1e9 / (parseFloat(data.inAmount) / 1e6);
+          } else {
+            prices[tokenMint] = null;
+          }
+        } catch {
+          prices[tokenMint] = null;
+        }
+      })
+    );
+
+    return c.json({ prices });
+  } catch (error) {
+    console.error('[API] Prices error:', error);
     return c.json({ error: String(error) }, 500);
   }
 });

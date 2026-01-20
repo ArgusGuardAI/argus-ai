@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { Bindings } from '../index';
-import { GraffitiCreateRequest } from '@whaleshield/shared';
+import { GraffitiCreateRequest } from '@argusguard/shared';
 import {
   createSupabaseClient,
   getGraffitiNotes,

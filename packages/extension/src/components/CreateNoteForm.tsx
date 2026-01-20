@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import type { GraffitiNote } from '@whaleshield/shared';
-import { WHALESHIELD_TOKEN } from '@whaleshield/shared';
+import type { GraffitiNote } from '@argusguard/shared';
+import { WHALESHIELD_TOKEN } from '@argusguard/shared';
 import { getAuthMessage, createGraffitiNote, createTestGraffitiNote } from '~/lib/api';
 
 type NoteType = 'WARNING' | 'INFO' | 'POSITIVE';

@@ -1,12 +1,12 @@
 /**
  * Token Analyzer
- * Calls WhaleShield API to analyze tokens before sniping
+ * Calls ArgusGuard API to analyze tokens before sniping
  * Includes rate limiting and pre-filtering to reduce API calls
  */
 
 import type { NewTokenEvent, SnipeDecision, SniperConfig } from '../types';
 
-const WHALESHIELD_API = process.env.WHALESHIELD_API_URL || 'https://whaleshield-api.hermosillo-jessie.workers.dev';
+const ARGUSGUARD_API = process.env.ARGUSGUARD_API_URL || 'https://api.argusguard.io';
 
 // Rate limiting config
 const MAX_ANALYSES_PER_MINUTE = 15; // Max API calls per minute
@@ -111,8 +111,8 @@ export class TokenAnalyzer {
     console.log(`[Analyzer] 🔍 Analyzing ${token.symbol} (${token.address})...`);
 
     try {
-      // Call WhaleShield API
-      const response = await fetch(`${WHALESHIELD_API}/analyze`, {
+      // Call ArgusGuard API
+      const response = await fetch(`${ARGUSGUARD_API}/analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

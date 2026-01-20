@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useWhaleshieldWallet } from '~/hooks/useWhaleshieldWallet';
-import { WHALESHIELD_TOKEN } from '@whaleshield/shared';
+import { WHALESHIELD_TOKEN } from '@argusguard/shared';
 import { createCheckoutSession, createPortalSession } from '~/lib/api';
 import '~/styles/globals.css';
 

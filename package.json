@@ -1,8 +1,8 @@
 {
-  "name": "whaleshield",
+  "name": "argusguard",
   "version": "1.0.0",
   "private": true,
-  "description": "AI-Powered Security Layer for Pump.fun and Crypto Twitter",
+  "description": "AI-Powered Security Layer for Solana - Detect Rugs, Bundles, and Scams",
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",
@@ -10,11 +10,11 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "dev:extension": "pnpm --filter @whaleshield/extension dev",
-    "dev:workers": "pnpm --filter @whaleshield/workers dev",
-    "build:extension": "pnpm --filter @whaleshield/extension build",
-    "build:workers": "pnpm --filter @whaleshield/workers build",
-    "deploy:workers": "pnpm --filter @whaleshield/workers deploy"
+    "dev:extension": "pnpm --filter @argusguard/extension dev",
+    "dev:workers": "pnpm --filter @argusguard/workers dev",
+    "build:extension": "pnpm --filter @argusguard/extension build",
+    "build:workers": "pnpm --filter @argusguard/workers build",
+    "deploy:workers": "pnpm --filter @argusguard/workers deploy"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^4.0.16",

@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { Bindings } from '../index';
-import { HoneypotAnalysisRequest, HoneypotResult, HoneypotFlag } from '@whaleshield/shared';
+import { HoneypotAnalysisRequest, HoneypotResult, HoneypotFlag } from '@argusguard/shared';
 import { analyzeForHoneypot } from '../services/together-ai';
 import { createSupabaseClient, cacheScanResult } from '../services/supabase';
 import { fetchTokenData, buildOnChainContext, TokenOnChainData } from '../services/solana-data';
@@ -81,29 +81,42 @@ function applyHardcodedRules(
     }
 
     // Serial token creator - VERY suspicious, most are rug farmers
-    if (creator.tokensCreated > 10) {
-      // 10+ tokens = almost certainly a serial rugger
+    if (creator.tokensCreated >= 20) {
+      // 20+ tokens = professional rug farmer
+      if (adjustedScore < 85) {
+        adjustedScore = 85;
+      }
+      additionalFlags.push({
+        type: 'DEPLOYER',
+        severity: 'CRITICAL',
+        message: `🚨 SERIAL RUG FARMER: Creator has deployed ${creator.tokensCreated} tokens - extremely high rug risk`,
+      });
+      console.log(`[Rules] Serial creator (${creator.tokensCreated} tokens) penalty applied - score: ${adjustedScore}`);
+    } else if (creator.tokensCreated >= 10) {
+      // 10-19 tokens = almost certainly a serial rugger
+      if (adjustedScore < 80) {
+        adjustedScore = 80;
+      }
+      additionalFlags.push({
+        type: 'DEPLOYER',
+        severity: 'CRITICAL',
+        message: `🚨 Serial token creator: ${creator.tokensCreated} tokens deployed - high rug risk`,
+      });
+      console.log(`[Rules] Serial creator (${creator.tokensCreated} tokens) penalty applied - score: ${adjustedScore}`);
+    } else if (creator.tokensCreated >= 5) {
+      // 5-9 tokens = very suspicious
       if (adjustedScore < 75) {
         adjustedScore = 75;
-        additionalFlags.push({
-          type: 'DEPLOYER',
-          severity: 'CRITICAL',
-          message: `⚠️ Serial token creator: ${creator.tokensCreated} tokens deployed - high rug risk`,
-        });
       }
-    } else if (creator.tokensCreated > 5) {
-      // 5-10 tokens = suspicious
-      if (adjustedScore < 65) {
-        adjustedScore = 65;
-        additionalFlags.push({
-          type: 'DEPLOYER',
-          severity: 'HIGH',
-          message: `Serial token creator: ${creator.tokensCreated} tokens deployed`,
-        });
-      }
-    } else if (creator.tokensCreated > 2) {
-      // 3-5 tokens = suspicious, especially for new micro-cap tokens
-      const minScore = (marketCapUsd < 50000 && ageInDays < 1) ? 65 : 55;
+      additionalFlags.push({
+        type: 'DEPLOYER',
+        severity: 'HIGH',
+        message: `⚠️ Serial token creator: ${creator.tokensCreated} tokens deployed - suspicious pattern`,
+      });
+      console.log(`[Rules] Serial creator (${creator.tokensCreated} tokens) penalty applied - score: ${adjustedScore}`);
+    } else if (creator.tokensCreated >= 3) {
+      // 3-4 tokens = suspicious, especially for new micro-cap tokens
+      const minScore = (marketCapUsd < 50000 && ageInDays < 1) ? 70 : 60;
       if (adjustedScore < minScore) {
         adjustedScore = minScore;
       }
@@ -556,38 +569,41 @@ function applyHardcodedRules(
     const bundledPercent = bundleData.bundledBuyPercent;
     bundleDetectedFromHelius = true;
 
-    if (coordWallets >= 15 || bundledPercent >= 30) {
-      // CRITICAL: 15+ coordinated wallets or 30%+ bundled buys
+    if (coordWallets >= 10 || bundledPercent >= 25) {
+      // CRITICAL: 10+ coordinated wallets or 25%+ bundled buys - definite rug setup
+      if (adjustedScore < 80) {
+        adjustedScore = 80;
+      }
+      additionalFlags.push({
+        type: 'BUNDLE',
+        severity: 'CRITICAL',
+        message: `🚨 ${coordWallets} coordinated wallets detected buying in same slot - likely rug setup`,
+      });
+    } else if (coordWallets >= 5 || bundledPercent >= 15) {
+      // HIGH: 5+ coordinated wallets or 15%+ bundled - very suspicious
       if (adjustedScore < 75) {
         adjustedScore = 75;
       }
       additionalFlags.push({
         type: 'BUNDLE',
-        severity: 'CRITICAL',
-        message: `🚨 ${coordWallets} coordinated wallets detected - likely rug setup`,
+        severity: 'HIGH',
+        message: `⚠️ ${coordWallets} coordinated wallets detected buying in same slot - suspicious activity`,
       });
-    } else if (coordWallets >= 10 || bundledPercent >= 20) {
-      // HIGH: 10+ coordinated wallets or 20%+ bundled
+    } else if (coordWallets >= 3) {
+      // MEDIUM: 3+ coordinated wallets - red flag
       if (adjustedScore < 70) {
         adjustedScore = 70;
       }
       additionalFlags.push({
         type: 'BUNDLE',
-        severity: 'HIGH',
-        message: `⚠️ ${coordWallets} coordinated wallets detected - suspicious activity`,
-      });
-    } else if (coordWallets >= 5) {
-      // MEDIUM: 5+ coordinated wallets
-      if (adjustedScore < 65) {
-        adjustedScore = 65;
-      }
-      additionalFlags.push({
-        type: 'BUNDLE',
         severity: 'MEDIUM',
-        message: `${coordWallets} coordinated wallets detected`,
+        message: `${coordWallets} coordinated wallets detected buying in same slot`,
       });
     } else {
-      // Less than 5 coordinated wallets - still flag it with LOW severity
+      // Less than 3 coordinated wallets - still flag it but lower severity
+      if (adjustedScore < 60) {
+        adjustedScore = 60;
+      }
       additionalFlags.push({
         type: 'BUNDLE',
         severity: 'LOW',
@@ -597,19 +613,20 @@ function applyHardcodedRules(
   }
 
   // ============================================
-  // RULE 11.6: BUNDLE PENALTY (+5 for ANY bundle detection)
+  // RULE 11.6: BUNDLE PENALTY (+15 for ANY bundle detection)
   // ============================================
-  // Any bundle activity adds +5 risk points - bundling is always suspicious
+  // Bundle activity is a PRIMARY rug indicator - this is how scammers coordinate buys
+  // Any bundle activity adds +15 risk points - bundling is always suspicious
   // This applies ON TOP of the minimum score rules above
   if (bundleDetectedFromHelius) {
-    adjustedScore += 5;
-    console.log(`[Rules] Bundle penalty +5 applied (Helius detected bundles) - new score: ${adjustedScore}`);
+    adjustedScore += 15;
+    console.log(`[Rules] Bundle penalty +15 applied (Helius detected bundles) - new score: ${adjustedScore}`);
   }
 
   // ============================================
-  // RULE 11.7: AI BUNDLE MENTION PENALTY (+5)
+  // RULE 11.7: AI BUNDLE MENTION PENALTY (+10)
   // ============================================
-  // If AI mentions bundles in text but we didn't detect via Helius, add +5
+  // If AI mentions bundles in text but we didn't detect via Helius, add +10
   // This catches cases where AI sees bundle patterns we missed
   const bundleKeywords = ['bundle', 'bundled', 'coordinated wallet', 'same slot', 'sniping'];
   const aiTextToSearch = [
@@ -621,17 +638,81 @@ function applyHardcodedRules(
 
   if (aiBundleMentioned && !bundleDetectedFromHelius) {
     // AI mentioned bundles but Helius didn't detect them - add penalty
-    adjustedScore += 5;
+    adjustedScore += 10;
     additionalFlags.push({
       type: 'BUNDLE',
-      severity: 'MEDIUM',
+      severity: 'HIGH',
       message: 'AI detected potential bundle/coordinated activity',
     });
-    console.log(`[Rules] AI bundle mention penalty +5 applied - new score: ${adjustedScore}`);
+    console.log(`[Rules] AI bundle mention penalty +10 applied - new score: ${adjustedScore}`);
   } else if (aiBundleMentioned && bundleDetectedFromHelius) {
-    // Both detected - add another +5 for double confirmation
-    adjustedScore += 5;
-    console.log(`[Rules] AI bundle confirmation penalty +5 applied - new score: ${adjustedScore}`);
+    // Both detected - add another +10 for double confirmation (strong rug signal)
+    adjustedScore += 10;
+    console.log(`[Rules] AI bundle confirmation penalty +10 applied - new score: ${adjustedScore}`);
+  }
+
+  // ============================================
+  // RULE 11.8: SIMILAR HOLDINGS BUNDLE DETECTION (BACKUP)
+  // ============================================
+  // If Helius transaction detection missed bundles, check for similar holdings patterns
+  // Bundles often result in many wallets holding nearly identical percentages
+  let similarHoldingsBundleDetected = false;
+  if (!bundleDetectedFromHelius && data.holderData && data.holderData.topHolders.length > 0) {
+    // Get non-LP, non-deployer holders sorted by percentage
+    const regularHolders = data.holderData.topHolders
+      .filter(h => !h.isLiquidityPool && !h.isDeployer && h.percentage > 0.5)
+      .sort((a, b) => b.percentage - a.percentage);
+
+    // Look for clusters of wallets with similar holdings (within 0.5% of each other)
+    let clusterCount = 0;
+    for (let i = 1; i < regularHolders.length; i++) {
+      const diff = Math.abs(regularHolders[i].percentage - regularHolders[i - 1].percentage);
+      if (diff < 0.5) {
+        clusterCount++;
+      }
+    }
+
+    // If 5+ wallets have similar holdings, it's a strong bundle signal
+    if (clusterCount >= 10) {
+      similarHoldingsBundleDetected = true;
+      if (adjustedScore < 80) {
+        adjustedScore = 80;
+      }
+      additionalFlags.push({
+        type: 'BUNDLE',
+        severity: 'CRITICAL',
+        message: `🚨 ${clusterCount + 1}+ wallets with suspiciously similar holdings - likely coordinated bundle`,
+      });
+      console.log(`[Rules] Similar holdings bundle (${clusterCount + 1} wallets) - CRITICAL - score: ${adjustedScore}`);
+    } else if (clusterCount >= 5) {
+      similarHoldingsBundleDetected = true;
+      if (adjustedScore < 75) {
+        adjustedScore = 75;
+      }
+      additionalFlags.push({
+        type: 'BUNDLE',
+        severity: 'HIGH',
+        message: `⚠️ ${clusterCount + 1} wallets with similar holdings detected - potential bundle`,
+      });
+      console.log(`[Rules] Similar holdings bundle (${clusterCount + 1} wallets) - HIGH - score: ${adjustedScore}`);
+    } else if (clusterCount >= 3) {
+      similarHoldingsBundleDetected = true;
+      if (adjustedScore < 70) {
+        adjustedScore = 70;
+      }
+      additionalFlags.push({
+        type: 'BUNDLE',
+        severity: 'MEDIUM',
+        message: `${clusterCount + 1} wallets with similar holdings detected`,
+      });
+      console.log(`[Rules] Similar holdings bundle (${clusterCount + 1} wallets) - MEDIUM - score: ${adjustedScore}`);
+    }
+
+    // Apply bundle penalty if detected via similar holdings
+    if (similarHoldingsBundleDetected) {
+      adjustedScore += 15;
+      console.log(`[Rules] Similar holdings bundle penalty +15 applied - new score: ${adjustedScore}`);
+    }
   }
 
   // ============================================
@@ -668,6 +749,50 @@ function applyHardcodedRules(
   }
 
   // ============================================
+  // RULE 12.5: SINGLE WHALE CONCENTRATION (CRITICAL)
+  // ============================================
+  // A single non-LP wallet holding >25% = major dump risk
+  // This catches whales that accumulated during bonding curve
+  if (data.holderData) {
+    const top1NonLp = data.holderData.top1NonLpHolderPercent;
+
+    if (top1NonLp >= 30) {
+      // CRITICAL: One wallet holds 30%+ - guaranteed crash if they sell
+      if (adjustedScore < 80) {
+        adjustedScore = 80;
+      }
+      additionalFlags.push({
+        type: 'HOLDERS',
+        severity: 'CRITICAL',
+        message: `🚨 CRITICAL: Single wallet holds ${top1NonLp.toFixed(1)}% of supply - major dump risk`,
+      });
+      console.log(`[Rules] Single whale >30% penalty applied (${top1NonLp.toFixed(1)}%) - score: ${adjustedScore}`);
+    } else if (top1NonLp >= 25) {
+      // HIGH: One wallet holds 25-30%
+      if (adjustedScore < 75) {
+        adjustedScore = 75;
+      }
+      additionalFlags.push({
+        type: 'HOLDERS',
+        severity: 'HIGH',
+        message: `⚠️ Single wallet holds ${top1NonLp.toFixed(1)}% of supply - high dump risk`,
+      });
+      console.log(`[Rules] Single whale >25% penalty applied (${top1NonLp.toFixed(1)}%) - score: ${adjustedScore}`);
+    } else if (top1NonLp >= 15) {
+      // MEDIUM: One wallet holds 15-25%
+      if (adjustedScore < 65) {
+        adjustedScore = 65;
+      }
+      additionalFlags.push({
+        type: 'HOLDERS',
+        severity: 'MEDIUM',
+        message: `Single wallet holds ${top1NonLp.toFixed(1)}% of supply - moderate dump risk`,
+      });
+      console.log(`[Rules] Single whale >15% penalty applied (${top1NonLp.toFixed(1)}%) - score: ${adjustedScore}`);
+    }
+  }
+
+  // ============================================
   // RULE 13: PUMP.FUN GOOD FUNDAMENTALS CREDIT
   // ============================================
   // For pump.fun tokens on bonding curve with GOOD indicators, reduce score
@@ -692,7 +817,6 @@ function applyHardcodedRules(
       // A dev dumping on a no-socials, micro-cap, new-wallet token is NOT positive!
       const hasSocials = hasTwitter || hasWebsite;
       const hasDecentMarketCap = marketCapUsd >= 50000;
-      const creatorNotBrandNew = creator && creator.walletAge > 0;
 
       if (devSelling && devSelling.currentHoldingsPercent === 0 && devSelling.hasSold) {
         // Only give credit if token has positive fundamentals

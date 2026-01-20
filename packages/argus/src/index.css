@@ -1,8 +1,8 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
 :root {
   --bg-primary: #0a0d12;
@@ -107,6 +107,31 @@ code, .mono {
 
 .animate-eye-glow {
   animation: eye-glow 3s ease-in-out infinite;
+}
+
+/* Risk glow animation for high-risk nodes */
+@keyframes risk-pulse {
+  0%, 100% {
+    stroke-opacity: 0.4;
+    filter: drop-shadow(0 0 8px rgba(255, 68, 68, 0.5));
+  }
+  50% {
+    stroke-opacity: 0.9;
+    filter: drop-shadow(0 0 20px rgba(255, 68, 68, 0.9));
+  }
+}
+
+.risk-glow {
+  animation: risk-pulse 1.5s ease-in-out infinite;
+}
+
+/* Hide scrollbar but keep functionality */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }
 
 /* Gradient text */

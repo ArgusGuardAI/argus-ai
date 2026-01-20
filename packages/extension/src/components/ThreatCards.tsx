@@ -1,4 +1,4 @@
-import type { HoneypotFlag } from '@whaleshield/shared';
+import type { HoneypotFlag } from '@argusguard/shared';
 
 interface ThreatCardsProps {
   flags: HoneypotFlag[];

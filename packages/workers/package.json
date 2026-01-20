@@ -1,5 +1,5 @@
 {
-  "name": "@whaleshield/workers",
+  "name": "@argusguard/workers",
   "version": "1.0.0",
   "private": true,
   "scripts": {
@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
-    "@whaleshield/shared": "workspace:*",
+    "@argusguard/shared": "workspace:*",
     "bs58": "^6.0.0",
     "hono": "^4.0.0",
     "stripe": "^20.1.2",

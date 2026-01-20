@@ -1,8 +1,8 @@
 {
-  "name": "@whaleshield/extension",
-  "displayName": "WhaleShield",
+  "name": "@argusguard/extension",
+  "displayName": "ArgusGuard",
   "version": "1.0.0",
-  "description": "AI-Powered Security Layer for Pump.fun, DexScreener, and Crypto Twitter",
+  "description": "AI-Powered Security Layer for Solana - Detect Rugs, Bundles, and Scams",
   "private": true,
   "scripts": {
     "dev": "plasmo dev",
@@ -22,7 +22,7 @@
     "@solana/wallet-adapter-react": "^0.15.35",
     "@solana/wallet-adapter-react-ui": "^0.9.35",
     "@solana/web3.js": "^1.95.0",
-    "@whaleshield/shared": "workspace:*",
+    "@argusguard/shared": "workspace:*",
     "bs58": "^6.0.0",
     "plasmo": "^0.90.5",
     "react": "^18.2.0",

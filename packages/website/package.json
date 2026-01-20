@@ -1,11 +1,11 @@
 {
-  "name": "@whaleshield/website",
+  "name": "@argusguard/website",
   "version": "1.0.0",
-  "description": "WhaleShield landing page",
+  "description": "ArgusGuard landing page",
   "scripts": {
     "dev": "npx serve .",
     "preview": "open index.html"
   },
-  "keywords": ["whaleshield", "solana", "crypto", "landing-page"],
+  "keywords": ["argusguard", "argus", "solana", "crypto", "security"],
   "license": "MIT"
 }

@@ -1,4 +1,4 @@
-import { Eye, Target, XCircle, TrendingUp } from 'lucide-react';
+import { Eye, Target, XCircle, TrendingUp, TrendingDown } from 'lucide-react';
 
 interface StatsProps {
   stats: {
@@ -10,54 +10,53 @@ interface StatsProps {
 }
 
 export function Stats({ stats }: StatsProps) {
-  const pnlColor = stats.totalPnlSol >= 0 ? 'text-green-400' : 'text-red-400';
-  const pnlBg = stats.totalPnlSol >= 0 ? 'bg-green-500/10' : 'bg-red-500/10';
+  const isProfit = stats.totalPnlSol >= 0;
 
   return (
-    <div className="bg-dark-800/50 cyber-border rounded-xl p-5 card-hover">
-      <h3 className="text-sm font-cyber font-medium text-cyber-blue mb-4">Session Stats</h3>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-cyber-blue/10 flex items-center justify-center border border-cyber-blue/20">
-            <Eye className="w-5 h-5 text-cyber-blue" />
+    <div className="bg-white/[0.02] border border-white/10 rounded-2xl p-4">
+      <div className="grid grid-cols-4 gap-3">
+        {/* Scanned */}
+        <div className="text-center p-3 rounded-xl bg-white/[0.02]">
+          <div className="w-8 h-8 mx-auto mb-2 rounded-lg bg-cyan-500/10 flex items-center justify-center">
+            <Eye className="w-4 h-4 text-cyan-400" />
           </div>
-          <div>
-            <p className="text-xl font-bold text-white">{stats.tokensScanned}</p>
-            <p className="text-xs text-gray-500">Scanned</p>
-          </div>
+          <p className="text-lg font-bold text-white tabular-nums">{stats.tokensScanned}</p>
+          <p className="text-xs text-gray-500">Scanned</p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center border border-green-500/20">
-            <Target className="w-5 h-5 text-green-400" />
+        {/* Sniped */}
+        <div className="text-center p-3 rounded-xl bg-white/[0.02]">
+          <div className="w-8 h-8 mx-auto mb-2 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+            <Target className="w-4 h-4 text-emerald-400" />
           </div>
-          <div>
-            <p className="text-xl font-bold text-white">{stats.tokensSniped}</p>
-            <p className="text-xs text-gray-500">Sniped</p>
-          </div>
+          <p className="text-lg font-bold text-white tabular-nums">{stats.tokensSniped}</p>
+          <p className="text-xs text-gray-500">Sniped</p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-gray-500/10 flex items-center justify-center border border-gray-500/20">
-            <XCircle className="w-5 h-5 text-gray-400" />
+        {/* Skipped */}
+        <div className="text-center p-3 rounded-xl bg-white/[0.02]">
+          <div className="w-8 h-8 mx-auto mb-2 rounded-lg bg-gray-500/10 flex items-center justify-center">
+            <XCircle className="w-4 h-4 text-gray-400" />
           </div>
-          <div>
-            <p className="text-xl font-bold text-white">{stats.tokensSkipped}</p>
-            <p className="text-xs text-gray-500">Skipped</p>
-          </div>
+          <p className="text-lg font-bold text-white tabular-nums">{stats.tokensSkipped}</p>
+          <p className="text-xs text-gray-500">Skipped</p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className={`w-10 h-10 rounded-lg ${pnlBg} flex items-center justify-center border ${stats.totalPnlSol >= 0 ? 'border-green-500/20' : 'border-red-500/20'}`}>
-            <TrendingUp className={`w-5 h-5 ${pnlColor}`} />
+        {/* PnL */}
+        <div className="text-center p-3 rounded-xl bg-white/[0.02]">
+          <div className={`w-8 h-8 mx-auto mb-2 rounded-lg flex items-center justify-center ${
+            isProfit ? 'bg-emerald-500/10' : 'bg-red-500/10'
+          }`}>
+            {isProfit ? (
+              <TrendingUp className="w-4 h-4 text-emerald-400" />
+            ) : (
+              <TrendingDown className="w-4 h-4 text-red-400" />
+            )}
           </div>
-          <div>
-            <p className={`text-xl font-bold ${pnlColor}`}>
-              {stats.totalPnlSol >= 0 ? '+' : ''}{stats.totalPnlSol.toFixed(4)}
-            </p>
-            <p className="text-xs text-gray-500">PnL (SOL)</p>
-          </div>
+          <p className={`text-lg font-bold tabular-nums ${isProfit ? 'text-emerald-400' : 'text-red-400'}`}>
+            {isProfit ? '+' : ''}{stats.totalPnlSol.toFixed(2)}
+          </p>
+          <p className="text-xs text-gray-500">PnL SOL</p>
         </div>
       </div>
     </div>

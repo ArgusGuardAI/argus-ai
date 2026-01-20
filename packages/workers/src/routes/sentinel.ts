@@ -31,7 +31,11 @@ interface HolderInfo {
   address: string;
   balance: number;
   percent: number;
+  isLp: boolean;
 }
+
+// Known LP pool authority prefixes (Raydium, Pumpswap, Meteora, etc.)
+const LP_PREFIXES = ['5Q544', 'HWy1', 'Gnt2', 'BVCh', 'DQyr', 'BDc8', '39azU', 'FoSD'];
 
 const sentinelRoutes = new Hono<{ Bindings: Bindings }>();
 
@@ -121,12 +125,28 @@ async function fetchTopHolders(
 
         if (info?.data?.parsed?.info?.owner) {
           const owner = info.data.parsed.info.owner;
+          const tokenAccountAddress = originalAccount.address;
           const balance = info.data.parsed.info.tokenAmount?.uiAmount || originalAccount.uiAmount;
+          const percent = (balance / totalBalance) * 100;
+
+          // Detect LP by checking BOTH owner and token account address for LP patterns
+          // Token account address is what getTokenLargestAccounts returns
+          // Owner is who controls that account
+          const isLp = LP_PREFIXES.some(prefix => owner.startsWith(prefix)) ||
+            LP_PREFIXES.some(prefix => tokenAccountAddress.startsWith(prefix)) ||
+            owner.includes('pool') ||
+            tokenAccountAddress.includes('pool') ||
+            (percent > 30 && !owner.includes('pump')); // Very high % and not bonding curve
+
+          if (isLp) {
+            console.log(`[Sentinel] Detected LP: owner=${owner.slice(0,8)}, tokenAcc=${tokenAccountAddress.slice(0,8)}, ${percent.toFixed(1)}%`);
+          }
 
           holders.push({
             address: owner,
             balance,
-            percent: (balance / totalBalance) * 100,
+            percent,
+            isLp,
           });
         }
       }
@@ -196,9 +216,8 @@ function buildNetworkGraph(
       type = 'insider';
     }
 
-    // Check if it looks like an LP
-    // Common LP program addresses often contain specific patterns
-    if (holder.address.includes('pool') || holder.percent > 30) {
+    // Use the isLp flag from holder detection
+    if (holder.isLp) {
       type = 'lp';
     }
 
@@ -226,6 +245,25 @@ function buildNetworkGraph(
 }
 
 /**
+ * Generate actionable recommendation based on risk score and bundle detection
+ */
+function generateRecommendation(riskScore: number, bundleDetected: boolean, bundleCount: number): string {
+  if (riskScore >= 80 || (bundleDetected && bundleCount >= 10)) {
+    return '🚨 AVOID. This token shows critical red flags. Do not invest. If holding, exit immediately.';
+  }
+  if (riskScore >= 70 || (bundleDetected && bundleCount >= 5)) {
+    return '⚠️ AVOID or EXIT. High probability of coordinated dump. If you must trade, use tight stop losses and expect sudden price crashes.';
+  }
+  if (riskScore >= 60 || bundleDetected) {
+    return '⚠️ CAUTION. Suspicious patterns detected. Trade with extreme care. Set stop losses and take profits early.';
+  }
+  if (riskScore >= 40) {
+    return '⚡ MODERATE RISK. Some concerns detected. DYOR and monitor closely. Consider smaller position sizes.';
+  }
+  return '✅ LOWER RISK. No major red flags detected, but always DYOR. Crypto is inherently risky.';
+}
+
+/**
  * Generate AI analysis for the network
  */
 async function generateNetworkAnalysis(
@@ -245,6 +283,11 @@ async function generateNetworkAnalysis(
     ruggedTokens: number;
     currentHoldings: number;
   } | null,
+  bundleInfo: {
+    detected: boolean;
+    count: number;
+    description?: string;
+  },
   apiKey: string,
   model: string
 ): Promise<{
@@ -252,6 +295,7 @@ async function generateNetworkAnalysis(
   riskLevel: 'SAFE' | 'SUSPICIOUS' | 'DANGEROUS' | 'SCAM';
   summary: string;
   prediction: string;
+  recommendation: string;
   flags: Array<{ type: string; severity: string; message: string }>;
   networkInsights: string[];
 }> {
@@ -281,6 +325,18 @@ ${whales.map(w => `- ${w.label}: ${w.holdingsPercent?.toFixed(2)}%`).join('\n') 
 
 `;
 
+  // ADD BUNDLE DETECTION TO CONTEXT - CRITICAL FOR SCORING
+  if (bundleInfo.detected) {
+    context += `
+⚠️ BUNDLE DETECTED - CRITICAL WARNING:
+- ${bundleInfo.count} wallets with suspiciously similar holdings detected
+- This is a strong indicator of coordinated buying (bundle attack)
+- Bundle wallets often dump simultaneously, causing massive price crashes
+- MUST increase risk score significantly (+25-40 points)
+
+`;
+  }
+
   if (creatorInfo) {
     context += `
 CREATOR ANALYSIS:
@@ -306,11 +362,17 @@ Analyze the provided network data and return a JSON response with:
 6. networkInsights: Array of strings with network pattern observations
 
 RISK FACTORS:
+- BUNDLE DETECTED (multiple wallets with similar holdings) = CRITICAL RISK (+30-40 points)
+  * 10+ bundled wallets = minimum score 80 (SCAM)
+  * 5-9 bundled wallets = minimum score 70 (DANGEROUS)
+  * 3-4 bundled wallets = minimum score 60 (DANGEROUS)
 - Concentrated holdings (few wallets hold most supply) = HIGH RISK
 - Creator with previous rugs = CRITICAL
 - New creator wallet (<7 days) = MEDIUM RISK
 - Creator still holds large % = DUMP RISK
 - Multiple whales >5% each = COORDINATION RISK
+
+IMPORTANT: If BUNDLE DETECTED is mentioned in the context, you MUST score at least 60+. Bundles are the #1 indicator of coordinated pump & dump schemes.
 
 RETURN ONLY VALID JSON, no markdown or explanation.`;
 
@@ -346,11 +408,13 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
     const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]);
+      const score = Math.max(0, Math.min(100, parsed.riskScore || 50));
       return {
-        riskScore: Math.max(0, Math.min(100, parsed.riskScore || 50)),
+        riskScore: score,
         riskLevel: parsed.riskLevel || 'SUSPICIOUS',
         summary: parsed.summary || 'Analysis completed.',
         prediction: parsed.prediction || 'Unable to predict.',
+        recommendation: generateRecommendation(score, bundleInfo.detected, bundleInfo.count),
         flags: parsed.flags || [],
         networkInsights: parsed.networkInsights || [],
       };
@@ -363,6 +427,33 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
   let riskScore = 30;
   const flags: Array<{ type: string; severity: string; message: string }> = [];
   const networkInsights: string[] = [];
+
+  // CRITICAL: Bundle detection significantly increases risk
+  if (bundleInfo.detected) {
+    if (bundleInfo.count >= 10) {
+      riskScore += 40; // 10+ bundled wallets = CRITICAL
+      flags.push({
+        type: 'BUNDLE',
+        severity: 'CRITICAL',
+        message: `🚨 ${bundleInfo.count} coordinated wallets detected - HIGH probability of coordinated dump`,
+      });
+    } else if (bundleInfo.count >= 5) {
+      riskScore += 30; // 5-9 bundled wallets = HIGH
+      flags.push({
+        type: 'BUNDLE',
+        severity: 'HIGH',
+        message: `⚠️ ${bundleInfo.count} wallets with similar holdings detected - likely coordinated buying`,
+      });
+    } else {
+      riskScore += 20; // 3-4 bundled wallets = MEDIUM
+      flags.push({
+        type: 'BUNDLE',
+        severity: 'MEDIUM',
+        message: `${bundleInfo.count} wallets with similar holdings detected`,
+      });
+    }
+    networkInsights.push(`Bundle pattern: ${bundleInfo.count} coordinated wallets`);
+  }
 
   if (whales.length > 0) {
     riskScore += whales.length * 10;
@@ -419,6 +510,7 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
     prediction: riskScore > 60
       ? 'High probability of coordinated dump based on network structure.'
       : 'Network appears relatively distributed. Monitor for changes.',
+    recommendation: generateRecommendation(riskScore, bundleInfo.detected, bundleInfo.count),
     flags,
     networkInsights,
   };
@@ -531,7 +623,7 @@ sentinelRoutes.post('/analyze', async (c) => {
     const holderDistribution = holders.slice(0, 10).map(h => {
       let type: 'creator' | 'whale' | 'insider' | 'lp' | 'normal' = 'normal';
       if (h.address === creatorAddress) type = 'creator';
-      else if (h.percent > 30) type = 'lp';
+      else if (h.isLp) type = 'lp';  // Use the detected LP flag
       else if (h.percent > 10) type = 'whale';
       else if (h.percent > 5) type = 'insider';
       return {
@@ -565,12 +657,13 @@ sentinelRoutes.post('/analyze', async (c) => {
       creatorHoldingsPercent
     );
 
-    // Generate AI analysis
+    // Generate AI analysis - PASS BUNDLE INFO for proper scoring
     const aiStart = Date.now();
     const analysis = await generateNetworkAnalysis(
       tokenInfo,
       network,
       creatorInfo,
+      bundleInfo,
       togetherKey,
       model
     );

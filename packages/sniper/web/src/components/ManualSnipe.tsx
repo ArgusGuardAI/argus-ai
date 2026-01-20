@@ -161,6 +161,25 @@ export function ManualSnipe({ onSnipe, maxRiskScore, isWatchOnly }: ManualSnipeP
             </div>
           </div>
 
+          {/* Risk Score Bar */}
+          <div className="relative h-2 rounded-full overflow-hidden bg-dark-700">
+            <div className="absolute inset-0 risk-bar opacity-30" />
+            <div
+              className="absolute left-0 top-0 h-full transition-all duration-500"
+              style={{
+                width: `${result.riskScore}%`,
+                background: `linear-gradient(90deg, #00ff88, ${scoreColor(result.riskScore)})`,
+                boxShadow: `0 0 10px ${scoreColor(result.riskScore)}60`
+              }}
+            />
+            {/* Threshold marker */}
+            <div
+              className="absolute top-0 h-full w-0.5 bg-white/50"
+              style={{ left: `${maxRiskScore}%` }}
+              title={`Max risk: ${maxRiskScore}`}
+            />
+          </div>
+
           {/* Stats Row - Only show if we have data */}
           {(result.market?.marketCap || result.market?.liquidity || result.holders?.totalHolders) && (
             <div className="flex gap-4 text-sm border-t border-b border-gray-800/50 py-2">

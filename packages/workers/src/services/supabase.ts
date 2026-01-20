@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { GraffitiNote, WalletReputation, HoneypotResult } from '@whaleshield/shared';
+import { GraffitiNote, WalletReputation, HoneypotResult } from '@argusguard/shared';
 
 export function createSupabaseClient(url: string, anonKey: string): SupabaseClient {
   return createClient(url, anonKey);

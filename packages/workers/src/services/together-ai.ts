@@ -3,7 +3,7 @@ import {
   HoneypotAIResponse,
   HoneypotFlag,
   getHoneypotRiskLevel,
-} from '@whaleshield/shared';
+} from '@argusguard/shared';
 import { HONEYPOT_SYSTEM_PROMPT } from '../prompts/honeypot-prompt';
 
 const TOGETHER_API_URL = 'https://api.together.xyz/v1/chat/completions';
