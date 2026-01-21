@@ -1,9 +1,9 @@
 import type { AnalysisResult } from '../types';
 
-const API_BASE = import.meta.env.PROD ? '' : '/api';
+const API_BASE = import.meta.env.VITE_API_URL || 'https://api.argusguard.io';
 
 export async function analyzeToken(tokenAddress: string): Promise<AnalysisResult> {
-  const response = await fetch(`${API_BASE}/sentinel/analyze`, {
+  const response = await fetch(`${API_BASE}/analyze`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
