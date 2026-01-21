@@ -137,6 +137,18 @@ function App() {
   const renderVisualization = () => {
     if (!result) return null;
 
+    // If no network data, show message
+    if (!result.network) {
+      return (
+        <div className="h-full flex items-center justify-center text-zinc-500">
+          <div className="text-center">
+            <i className="fa-solid fa-diagram-project text-4xl mb-4 text-zinc-600" />
+            <p>Network visualization coming soon</p>
+          </div>
+        </div>
+      );
+    }
+
     switch (activeViz) {
       case 'network':
         return <NetworkGraph data={result.network} />;
@@ -290,7 +302,7 @@ function App() {
                 </div>
                 <div className="flex items-center gap-4">
                   <span className="text-xs text-zinc-500">
-                    {result.network.nodes.length} wallets connected
+                    {result.network?.nodes?.length || 0} wallets connected
                   </span>
                   <button
                     onClick={() => setShowAnalysis(!showAnalysis)}
