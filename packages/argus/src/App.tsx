@@ -342,12 +342,10 @@ function App() {
 
             {/* Free tier notice */}
             {!connected && (
-              <div className="mb-8 px-4 py-3 bg-argus-card border border-argus-border rounded-lg max-w-md">
-                <p className="text-zinc-400 text-sm">
-                  <i className="fa-solid fa-info-circle text-argus-accent mr-2" />
-                  Connect your wallet for unlimited scans with 1,000+ $ARGUSGUARD tokens
-                </p>
-              </div>
+              <p className="text-zinc-500 text-xs mb-4">
+                <i className="fa-solid fa-wallet text-argus-accent/50 mr-1" />
+                Connect wallet for unlimited scans
+              </p>
             )}
 
             {/* Preview of visualization types */}
