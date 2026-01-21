@@ -217,7 +217,7 @@
   <section class="relative min-h-screen flex items-center justify-center overflow-hidden storm-bg">
     <!-- Video Background -->
     <video autoplay muted loop playsinline class="absolute inset-0 w-full h-full object-cover opacity-30">
-      <source src="img/argus-hero.mp4" type="video/mp4">
+      <source src="img/argus-4K.mp4" type="video/mp4">
     </video>
 
     <!-- Overlay -->
@@ -283,10 +283,8 @@
           <div class="relative">
             <div class="absolute inset-0 bg-argus-500/10 rounded-full blur-3xl scale-75 animate-eye-glow"></div>
             <video autoplay muted loop playsinline class="relative w-full max-w-lg argus-image rounded-2xl">
-              <source src="img/argus-hero.mp4" type="video/mp4">
+              <source src="img/argus-4K.mp4" type="video/mp4">
             </video>
-            <!-- Fallback image -->
-            <img src="img/argus.png" alt="Argus Panoptes" class="relative w-full max-w-lg argus-image rounded-2xl" id="argus-fallback">
           </div>
         </div>
       </div>
@@ -449,8 +447,10 @@
       </div>
 
       <!-- Demo Screenshot -->
-      <div class="bg-storm-800/50 argus-border rounded-2xl p-2 max-w-5xl mx-auto argus-glow">
-        <img src="img/argus-demo.png" alt="Argus Demo" class="w-full rounded-xl bg-storm-900">
+      <div class="bg-storm-800/50 argus-border rounded-2xl p-12 max-w-5xl mx-auto argus-glow text-center">
+        <div class="text-6xl mb-6"><i class="fa-solid fa-eye text-argus-500 animate-pulse"></i></div>
+        <h3 class="text-3xl font-bold font-myth gradient-text mb-4">DEMO COMING SOON</h3>
+        <p class="text-slate-400 text-lg">The all-seeing eye is awakening...</p>
       </div>
     </div>
   </section>
@@ -481,7 +481,7 @@
           <ul class="space-y-3 mb-8 flex-grow">
             <li class="flex items-center gap-3 text-slate-400">
               <i class="fa-solid fa-check text-slate-500"></i>
-              <span>5 analyses per day</span>
+              <span>3 analyses per day</span>
             </li>
             <li class="flex items-center gap-3 text-slate-400">
               <i class="fa-solid fa-check text-slate-500"></i>
@@ -493,22 +493,22 @@
             </li>
             <li class="flex items-center gap-3 text-slate-500">
               <i class="fa-solid fa-xmark text-slate-600"></i>
-              <span>AI predictions</span>
+              <span>Advanced visualizations</span>
             </li>
             <li class="flex items-center gap-3 text-slate-500">
               <i class="fa-solid fa-xmark text-slate-600"></i>
-              <span>Bundle detection</span>
+              <span>Sniper Bot</span>
             </li>
           </ul>
-          <a href="https://argus.watch/app" class="block w-full bg-storm-700/50 border border-slate-500/20 text-slate-300 py-3 rounded-lg font-bold text-center hover:bg-storm-600/50 transition font-myth">
+          <a href="https://argusguard.io/app" class="block w-full bg-storm-700/50 border border-slate-500/20 text-slate-300 py-3 rounded-lg font-bold text-center hover:bg-storm-600/50 transition font-myth">
             Begin
           </a>
         </div>
 
-        <!-- Pro Tier -->
+        <!-- Holder Tier -->
         <div class="bg-storm-800/50 border-2 border-argus-500/50 rounded-2xl p-8 card-hover transition-all duration-300 flex flex-col relative argus-glow">
           <div class="absolute -top-4 left-1/2 -translate-x-1/2 bg-argus-500 text-storm-950 px-4 py-1 rounded-full text-sm font-bold font-myth">
-            RECOMMENDED
+            TOKEN HOLDERS
           </div>
           <div class="text-center mb-6">
             <div class="w-16 h-16 bg-argus-500/10 border border-argus-500/20 rounded-xl flex items-center justify-center mx-auto mb-4 animate-glow-pulse">
@@ -525,8 +525,8 @@
             <p class="text-argus-400/70 text-sm mt-1">See beyond the veil</p>
           </div>
           <div class="text-center mb-6">
-            <span class="text-5xl font-bold font-myth gradient-text">$29</span>
-            <span class="text-slate-400">/month</span>
+            <span class="text-4xl font-bold font-myth gradient-text">1,000</span>
+            <p class="text-slate-400 text-sm mt-1">$ARGUSGUARD tokens</p>
           </div>
           <ul class="space-y-3 mb-8 flex-grow">
             <li class="flex items-center gap-3 text-slate-300">
@@ -545,28 +545,29 @@
               <i class="fa-solid fa-check text-argus-500"></i>
               <span>Bundle detection</span>
             </li>
-            <li class="flex items-center gap-3 text-slate-300">
-              <i class="fa-solid fa-check text-argus-500"></i>
-              <span>Creator wallet tracking</span>
+            <li class="flex items-center gap-3 text-slate-500">
+              <i class="fa-solid fa-xmark text-slate-600"></i>
+              <span>Sniper Bot</span>
             </li>
           </ul>
-          <a href="https://argus.watch/app" class="block w-full gradient-bg text-storm-950 py-3 rounded-lg font-bold text-center hover:opacity-90 transition font-myth">
-            Awaken
+          <a href="https://argusguard.io/app" class="block w-full gradient-bg text-storm-950 py-3 rounded-lg font-bold text-center hover:opacity-90 transition font-myth">
+            Connect Wallet
           </a>
         </div>
 
-        <!-- Enterprise Tier -->
+        <!-- Pro Tier -->
         <div class="bg-storm-800/30 argus-border rounded-2xl p-8 card-hover transition-all duration-300 flex flex-col">
           <div class="text-center mb-6">
             <div class="w-16 h-16 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center justify-center mx-auto mb-4">
               <i class="fa-solid fa-crown text-3xl text-amber-400"></i>
             </div>
             <h3 class="text-2xl font-bold font-myth text-amber-400">PANOPTES</h3>
-            <p class="text-amber-400/50 text-sm mt-1">Absolute vision</p>
+            <p class="text-amber-400/50 text-sm mt-1">Absolute vision + Sniper</p>
           </div>
           <div class="text-center mb-6">
-            <span class="text-5xl font-bold font-myth text-amber-400">$99</span>
+            <span class="text-5xl font-bold font-myth text-amber-400">$19.99</span>
             <span class="text-slate-400">/month</span>
+            <p class="text-slate-500 text-xs mt-2">or hold 10,000 $ARGUSGUARD</p>
           </div>
           <ul class="space-y-3 mb-8 flex-grow">
             <li class="flex items-center gap-3 text-slate-300">
@@ -575,23 +576,23 @@
             </li>
             <li class="flex items-center gap-3 text-slate-300">
               <i class="fa-solid fa-check text-amber-500"></i>
-              <span>API access</span>
+              <span>Sniper Bot access</span>
             </li>
             <li class="flex items-center gap-3 text-slate-300">
               <i class="fa-solid fa-check text-amber-500"></i>
-              <span>Real-time alerts</span>
+              <span>Auto TP/SL alerts</span>
             </li>
             <li class="flex items-center gap-3 text-slate-300">
               <i class="fa-solid fa-check text-amber-500"></i>
-              <span>Custom watchlists</span>
+              <span>Trailing stop automation</span>
             </li>
             <li class="flex items-center gap-3 text-slate-300">
               <i class="fa-solid fa-check text-amber-500"></i>
-              <span>Priority support</span>
+              <span>Position tracking</span>
             </li>
           </ul>
-          <a href="https://argus.watch/app" class="block w-full bg-storm-700/50 border border-amber-500/20 text-amber-400 py-3 rounded-lg font-bold text-center hover:bg-storm-600/50 hover:border-amber-500/40 transition font-myth">
-            Ascend
+          <a href="https://argusguard.io/app" class="block w-full bg-storm-700/50 border border-amber-500/20 text-amber-400 py-3 rounded-lg font-bold text-center hover:bg-storm-600/50 hover:border-amber-500/40 transition font-myth">
+            Go Pro
           </a>
         </div>
       </div>
