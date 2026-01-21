@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { Bindings } from '../index';
-import { fetchHeliusTokenMetadata } from '../services/helius';
+import { fetchHeliusTokenMetadata, analyzeTokenTransactions } from '../services/helius';
 import { fetchDexScreenerData } from '../services/dexscreener';
 
 const HELIUS_RPC_BASE = 'https://mainnet.helius-rpc.com';
@@ -285,7 +285,10 @@ async function generateNetworkAnalysis(
   } | null,
   bundleInfo: {
     detected: boolean;
+    confidence: 'HIGH' | 'MEDIUM' | 'LOW' | 'NONE';
     count: number;
+    txBundlePercent?: number;
+    suspiciousPatterns?: string[];
     description?: string;
   },
   apiKey: string,
@@ -325,16 +328,46 @@ ${whales.map(w => `- ${w.label}: ${w.holdingsPercent?.toFixed(2)}%`).join('\n') 
 
 `;
 
-  // ADD BUNDLE DETECTION TO CONTEXT - CRITICAL FOR SCORING
-  if (bundleInfo.detected) {
-    context += `
-⚠️ BUNDLE DETECTED - CRITICAL WARNING:
-- ${bundleInfo.count} wallets with suspiciously similar holdings detected
-- This is a strong indicator of coordinated buying (bundle attack)
-- Bundle wallets often dump simultaneously, causing massive price crashes
-- MUST increase risk score significantly (+25-40 points)
-
+  // ADD BUNDLE DETECTION TO CONTEXT - weight by confidence level
+  if (bundleInfo.detected || bundleInfo.confidence === 'LOW') {
+    if (bundleInfo.confidence === 'HIGH') {
+      context += `
+⚠️ BUNDLE DETECTED - HIGH CONFIDENCE (CRITICAL):
+- ${bundleInfo.count} coordinated wallets CONFIRMED via same-block transactions
+${bundleInfo.txBundlePercent ? `- ${bundleInfo.txBundlePercent.toFixed(1)}% of buys came from bundled transactions` : ''}
+- This is DEFINITIVE evidence of coordinated buying (bundle attack)
+- Bundle wallets will likely dump simultaneously
+- MUST increase risk score significantly (+30-40 points)
+${bundleInfo.description ? `\nDetails: ${bundleInfo.description}` : ''}
 `;
+    } else if (bundleInfo.confidence === 'MEDIUM') {
+      context += `
+⚠️ BUNDLE DETECTED - MEDIUM CONFIDENCE:
+- ${bundleInfo.count} wallets show coordination patterns
+${bundleInfo.txBundlePercent && bundleInfo.txBundlePercent > 0 ? `- ${bundleInfo.txBundlePercent.toFixed(1)}% of buys from same-block transactions` : '- Near-identical holdings detected'}
+- Likely coordinated buying, exercise caution
+- Increase risk score (+15-25 points)
+${bundleInfo.description ? `\nDetails: ${bundleInfo.description}` : ''}
+`;
+    } else if (bundleInfo.confidence === 'LOW') {
+      context += `
+ℹ️ POSSIBLE BUNDLE - LOW CONFIDENCE:
+- Some wallets have similar holdings, but this could be natural distribution
+- No same-block transaction evidence found
+- Do NOT significantly increase risk score for this alone (+5-10 points max)
+- This is common in new tokens with organic interest
+${bundleInfo.description ? `\nDetails: ${bundleInfo.description}` : ''}
+`;
+    }
+
+    // Add suspicious patterns from transaction analysis
+    if (bundleInfo.suspiciousPatterns && bundleInfo.suspiciousPatterns.length > 0) {
+      context += `\nSuspicious Patterns:\n`;
+      for (const pattern of bundleInfo.suspiciousPatterns) {
+        context += `- ⚠️ ${pattern}\n`;
+      }
+    }
+    context += '\n';
   }
 
   if (creatorInfo) {
@@ -361,18 +394,23 @@ Analyze the provided network data and return a JSON response with:
 5. flags: Array of {type, severity, message} for specific risks
 6. networkInsights: Array of strings with network pattern observations
 
-RISK FACTORS:
-- BUNDLE DETECTED (multiple wallets with similar holdings) = CRITICAL RISK (+30-40 points)
-  * 10+ bundled wallets = minimum score 80 (SCAM)
-  * 5-9 bundled wallets = minimum score 70 (DANGEROUS)
-  * 3-4 bundled wallets = minimum score 60 (DANGEROUS)
+RISK FACTORS (weight by confidence):
+
+BUNDLE DETECTION - weight by CONFIDENCE LEVEL:
+- HIGH CONFIDENCE bundle (same-block transactions confirmed) = CRITICAL (+30-40 points, min score 70)
+- MEDIUM CONFIDENCE bundle (strong patterns) = HIGH RISK (+15-25 points)
+- LOW CONFIDENCE bundle (similar holdings only) = MINOR (+5-10 points max)
+  * LOW confidence often means natural distribution, NOT a scam
+  * Do NOT flag as SCAM based on LOW confidence alone
+
+OTHER RISK FACTORS:
 - Concentrated holdings (few wallets hold most supply) = HIGH RISK
-- Creator with previous rugs = CRITICAL
-- New creator wallet (<7 days) = MEDIUM RISK
-- Creator still holds large % = DUMP RISK
+- Creator with previous rugs = CRITICAL (+40 points)
+- New creator wallet (<7 days) = MEDIUM RISK (+10 points)
+- Creator still holds large % (>20%) = DUMP RISK (+15 points)
 - Multiple whales >5% each = COORDINATION RISK
 
-IMPORTANT: If BUNDLE DETECTED is mentioned in the context, you MUST score at least 60+. Bundles are the #1 indicator of coordinated pump & dump schemes.
+IMPORTANT: Only score 80+ (SCAM) if you have HIGH confidence bundle detection OR creator has previous rugs. Similar holdings alone is NOT enough for SCAM rating.
 
 RETURN ONLY VALID JSON, no markdown or explanation.`;
 
@@ -428,31 +466,34 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
   const flags: Array<{ type: string; severity: string; message: string }> = [];
   const networkInsights: string[] = [];
 
-  // CRITICAL: Bundle detection significantly increases risk
-  if (bundleInfo.detected) {
-    if (bundleInfo.count >= 10) {
-      riskScore += 40; // 10+ bundled wallets = CRITICAL
-      flags.push({
-        type: 'BUNDLE',
-        severity: 'CRITICAL',
-        message: `🚨 ${bundleInfo.count} coordinated wallets detected - HIGH probability of coordinated dump`,
-      });
-    } else if (bundleInfo.count >= 5) {
-      riskScore += 30; // 5-9 bundled wallets = HIGH
-      flags.push({
-        type: 'BUNDLE',
-        severity: 'HIGH',
-        message: `⚠️ ${bundleInfo.count} wallets with similar holdings detected - likely coordinated buying`,
-      });
-    } else {
-      riskScore += 20; // 3-4 bundled wallets = MEDIUM
-      flags.push({
-        type: 'BUNDLE',
-        severity: 'MEDIUM',
-        message: `${bundleInfo.count} wallets with similar holdings detected`,
-      });
-    }
-    networkInsights.push(`Bundle pattern: ${bundleInfo.count} coordinated wallets`);
+  // Bundle detection scoring based on CONFIDENCE level
+  if (bundleInfo.confidence === 'HIGH') {
+    // HIGH confidence = confirmed same-block transactions
+    riskScore += 35;
+    flags.push({
+      type: 'BUNDLE',
+      severity: 'CRITICAL',
+      message: `🚨 ${bundleInfo.count} coordinated wallets CONFIRMED via same-block transactions`,
+    });
+    networkInsights.push(`Bundle CONFIRMED: ${bundleInfo.count} wallets bought in same block`);
+  } else if (bundleInfo.confidence === 'MEDIUM') {
+    // MEDIUM confidence = strong pattern but not definitive
+    riskScore += 20;
+    flags.push({
+      type: 'BUNDLE',
+      severity: 'HIGH',
+      message: `⚠️ ${bundleInfo.count} wallets show coordination patterns`,
+    });
+    networkInsights.push(`Likely bundle: ${bundleInfo.count} wallets with suspicious patterns`);
+  } else if (bundleInfo.confidence === 'LOW') {
+    // LOW confidence = could be natural distribution, minimal score impact
+    riskScore += 5;
+    flags.push({
+      type: 'BUNDLE',
+      severity: 'LOW',
+      message: `Some wallets have similar holdings (could be natural distribution)`,
+    });
+    networkInsights.push(`Possible coordination: similar holdings detected`);
   }
 
   if (whales.length > 0) {
@@ -538,13 +579,14 @@ sentinelRoutes.post('/analyze', async (c) => {
       return c.json({ error: 'Together AI API key not configured' }, 500);
     }
 
-    // Fetch data in parallel
+    // Fetch data in parallel - including transaction analysis for bundle detection
     console.log('[Sentinel] Starting parallel fetch...');
     const fetchStart = Date.now();
-    const [dexData, metadata, holders] = await Promise.all([
+    const [dexData, metadata, holders, txAnalysis] = await Promise.all([
       fetchDexScreenerData(tokenAddress),
       fetchHeliusTokenMetadata(tokenAddress, heliusKey),
       fetchTopHolders(tokenAddress, heliusKey, 20),
+      analyzeTokenTransactions(tokenAddress, heliusKey),
     ]);
     console.log(`[Sentinel] Parallel fetch took ${Date.now() - fetchStart}ms`);
 
@@ -633,20 +675,83 @@ sentinelRoutes.post('/analyze', async (c) => {
       };
     });
 
-    // Simple bundle detection based on holder patterns
-    // Bundles often show as multiple wallets with very similar holdings
-    const similarHoldings = holders.filter((h, i, arr) => {
+    // IMPROVED BUNDLE DETECTION - transaction-based is PRIMARY, holder-based is SUPPORTING
+    // Method 1: Transaction-based (HIGH CONFIDENCE) - wallets buying in same slot
+    const txBundleDetected = txAnalysis.bundleDetected;
+    const txBundleCount = txAnalysis.coordinatedWallets;
+    const txBundlePercent = txAnalysis.bundledBuyPercent;
+
+    // Method 2: Holder pattern-based (SUPPORTING EVIDENCE ONLY)
+    // Much stricter: require near-IDENTICAL holdings (0.1% tolerance) AND 5+ wallets
+    // This avoids flagging natural distribution (people buying similar amounts)
+    const nearIdenticalHoldings = holders.filter((h, i, arr) => {
       if (i === 0) return false;
       const prevPercent = arr[i - 1].percent;
-      return Math.abs(h.percent - prevPercent) < 0.5 && h.percent > 1;
+      // Must be within 0.1% AND both > 1% holding
+      return Math.abs(h.percent - prevPercent) < 0.1 && h.percent > 1 && arr[i - 1].percent > 1;
     });
+
+    // Even stricter: check for EXACT same holdings (within 0.05%) - very suspicious
+    const exactSameHoldings = holders.filter((h, i, arr) => {
+      if (i === 0) return false;
+      const prevPercent = arr[i - 1].percent;
+      return Math.abs(h.percent - prevPercent) < 0.05 && h.percent > 0.5;
+    });
+
+    // Holder pattern only triggers with 5+ near-identical OR 3+ exact-same
+    const holderBundleDetected = nearIdenticalHoldings.length >= 5 || exactSameHoldings.length >= 3;
+    const holderBundleCount = Math.max(nearIdenticalHoldings.length, exactSameHoldings.length);
+
+    // CONFIDENCE LEVELS:
+    // HIGH: Transaction-based detected (same-block buys) - this is definitive
+    // MEDIUM: Both transaction AND holder patterns agree
+    // LOW: Only holder patterns (could be natural distribution)
+    let bundleConfidence: 'HIGH' | 'MEDIUM' | 'LOW' | 'NONE' = 'NONE';
+    if (txBundleDetected && txBundlePercent > 20) {
+      bundleConfidence = 'HIGH';
+    } else if (txBundleDetected && holderBundleDetected) {
+      bundleConfidence = 'HIGH';
+    } else if (txBundleDetected) {
+      bundleConfidence = 'MEDIUM';
+    } else if (holderBundleDetected && exactSameHoldings.length >= 3) {
+      bundleConfidence = 'MEDIUM'; // Exact same holdings is suspicious even without tx data
+    } else if (holderBundleDetected) {
+      bundleConfidence = 'LOW'; // Could be false positive
+    }
+
+    // Only flag as bundle if we have at least MEDIUM confidence
+    const bundleDetected = bundleConfidence === 'HIGH' || bundleConfidence === 'MEDIUM';
+    const bundleCount = txBundleDetected ? txBundleCount : holderBundleCount;
+
+    // Build description with specifics
+    let bundleDescription: string | undefined;
+    if (bundleDetected || bundleConfidence === 'LOW') {
+      const parts: string[] = [];
+      if (txBundleDetected) {
+        parts.push(`${txBundleCount} wallets bought in same block (${txBundlePercent.toFixed(1)}% of buys)`);
+      }
+      if (exactSameHoldings.length >= 3) {
+        parts.push(`${exactSameHoldings.length} wallets with near-identical holdings`);
+      } else if (nearIdenticalHoldings.length >= 5) {
+        parts.push(`${nearIdenticalHoldings.length} wallets with similar holdings (possible coordination)`);
+      }
+      bundleDescription = parts.join('; ');
+    }
+
     const bundleInfo = {
-      detected: similarHoldings.length >= 3,
-      count: similarHoldings.length,
-      description: similarHoldings.length >= 3
-        ? `${similarHoldings.length} wallets with suspiciously similar holdings detected`
-        : undefined,
+      detected: bundleDetected,
+      confidence: bundleConfidence,
+      count: bundleCount,
+      txBundlePercent: txBundlePercent,
+      suspiciousPatterns: txAnalysis.suspiciousPatterns,
+      description: bundleDescription,
     };
+
+    if (bundleDetected) {
+      console.log(`[Sentinel] BUNDLE DETECTED (${bundleConfidence}): ${bundleDescription}`);
+    } else if (bundleConfidence === 'LOW') {
+      console.log(`[Sentinel] Possible bundle (LOW confidence): ${bundleDescription}`);
+    }
 
     // Build network graph
     const network = buildNetworkGraph(

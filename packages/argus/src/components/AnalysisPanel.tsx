@@ -1,25 +1,19 @@
-import type { AnalysisResult, RiskFlag, HolderDistribution } from '../types';
+import type { AnalysisResult, RiskFlag } from '../types';
 
 interface Props {
   result: AnalysisResult;
 }
 
-const holderTypeColors: Record<HolderDistribution['type'], string> = {
-  creator: '#ff9500',
-  whale: '#ff4444',
-  insider: '#ff6b6b',
-  lp: '#3b82f6',
-  normal: '#71717a',
-};
-
-const riskColors = {
+const riskColors: Record<string, { bg: string; border: string; text: string }> = {
   SAFE: { bg: 'bg-green-500/10', border: 'border-green-500/30', text: 'text-green-400' },
   SUSPICIOUS: { bg: 'bg-yellow-500/10', border: 'border-yellow-500/30', text: 'text-yellow-400' },
   DANGEROUS: { bg: 'bg-orange-500/10', border: 'border-orange-500/30', text: 'text-orange-400' },
   SCAM: { bg: 'bg-red-500/10', border: 'border-red-500/30', text: 'text-red-400' },
 };
 
-const severityColors = {
+const defaultColors = { bg: 'bg-zinc-500/10', border: 'border-zinc-500/30', text: 'text-zinc-400' };
+
+const severityColors: Record<string, string> = {
   LOW: 'text-zinc-400 bg-zinc-500/10',
   MEDIUM: 'text-yellow-400 bg-yellow-500/10',
   HIGH: 'text-orange-400 bg-orange-500/10',
@@ -80,46 +74,14 @@ function RiskMeter({ score }: { score: number }) {
 }
 
 function FlagItem({ flag }: { flag: RiskFlag }) {
+  const colorClass = severityColors[flag.severity] || 'text-zinc-400 bg-zinc-500/10';
   return (
-    <div className={`px-3 py-2 rounded-lg ${severityColors[flag.severity]} border border-current/20`}>
+    <div className={`px-3 py-2 rounded-lg ${colorClass} border border-current/20`}>
       <div className="flex items-center gap-2 text-xs mb-1">
-        <span className="font-semibold">{flag.type}</span>
-        <span className="opacity-60">{flag.severity}</span>
+        <span className="font-semibold">{flag.type || 'UNKNOWN'}</span>
+        <span className="opacity-60">{flag.severity || 'MEDIUM'}</span>
       </div>
-      <p className="text-sm opacity-90">{flag.message}</p>
-    </div>
-  );
-}
-
-function HolderChart({ holders }: { holders: HolderDistribution[] }) {
-  const maxPercent = Math.max(...holders.map(h => h.percent), 1);
-
-  return (
-    <div className="space-y-2">
-      {holders.map((holder, i) => (
-        <div key={holder.address} className="flex items-center gap-2">
-          <span className="text-[10px] text-zinc-500 w-4">{i + 1}</span>
-          <div className="flex-1 h-5 bg-argus-bg rounded overflow-hidden relative">
-            <div
-              className="h-full rounded transition-all"
-              style={{
-                width: `${(holder.percent / maxPercent) * 100}%`,
-                backgroundColor: holderTypeColors[holder.type],
-                opacity: 0.7,
-              }}
-            />
-            <span className="absolute inset-y-0 left-2 flex items-center text-[10px] text-white font-mono">
-              {holder.address.slice(0, 4)}...{holder.address.slice(-4)}
-            </span>
-          </div>
-          <span className={`text-xs font-semibold w-14 text-right ${
-            holder.percent > 10 ? 'text-red-400' :
-            holder.percent > 5 ? 'text-yellow-400' : 'text-zinc-400'
-          }`}>
-            {holder.percent.toFixed(1)}%
-          </span>
-        </div>
-      ))}
+      <p className="text-sm opacity-90">{flag.message || ''}</p>
     </div>
   );
 }
@@ -134,21 +96,20 @@ function PriceChange({ change }: { change: number }) {
   );
 }
 
-function BundleBadge({ count, description }: { count: number; description?: string }) {
-  return (
-    <div className="flex items-center gap-2 px-3 py-2 bg-red-500/10 border border-red-500/30 rounded-lg">
-      <i className="fa-solid fa-cubes-stacked text-red-400"></i>
-      <div>
-        <p className="text-sm font-semibold text-red-400">Bundle Detected</p>
-        <p className="text-xs text-zinc-400">{description || `${count} suspicious wallets`}</p>
-      </div>
-    </div>
-  );
+function formatNumber(value: number): string {
+  if (value >= 1e9) return `${(value / 1e9).toFixed(1)}B`;
+  if (value >= 1e6) return `${(value / 1e6).toFixed(1)}M`;
+  if (value >= 1e3) return `${(value / 1e3).toFixed(1)}K`;
+  return value.toFixed(0);
 }
 
 export function AnalysisPanel({ result }: Props) {
-  const { tokenInfo, analysis, creatorInfo, holderDistribution, bundleInfo } = result;
-  const colors = riskColors[analysis.riskLevel];
+  const colors = riskColors[result.riskLevel] || defaultColors;
+  const market = result.market;
+  const holders = result.holders;
+  const creator = result.creator;
+  const socials = result.socials;
+  const authorities = result.authorities;
 
   return (
     <>
@@ -157,198 +118,219 @@ export function AnalysisPanel({ result }: Props) {
         <div className="flex items-start justify-between mb-4">
           <div>
             <h3 className="font-semibold text-white text-lg">
-              {tokenInfo.name || 'Unknown Token'}
+              {market?.name || 'Unknown Token'}
             </h3>
-            <p className="text-zinc-500 text-sm">{tokenInfo.symbol}</p>
+            <p className="text-zinc-500 text-sm">{market?.symbol || '???'}</p>
           </div>
           <div className={`px-3 py-1 rounded-lg ${colors.bg} ${colors.border} border`}>
-            <span className={`font-semibold ${colors.text}`}>{analysis.riskLevel}</span>
+            <span className={`font-semibold ${colors.text}`}>{result.riskLevel}</span>
           </div>
         </div>
 
         <div className="grid grid-cols-3 gap-3 text-sm">
-          {tokenInfo.marketCap !== undefined && (
+          {market?.marketCap !== undefined && (
             <div>
               <p className="text-zinc-500 text-xs">Market Cap</p>
-              <p className="font-semibold text-white">
-                ${tokenInfo.marketCap >= 1e6
-                  ? `${(tokenInfo.marketCap / 1e6).toFixed(1)}M`
-                  : tokenInfo.marketCap >= 1e3
-                  ? `${(tokenInfo.marketCap / 1e3).toFixed(1)}K`
-                  : tokenInfo.marketCap.toFixed(0)}
-              </p>
+              <p className="font-semibold text-white">${formatNumber(market.marketCap)}</p>
             </div>
           )}
-          {tokenInfo.liquidity !== undefined && (
+          {market?.liquidity !== undefined && (
             <div>
               <p className="text-zinc-500 text-xs">Liquidity</p>
-              <p className="font-semibold text-white">
-                ${tokenInfo.liquidity >= 1e3
-                  ? `${(tokenInfo.liquidity / 1e3).toFixed(1)}K`
-                  : tokenInfo.liquidity.toFixed(0)}
-              </p>
+              <p className="font-semibold text-white">${formatNumber(market.liquidity)}</p>
             </div>
           )}
-          {tokenInfo.age !== undefined && (
+          {market?.ageInDays !== undefined && (
             <div>
               <p className="text-zinc-500 text-xs">Age</p>
               <p className="font-semibold text-white">
-                {tokenInfo.age < 1
+                {market.ageInDays < 1
                   ? '<1 day'
-                  : tokenInfo.age === 1
+                  : market.ageInDays === 1
                   ? '1 day'
-                  : `${tokenInfo.age} days`}
+                  : `${Math.floor(market.ageInDays)} days`}
               </p>
             </div>
           )}
-          {tokenInfo.priceChange24h !== undefined && (
+          {market?.priceChange24h !== undefined && (
             <div>
               <p className="text-zinc-500 text-xs">24h Change</p>
-              <PriceChange change={tokenInfo.priceChange24h} />
+              <PriceChange change={market.priceChange24h} />
             </div>
           )}
-          {tokenInfo.volume24h !== undefined && (
+          {market?.volume24h !== undefined && (
             <div>
               <p className="text-zinc-500 text-xs">24h Volume</p>
-              <p className="font-semibold text-white">
-                ${tokenInfo.volume24h >= 1e6
-                  ? `${(tokenInfo.volume24h / 1e6).toFixed(1)}M`
-                  : tokenInfo.volume24h >= 1e3
-                  ? `${(tokenInfo.volume24h / 1e3).toFixed(1)}K`
-                  : tokenInfo.volume24h.toFixed(0)}
-              </p>
+              <p className="font-semibold text-white">${formatNumber(market.volume24h)}</p>
             </div>
           )}
-          {tokenInfo.txns24h && (
+          {market?.txns24h && (
             <div>
               <p className="text-zinc-500 text-xs">24h Txns</p>
               <p className="font-semibold text-white">
-                <span className="text-green-400">{tokenInfo.txns24h.buys}</span>
+                <span className="text-green-400">{market.txns24h.buys}</span>
                 <span className="text-zinc-500">/</span>
-                <span className="text-red-400">{tokenInfo.txns24h.sells}</span>
+                <span className="text-red-400">{market.txns24h.sells}</span>
               </p>
             </div>
           )}
         </div>
 
         <p className="mt-3 font-mono text-xs text-zinc-500 break-all">
-          {tokenInfo.address}
+          {result.tokenAddress}
         </p>
       </div>
 
       {/* Risk Score */}
       <div className="bg-argus-card border border-argus-border rounded-xl p-4">
         <h3 className="font-semibold text-white mb-4">Risk Assessment</h3>
-        <RiskMeter score={analysis.riskScore} />
-
-        <p className="text-sm text-zinc-300 mt-4 text-center">{analysis.summary}</p>
-
-        {/* Recommendation */}
-        {analysis.recommendation && (
-          <div className={`mt-4 px-3 py-2 rounded-lg text-sm font-medium ${
-            analysis.riskScore >= 70 ? 'bg-red-500/10 text-red-400 border border-red-500/30' :
-            analysis.riskScore >= 40 ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/30' :
-            'bg-green-500/10 text-green-400 border border-green-500/30'
-          }`}>
-            {analysis.recommendation}
-          </div>
-        )}
+        <RiskMeter score={result.riskScore} />
+        <p className="text-sm text-zinc-300 mt-4 text-center">{result.summary}</p>
       </div>
 
-      {/* Bundle Detection Warning */}
-      {bundleInfo?.detected && (
-        <BundleBadge count={bundleInfo.count} description={bundleInfo.description} />
-      )}
-
-      {/* Holder Distribution */}
-      {holderDistribution && holderDistribution.length > 0 && (
+      {/* Holder Stats */}
+      {holders && (
         <div className="bg-argus-card border border-argus-border rounded-xl p-4">
           <h3 className="font-semibold text-white mb-3 flex items-center gap-2">
             <i className="fa-solid fa-chart-bar text-argus-accent"></i>
-            Top Holders
+            Holder Stats
           </h3>
-          <HolderChart holders={holderDistribution} />
-          <div className="flex items-center gap-4 mt-3 pt-3 border-t border-argus-border text-[10px]">
-            <span className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-orange-500"></span>
-              Creator
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-red-500"></span>
-              Whale
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-              LP
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-zinc-500"></span>
-              Other
-            </span>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            {holders.totalHolders !== undefined && (
+              <div>
+                <p className="text-zinc-500 text-xs">Total Holders</p>
+                <p className="font-semibold text-white">{holders.totalHolders.toLocaleString()}</p>
+              </div>
+            )}
+            {holders.topHolder !== undefined && (
+              <div>
+                <p className="text-zinc-500 text-xs">Top Holder</p>
+                <p className={`font-semibold ${holders.topHolder > 20 ? 'text-red-400' : holders.topHolder > 10 ? 'text-yellow-400' : 'text-white'}`}>
+                  {holders.topHolder.toFixed(1)}%
+                </p>
+              </div>
+            )}
+            {holders.top10Holders !== undefined && (
+              <div>
+                <p className="text-zinc-500 text-xs">Top 10 Combined</p>
+                <p className={`font-semibold ${holders.top10Holders > 50 ? 'text-red-400' : holders.top10Holders > 30 ? 'text-yellow-400' : 'text-white'}`}>
+                  {holders.top10Holders.toFixed(1)}%
+                </p>
+              </div>
+            )}
+            {holders.top1NonLp !== undefined && (
+              <div>
+                <p className="text-zinc-500 text-xs">Top Non-LP</p>
+                <p className={`font-semibold ${holders.top1NonLp > 20 ? 'text-red-400' : holders.top1NonLp > 10 ? 'text-yellow-400' : 'text-white'}`}>
+                  {holders.top1NonLp.toFixed(1)}%
+                </p>
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      {/* AI Prediction */}
-      <div className="bg-argus-card border border-argus-border rounded-xl p-4">
-        <h3 className="font-semibold text-white mb-2">AI Prediction</h3>
-        <p className="text-sm text-zinc-300">{analysis.prediction}</p>
-
-        {analysis.networkInsights.length > 0 && (
-          <div className="mt-3 pt-3 border-t border-argus-border">
-            <p className="text-xs text-zinc-500 mb-2">Network Insights</p>
-            <ul className="space-y-1">
-              {analysis.networkInsights.map((insight, i) => (
-                <li key={i} className="text-sm text-zinc-400 flex items-start gap-2">
-                  <span className="text-argus-accent">-</span>
-                  {insight}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </div>
-
       {/* Creator Info */}
-      {creatorInfo && (
+      {creator && (
         <div className="bg-argus-card border border-argus-border rounded-xl p-4">
           <h3 className="font-semibold text-white mb-3">Creator Analysis</h3>
           <div className="grid grid-cols-2 gap-3 text-sm">
+            {creator.walletAge !== undefined && (
+              <div>
+                <p className="text-zinc-500 text-xs">Wallet Age</p>
+                <p className="text-white">{creator.walletAge} days</p>
+              </div>
+            )}
+            {creator.tokensCreated !== undefined && (
+              <div>
+                <p className="text-zinc-500 text-xs">Tokens Created</p>
+                <p className="text-white">{creator.tokensCreated}</p>
+              </div>
+            )}
+            {creator.ruggedTokens !== undefined && (
+              <div>
+                <p className="text-zinc-500 text-xs">Previous Rugs</p>
+                <p className={creator.ruggedTokens > 0 ? 'text-red-400 font-semibold' : 'text-white'}>
+                  {creator.ruggedTokens}
+                </p>
+              </div>
+            )}
+            {creator.currentHoldings !== undefined && (
+              <div>
+                <p className="text-zinc-500 text-xs">Current Holdings</p>
+                <p className={creator.currentHoldings > 10 ? 'text-yellow-400' : 'text-white'}>
+                  {creator.currentHoldings.toFixed(1)}%
+                </p>
+              </div>
+            )}
+          </div>
+          {creator.address && (
+            <p className="mt-2 font-mono text-xs text-zinc-500 break-all">
+              {creator.address}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Authorities */}
+      {authorities && (
+        <div className="bg-argus-card border border-argus-border rounded-xl p-4">
+          <h3 className="font-semibold text-white mb-3">Token Authorities</h3>
+          <div className="grid grid-cols-2 gap-3 text-sm">
             <div>
-              <p className="text-zinc-500">Wallet Age</p>
-              <p className="text-white">{creatorInfo.walletAge} days</p>
-            </div>
-            <div>
-              <p className="text-zinc-500">Tokens Created</p>
-              <p className="text-white">{creatorInfo.tokensCreated}</p>
-            </div>
-            <div>
-              <p className="text-zinc-500">Previous Rugs</p>
-              <p className={creatorInfo.ruggedTokens > 0 ? 'text-red-400 font-semibold' : 'text-white'}>
-                {creatorInfo.ruggedTokens}
+              <p className="text-zinc-500 text-xs">Mint Authority</p>
+              <p className={authorities.mintRevoked ? 'text-green-400' : 'text-red-400'}>
+                {authorities.mintRevoked ? 'Revoked' : 'Active'}
               </p>
             </div>
             <div>
-              <p className="text-zinc-500">Current Holdings</p>
-              <p className={creatorInfo.currentHoldings > 10 ? 'text-yellow-400' : 'text-white'}>
-                {creatorInfo.currentHoldings.toFixed(1)}%
+              <p className="text-zinc-500 text-xs">Freeze Authority</p>
+              <p className={authorities.freezeRevoked ? 'text-green-400' : 'text-red-400'}>
+                {authorities.freezeRevoked ? 'Revoked' : 'Active'}
               </p>
             </div>
           </div>
-          <p className="mt-2 font-mono text-xs text-zinc-500 break-all">
-            {creatorInfo.address}
-          </p>
+        </div>
+      )}
+
+      {/* Socials */}
+      {socials && (socials.website || socials.twitter || socials.telegram) && (
+        <div className="bg-argus-card border border-argus-border rounded-xl p-4">
+          <h3 className="font-semibold text-white mb-3">Social Links</h3>
+          <div className="flex flex-wrap gap-2">
+            {socials.website && (
+              <a href={socials.website} target="_blank" rel="noopener noreferrer"
+                className="px-3 py-1.5 bg-argus-bg rounded-lg text-sm text-zinc-300 hover:text-white flex items-center gap-2">
+                <i className="fa-solid fa-globe"></i>
+                Website
+              </a>
+            )}
+            {socials.twitter && (
+              <a href={socials.twitter} target="_blank" rel="noopener noreferrer"
+                className="px-3 py-1.5 bg-argus-bg rounded-lg text-sm text-zinc-300 hover:text-white flex items-center gap-2">
+                <i className="fa-brands fa-x-twitter"></i>
+                Twitter
+              </a>
+            )}
+            {socials.telegram && (
+              <a href={socials.telegram} target="_blank" rel="noopener noreferrer"
+                className="px-3 py-1.5 bg-argus-bg rounded-lg text-sm text-zinc-300 hover:text-white flex items-center gap-2">
+                <i className="fa-brands fa-telegram"></i>
+                Telegram
+              </a>
+            )}
+          </div>
         </div>
       )}
 
       {/* Risk Flags */}
-      {analysis.flags.length > 0 && (
+      {result.flags && result.flags.length > 0 && (
         <div className="bg-argus-card border border-argus-border rounded-xl p-4">
           <h3 className="font-semibold text-white mb-3">
-            Risk Flags ({analysis.flags.length})
+            Risk Flags ({result.flags.length})
           </h3>
           <div className="space-y-2">
-            {analysis.flags.map((flag, i) => (
+            {result.flags.map((flag, i) => (
               <FlagItem key={i} flag={flag} />
             ))}
           </div>

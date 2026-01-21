@@ -434,25 +434,23 @@ function applyHardcodedRules(
   // If dev exited and token has sustained activity, it's actually safer
   // The PROACTIVE risk is in RULE 10 (current holdings)
   const { devSelling } = data;
+  let isCommunityOwned = false; // Track this for later rules
 
   if (devSelling && devSelling.hasSold) {
     const { percentSold, currentHoldingsPercent } = devSelling;
 
     // If dev sold 100% and holds 0%, token is "community-owned"
     if (percentSold >= 90 && currentHoldingsPercent === 0) {
-      // Dev has completely exited - this is NEUTRAL/POSITIVE for new buyers
-      // Only flag as info, don't increase score
+      isCommunityOwned = true;
+      // Dev has completely exited - this is POSITIVE for new buyers
       additionalFlags.push({
         type: 'DEPLOYER',
         severity: 'LOW',
         message: `Dev has exited (sold ${percentSold.toFixed(0)}%) - token is community-owned`,
       });
-      // Give slight credit if token has sustained activity after dev exit
-      if (marketCapUsd > 100000 && liquidityUsd > 10000) {
-        if (adjustedScore > 50) {
-          adjustedScore -= 5; // Credit for surviving dev exit
-        }
-      }
+      // Significant credit for dev exit - no one to rug
+      adjustedScore -= 15;
+      console.log(`[Rules] Community-owned token (dev exited) - credit -15 applied - new score: ${adjustedScore}`);
     } else if (percentSold >= 50 && currentHoldingsPercent > 0) {
       // Dev sold significant amount but STILL HOLDS some - mixed signal
       additionalFlags.push({
@@ -614,20 +612,28 @@ function applyHardcodedRules(
   }
 
   // ============================================
-  // RULE 11.6: BUNDLE PENALTY (+15 for ANY bundle detection)
+  // RULE 11.6: BUNDLE PENALTY (CONDITIONAL)
   // ============================================
-  // Bundle activity is a PRIMARY rug indicator - this is how scammers coordinate buys
-  // Any bundle activity adds +15 risk points - bundling is always suspicious
-  // This applies ON TOP of the minimum score rules above
+  // Bundle activity is suspicious BUT context matters:
+  // - If dev still holds tokens: bundles are HIGH risk (coordinated rug setup)
+  // - If community-owned (dev exited): bundles are LOWER risk (just traders/bots)
   if (bundleDetectedFromHelius) {
-    adjustedScore += 15;
-    console.log(`[Rules] Bundle penalty +15 applied (Helius detected bundles) - new score: ${adjustedScore}`);
+    if (isCommunityOwned) {
+      // Community-owned: bundles are less concerning (no dev to coordinate with)
+      // Still add small penalty but not the full amount
+      adjustedScore += 5;
+      console.log(`[Rules] Bundle penalty +5 applied (community-owned, reduced penalty) - new score: ${adjustedScore}`);
+    } else {
+      // Dev still active: bundles are HIGH risk
+      adjustedScore += 15;
+      console.log(`[Rules] Bundle penalty +15 applied (dev active) - new score: ${adjustedScore}`);
+    }
   }
 
   // ============================================
-  // RULE 11.7: AI BUNDLE MENTION PENALTY (+10)
+  // RULE 11.7: AI BUNDLE MENTION PENALTY (CONDITIONAL)
   // ============================================
-  // If AI mentions bundles in text but we didn't detect via Helius, add +10
+  // If AI mentions bundles in text but we didn't detect via Helius, add penalty
   // This catches cases where AI sees bundle patterns we missed
   const bundleKeywords = ['bundle', 'bundled', 'coordinated wallet', 'same slot', 'sniping'];
   const aiTextToSearch = [
@@ -638,16 +644,19 @@ function applyHardcodedRules(
   const aiBundleMentioned = bundleKeywords.some(keyword => aiTextToSearch.includes(keyword));
 
   if (aiBundleMentioned && !bundleDetectedFromHelius) {
-    // AI mentioned bundles but Helius didn't detect them - add penalty
-    adjustedScore += 10;
-    additionalFlags.push({
-      type: 'BUNDLE',
-      severity: 'HIGH',
-      message: 'AI detected potential bundle/coordinated activity',
-    });
-    console.log(`[Rules] AI bundle mention penalty +10 applied - new score: ${adjustedScore}`);
-  } else if (aiBundleMentioned && bundleDetectedFromHelius) {
-    // Both detected - add another +10 for double confirmation (strong rug signal)
+    // AI mentioned bundles but Helius didn't detect them
+    const penalty = isCommunityOwned ? 3 : 10;
+    adjustedScore += penalty;
+    if (!isCommunityOwned) {
+      additionalFlags.push({
+        type: 'BUNDLE',
+        severity: 'HIGH',
+        message: 'AI detected potential bundle/coordinated activity',
+      });
+    }
+    console.log(`[Rules] AI bundle mention penalty +${penalty} applied - new score: ${adjustedScore}`);
+  } else if (aiBundleMentioned && bundleDetectedFromHelius && !isCommunityOwned) {
+    // Both detected AND dev active - add another +10 for double confirmation
     adjustedScore += 10;
     console.log(`[Rules] AI bundle confirmation penalty +10 applied - new score: ${adjustedScore}`);
   }
@@ -877,6 +886,49 @@ function applyHardcodedRules(
       }
     } else {
       console.log(`[Rules] Skipping good fundamentals credit - insufficient verified data or distribution`);
+    }
+  }
+
+  // ============================================
+  // RULE 13.5: COMMUNITY-OWNED TOKEN CAP
+  // ============================================
+  // If token is community-owned (dev exited 100%) with good signals,
+  // cap the score at 55 (SUSPICIOUS) max - no one to rug!
+  if (isCommunityOwned) {
+    const hasSocials = hasTwitter || hasWebsite;
+    const hasGoodDistribution = data.holderData &&
+      data.holderData.top1NonLpHolderPercent < 10 && // No whale > 10%
+      data.holderData.top10NonLpHolderPercent >= 10; // Real distribution
+    const hasLiquidity = liquidityUsd >= 25000;
+
+    // Count positive signals
+    let positiveSignals = 0;
+    if (hasSocials) positiveSignals++;
+    if (hasGoodDistribution) positiveSignals++;
+    if (hasLiquidity) positiveSignals++;
+    if (!data.hasMintAuthority && !data.hasFreezeAuthority) positiveSignals++;
+
+    // With 2+ positive signals, cap at 55 (SUSPICIOUS)
+    // With 3+ positive signals, cap at 50 (borderline SAFE)
+    if (positiveSignals >= 3 && adjustedScore > 50) {
+      console.log(`[Rules] Community-owned token with ${positiveSignals} positive signals - capping at 50`);
+      adjustedScore = 50;
+      additionalFlags.push({
+        type: 'DEPLOYER',
+        severity: 'LOW',
+        message: `Community token with strong fundamentals - reduced risk`,
+      });
+    } else if (positiveSignals >= 2 && adjustedScore > 55) {
+      console.log(`[Rules] Community-owned token with ${positiveSignals} positive signals - capping at 55`);
+      adjustedScore = 55;
+      additionalFlags.push({
+        type: 'DEPLOYER',
+        severity: 'LOW',
+        message: `Community token with good fundamentals`,
+      });
+    } else if (positiveSignals >= 1 && adjustedScore > 65) {
+      console.log(`[Rules] Community-owned token with ${positiveSignals} positive signal - capping at 65`);
+      adjustedScore = 65;
     }
   }
 

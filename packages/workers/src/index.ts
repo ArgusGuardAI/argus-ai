@@ -8,6 +8,7 @@ import { authRoutes } from './routes/auth';
 import { trendsRoutes } from './routes/trends';
 import scoresRoutes from './routes/scores';
 import { sentinelRoutes } from './routes/sentinel';
+import { jupiterRoutes } from './routes/jupiter';
 
 export type Bindings = {
   SCAN_CACHE: KVNamespace;
@@ -161,6 +162,7 @@ app.route('/auth', authRoutes);
 app.route('/trends', trendsRoutes);
 app.route('/scores', scoresRoutes);
 app.route('/sentinel', sentinelRoutes);
+app.route('/jupiter', jupiterRoutes);
 
 // 404 handler
 app.notFound((c) => {

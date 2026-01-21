@@ -63,15 +63,26 @@ function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     setIsLoading(true);
+    const walletAddress = publicKey.toBase58();
+    console.log('[Auth] Checking status for wallet:', walletAddress);
+
     try {
-      const response = await fetch(`${API_URL}/auth/status?wallet=${publicKey.toBase58()}`);
+      const url = `${API_URL}/auth/status?wallet=${walletAddress}`;
+      console.log('[Auth] Fetching:', url);
+      const response = await fetch(url);
+      console.log('[Auth] Response status:', response.status);
+
       if (response.ok) {
         const data = await response.json();
+        console.log('[Auth] Response data:', data);
         setTokenBalance(data.tokenBalance || 0);
-        setIsSubscribed(data.isSubscribed || false);
+        setIsSubscribed(data.isSubscribed === true);
+        console.log('[Auth] Set isSubscribed to:', data.isSubscribed === true);
+      } else {
+        console.error('[Auth] Response not OK:', await response.text());
       }
     } catch (error) {
-      console.error('Failed to check auth status:', error);
+      console.error('[Auth] Failed to check auth status:', error);
     } finally {
       setIsLoading(false);
     }
@@ -79,18 +90,26 @@ function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (connected && publicKey) {
+      console.log('[Auth] Wallet connected, refreshing auth...');
       refreshAuth();
     } else {
+      console.log('[Auth] Wallet disconnected, resetting state');
       setTokenBalance(0);
       setIsSubscribed(false);
     }
-  }, [connected, publicKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connected, publicKey?.toBase58()]);
 
   // Calculate tier
   const tier: UserTier = useMemo(() => {
-    if (isSubscribed || tokenBalance >= PRO_THRESHOLD) return 'pro';
-    if (tokenBalance >= HOLDER_THRESHOLD) return 'holder';
-    return 'free';
+    let calculatedTier: UserTier = 'free';
+    if (isSubscribed || tokenBalance >= PRO_THRESHOLD) {
+      calculatedTier = 'pro';
+    } else if (tokenBalance >= HOLDER_THRESHOLD) {
+      calculatedTier = 'holder';
+    }
+    console.log('[Auth] Tier calculation:', { isSubscribed, tokenBalance, calculatedTier });
+    return calculatedTier;
   }, [tokenBalance, isSubscribed]);
 
   // Max scans based on tier

@@ -86,7 +86,7 @@ scoresRoutes.get('/', async (c) => {
         tokensCreated?: number;
         ruggedTokens?: number;
       };
-      flags?: unknown[];
+      flags?: Array<{ type?: string; severity?: string; message?: string }>;
     } | null;
 
     if (cachedData && cachedData.riskScore !== undefined) {
@@ -174,7 +174,7 @@ scoresRoutes.post('/', async (c) => {
         tokensCreated?: number;
         ruggedTokens?: number;
       };
-      flags?: unknown[];
+      flags?: Array<{ type?: string; severity?: string; message?: string }>;
     } | null;
 
     if (cachedData && cachedData.riskScore !== undefined) {

@@ -6,54 +6,24 @@ export interface WalletNode {
   holdingsPercent?: number;
   isHighRisk?: boolean;
   txCount?: number;
-  // Timeline data
-  firstTxTime?: number; // Unix timestamp of first transaction
-  lastTxTime?: number; // Unix timestamp of last transaction
-  buyTime?: number; // When they bought
-  sellTime?: number; // When they sold (if applicable)
-  fundedBy?: string; // Address that funded this wallet
-  solReceived?: number; // Amount of SOL received from funder
+  firstTxTime?: number;
+  lastTxTime?: number;
+  buyTime?: number;
+  sellTime?: number;
+  fundedBy?: string;
+  solReceived?: number;
 }
 
 export interface WalletLink {
   source: string;
   target: string;
   type: 'created' | 'holds' | 'funded' | 'coordinated';
-  value: number; // Strength of connection
+  value: number;
 }
 
 export interface NetworkData {
   nodes: WalletNode[];
   links: WalletLink[];
-}
-
-export interface TokenInfo {
-  address: string;
-  name: string;
-  symbol: string;
-  price?: number;
-  marketCap?: number;
-  liquidity?: number;
-  age?: number; // days
-  holderCount?: number;
-  priceChange24h?: number;
-  volume24h?: number;
-  txns24h?: {
-    buys: number;
-    sells: number;
-  };
-}
-
-export interface HolderDistribution {
-  address: string;
-  percent: number;
-  type: 'creator' | 'whale' | 'insider' | 'lp' | 'normal';
-}
-
-export interface BundleInfo {
-  detected: boolean;
-  count: number;
-  description?: string;
 }
 
 export interface RiskFlag {
@@ -62,28 +32,66 @@ export interface RiskFlag {
   message: string;
 }
 
-export interface AIAnalysis {
-  riskScore: number;
-  riskLevel: 'SAFE' | 'SUSPICIOUS' | 'DANGEROUS' | 'SCAM';
-  summary: string;
-  prediction: string;
-  recommendation?: string;
-  flags: RiskFlag[];
-  networkInsights: string[];
+export interface MarketData {
+  name?: string;
+  symbol?: string;
+  priceUsd?: number;
+  priceChange24h?: number;
+  marketCap?: number;
+  liquidity?: number;
+  volume24h?: number;
+  txns24h?: {
+    buys: number;
+    sells: number;
+  };
+  dex?: string;
+  ageInDays?: number;
 }
 
+export interface HolderData {
+  topHolder?: number;
+  top10Holders?: number;
+  top1NonLp?: number;
+  top10NonLp?: number;
+  totalHolders?: number;
+}
+
+export interface CreatorData {
+  address?: string;
+  walletAge?: number;
+  tokensCreated?: number;
+  ruggedTokens?: number;
+  currentHoldings?: number;
+}
+
+export interface SocialsData {
+  website?: string;
+  twitter?: string;
+  telegram?: string;
+}
+
+export interface AuthoritiesData {
+  mintRevoked?: boolean;
+  freezeRevoked?: boolean;
+}
+
+// This matches the actual API response
 export interface AnalysisResult {
-  tokenInfo: TokenInfo;
-  network: NetworkData;
-  analysis: AIAnalysis;
-  creatorInfo?: {
-    address: string;
-    walletAge: number;
-    tokensCreated: number;
-    ruggedTokens: number;
-    currentHoldings: number;
-  };
-  holderDistribution?: HolderDistribution[];
-  bundleInfo?: BundleInfo;
-  timestamp: number;
+  tokenAddress: string;
+  riskLevel: 'SAFE' | 'SUSPICIOUS' | 'DANGEROUS' | 'SCAM';
+  riskScore: number;
+  confidence?: number;
+  flags: RiskFlag[];
+  summary: string;
+  checkedAt?: number;
+  cached?: boolean;
+  market?: MarketData;
+  holders?: HolderData;
+  creator?: CreatorData | null;
+  devSelling?: unknown;
+  insiders?: unknown;
+  socials?: SocialsData;
+  authorities?: AuthoritiesData;
+  // Optional network data (not currently returned by API)
+  network?: NetworkData;
 }

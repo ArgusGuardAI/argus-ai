@@ -42,7 +42,7 @@ authRoutes.get('/status', async (c) => {
     try {
       const supabase = createSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_ANON_KEY);
       const { data } = await supabase
-        .from('subscriptions')
+        .from('subscribers')
         .select('status, current_period_end')
         .eq('wallet_address', wallet)
         .single();
@@ -105,7 +105,7 @@ authRoutes.get('/usage', async (c) => {
       try {
         const supabase = createSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_ANON_KEY);
         const { data } = await supabase
-          .from('subscriptions')
+          .from('subscribers')
           .select('status, current_period_end')
           .eq('wallet_address', wallet)
           .single();

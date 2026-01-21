@@ -90,7 +90,7 @@ export async function getUserTier(
     });
 
     if (response.ok) {
-      const data = await response.json();
+      const data = await response.json() as Array<{ status: string; current_period_end: string }> | null;
       if (data && data.length > 0 && data[0].status === 'active') {
         const periodEnd = new Date(data[0].current_period_end);
         isSubscribed = periodEnd > new Date();

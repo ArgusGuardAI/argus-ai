@@ -85,54 +85,6 @@ export function NetworkGraph({ data }: Props) {
       }
     });
 
-    // Calculate summaries
-    const highRiskCount = data.nodes.filter(n => n.isHighRisk).length;
-    const bundleCount = bundleWallets.size;
-
-    // Add summary badges at top
-    if (bundleCount >= 4) {
-      svg.append('rect')
-        .attr('x', 10)
-        .attr('y', 8)
-        .attr('width', 140)
-        .attr('height', 24)
-        .attr('fill', 'rgba(168, 85, 247, 0.15)')
-        .attr('stroke', '#a855f7')
-        .attr('stroke-width', 1)
-        .attr('rx', 4);
-
-      svg.append('text')
-        .attr('x', 80)
-        .attr('y', 24)
-        .attr('text-anchor', 'middle')
-        .attr('fill', '#a855f7')
-        .attr('font-size', '11px')
-        .attr('font-weight', '600')
-        .text(`⚠ ${bundleCount} bundled wallets`);
-    }
-
-    if (highRiskCount > 0) {
-      const riskBadgeX = bundleCount >= 4 ? 160 : 10;
-      svg.append('rect')
-        .attr('x', riskBadgeX)
-        .attr('y', 8)
-        .attr('width', 110)
-        .attr('height', 24)
-        .attr('fill', 'rgba(255, 68, 68, 0.15)')
-        .attr('stroke', '#ff4444')
-        .attr('stroke-width', 1)
-        .attr('rx', 4);
-
-      svg.append('text')
-        .attr('x', riskBadgeX + 55)
-        .attr('y', 24)
-        .attr('text-anchor', 'middle')
-        .attr('fill', '#ff4444')
-        .attr('font-size', '11px')
-        .attr('font-weight', '600')
-        .text(`⚠ ${highRiskCount} high-risk`);
-    }
-
     // Create nodes and links with proper typing
     const nodes: SimNode[] = data.nodes.map(d => ({ ...d }));
     const links: SimLink[] = data.links.map(d => ({ ...d }));
@@ -334,8 +286,8 @@ export function NetworkGraph({ data }: Props) {
   return (
     <div ref={containerRef} className="w-full h-full relative">
       <svg ref={svgRef} className="w-full h-full" />
-      {/* Legend - Centered with Font Awesome icons */}
-      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-argus-bg/95 border border-argus-border rounded-lg px-4 py-2.5 text-xs backdrop-blur-sm">
+      {/* Legend - Raised above TokenInfoBar */}
+      <div className="absolute bottom-20 left-1/2 -translate-x-1/2 bg-argus-bg/95 border border-argus-border rounded-lg px-4 py-2.5 text-xs backdrop-blur-sm">
         <div className="flex items-center gap-5">
           <div className="flex items-center gap-2">
             <i className="fa-solid fa-coins text-argus-accent"></i>
