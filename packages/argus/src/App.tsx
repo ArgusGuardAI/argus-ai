@@ -340,14 +340,6 @@ function App() {
               analysis exposes coordinated manipulation and predicts outcomes.
             </p>
 
-            {/* Free tier notice */}
-            {!connected && (
-              <p className="text-zinc-500 text-xs mb-4">
-                <i className="fa-solid fa-wallet text-argus-accent/50 mr-1" />
-                Connect wallet for unlimited scans
-              </p>
-            )}
-
             {/* Preview of visualization types */}
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4 max-w-2xl">
               {visualizations.map((viz) => (
