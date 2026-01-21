@@ -1,11 +1,159 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Shield, Settings as SettingsIcon, Zap, Search, AlertTriangle, CheckCircle, XCircle, ExternalLink, Copy, Check, Loader2, Wallet, TrendingUp, Target, BarChart3, Clock, Bell, X } from 'lucide-react';
+import { Shield, Settings as SettingsIcon, Zap, Search, AlertTriangle, CheckCircle, XCircle, ExternalLink, Copy, Check, Loader2, Wallet, TrendingUp, Target, BarChart3, Clock, Bell, X, Crown, Lock } from 'lucide-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { Settings } from './components/Settings';
 import { useWebSocket } from './hooks/useWebSocket';
 import { executeBuy, executeSell } from './lib/swap';
 import type { Position, SniperConfig } from './types';
+
+// API URL for auth checks
+const API_URL = import.meta.env.VITE_API_URL || 'https://api.argusguard.io';
+
+// Pro tier thresholds
+const PRO_TOKEN_THRESHOLD = 10000;
+
+// Hook to check user's tier
+function useAuthTier() {
+  const { publicKey, connected } = useWallet();
+  const [tier, setTier] = useState<'free' | 'holder' | 'pro'>('free');
+  const [tokenBalance, setTokenBalance] = useState(0);
+  const [isSubscribed, setIsSubscribed] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    async function checkAuth() {
+      if (!connected || !publicKey) {
+        setTier('free');
+        setTokenBalance(0);
+        setIsSubscribed(false);
+        return;
+      }
+
+      setLoading(true);
+      try {
+        const response = await fetch(`${API_URL}/auth/status?wallet=${publicKey.toBase58()}`);
+        if (response.ok) {
+          const data = await response.json();
+          setTokenBalance(data.tokenBalance || 0);
+          setIsSubscribed(data.isSubscribed || false);
+          setTier(data.tier || 'free');
+        }
+      } catch (error) {
+        console.error('[Auth] Failed to check status:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    checkAuth();
+  }, [connected, publicKey]);
+
+  return { tier, tokenBalance, isSubscribed, loading, isPro: tier === 'pro' };
+}
+
+// Pro Paywall Component
+function ProPaywall() {
+  const { publicKey } = useWallet();
+
+  const handleSubscribe = async () => {
+    if (!publicKey) return;
+
+    try {
+      const response = await fetch(`${API_URL}/subscribe/create-checkout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          walletAddress: publicKey.toBase58(),
+          successUrl: window.location.origin + '?upgraded=true',
+          cancelUrl: window.location.origin,
+        }),
+      });
+      const data = await response.json();
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+      }
+    } catch (err) {
+      console.error('Failed to create checkout:', err);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-dark-950 flex items-center justify-center p-6">
+      <div className="fixed inset-0 tech-grid opacity-20 pointer-events-none" />
+
+      <div className="relative z-10 max-w-lg w-full">
+        <div className="cyber-border rounded-2xl p-8 bg-dark-800/80 backdrop-blur-xl text-center">
+          <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center mx-auto mb-6">
+            <Crown className="w-10 h-10 text-white" />
+          </div>
+
+          <h1 className="text-3xl font-bold font-cyber mb-2">
+            <span className="gradient-text">SNIPER BOT</span>
+          </h1>
+          <p className="text-gray-400 mb-6">Pro Feature - Requires Subscription</p>
+
+          <div className="bg-dark-900/50 rounded-xl p-4 mb-6">
+            <div className="flex items-center justify-center gap-3 mb-4">
+              <Lock className="w-5 h-5 text-amber-400" />
+              <span className="text-sm text-gray-300">Unlock instant token sniping</span>
+            </div>
+
+            <ul className="text-sm text-left space-y-2 text-gray-400">
+              <li className="flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-green-400" />
+                AI-powered risk analysis
+              </li>
+              <li className="flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-green-400" />
+                Instant buy execution
+              </li>
+              <li className="flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-green-400" />
+                Take-profit & stop-loss alerts
+              </li>
+              <li className="flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-green-400" />
+                Trailing stop automation
+              </li>
+              <li className="flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-green-400" />
+                Position tracking & PnL
+              </li>
+            </ul>
+          </div>
+
+          <div className="space-y-3">
+            {publicKey ? (
+              <button
+                onClick={handleSubscribe}
+                className="w-full py-4 bg-gradient-to-r from-amber-500 to-orange-600 text-white font-bold font-cyber rounded-xl hover:opacity-90 transition flex items-center justify-center gap-2"
+              >
+                <Crown className="w-5 h-5" />
+                SUBSCRIBE $19.99/mo
+              </button>
+            ) : (
+              <WalletMultiButton className="!w-full !py-4 !bg-gradient-to-r !from-cyber-blue !to-cyber-purple !rounded-xl !font-bold !font-cyber" />
+            )}
+
+            <p className="text-xs text-gray-500">
+              Or hold {PRO_TOKEN_THRESHOLD.toLocaleString()}+ $ARGUSGUARD tokens
+            </p>
+          </div>
+
+          <div className="mt-6 pt-6 border-t border-dark-600">
+            <a
+              href="https://argusguard.io"
+              className="text-sm text-cyber-blue hover:underline"
+            >
+              Learn more about ArgusGuard
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const DEFAULT_CONFIG: SniperConfig = {
   // Basic Settings
@@ -125,7 +273,7 @@ function savePositions(positions: Position[]) {
   }
 }
 
-export default function App() {
+function SniperApp() {
   const { publicKey, signTransaction } = useWallet();
   const [positions, setPositions] = useState<Position[]>(loadPositions);
   const [config, setConfig] = useState<SniperConfig>(DEFAULT_CONFIG);
@@ -947,4 +1095,31 @@ export default function App() {
       )}
     </div>
   );
+}
+
+// Main App with Pro tier gating
+export default function App() {
+  const { isPro, loading } = useAuthTier();
+  const { connected } = useWallet();
+
+  // Show loading state while checking auth
+  if (connected && loading) {
+    return (
+      <div className="min-h-screen bg-dark-950 flex items-center justify-center">
+        <div className="fixed inset-0 tech-grid opacity-20 pointer-events-none" />
+        <div className="text-center relative z-10">
+          <Loader2 className="w-12 h-12 text-cyber-blue animate-spin mx-auto mb-4" />
+          <p className="text-gray-400">Checking subscription status...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show paywall if not Pro tier
+  if (!isPro) {
+    return <ProPaywall />;
+  }
+
+  // Show the sniper app for Pro users
+  return <SniperApp />;
 }

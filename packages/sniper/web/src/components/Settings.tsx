@@ -1,4 +1,4 @@
-import { X, Shield, Zap, Target, TrendingUp, Layers, Timer, Rocket } from 'lucide-react';
+import { X, Shield, Zap, Target, TrendingUp, Layers, Rocket } from 'lucide-react';
 import { useState } from 'react';
 import type { SniperConfig } from '../types';
 
