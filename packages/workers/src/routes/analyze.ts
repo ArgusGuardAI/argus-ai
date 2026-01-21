@@ -19,6 +19,7 @@ import {
   InsiderAnalysis,
   TransactionAnalysis,
 } from '../services/helius';
+import { checkRateLimit, getUserTier, getClientIP } from '../services/rate-limit';
 
 interface AnalysisData {
   dexScreener: DexScreenerData | null;
@@ -960,11 +961,48 @@ export const analyzeRoutes = new Hono<{ Bindings: Bindings }>();
 
 analyzeRoutes.post('/', async (c) => {
   try {
-    const body = await c.req.json<HoneypotAnalysisRequest & { forceRefresh?: boolean }>();
+    const body = await c.req.json<HoneypotAnalysisRequest & { forceRefresh?: boolean; walletAddress?: string }>();
 
     if (!body.tokenAddress) {
       return c.json({ error: 'tokenAddress is required' }, 400);
     }
+
+    // ============================================
+    // RATE LIMITING CHECK
+    // ============================================
+    const walletAddress = body.walletAddress || c.req.header('X-Wallet-Address') || null;
+    const clientIP = getClientIP(c.req.raw);
+
+    // Determine user tier
+    const { tier } = await getUserTier(
+      walletAddress,
+      c.env.ARGUSGUARD_MINT,
+      c.env.HELIUS_API_KEY,
+      c.env.SUPABASE_URL,
+      c.env.SUPABASE_ANON_KEY
+    );
+
+    // Use wallet address if connected, otherwise use IP
+    const rateLimitIdentifier = walletAddress || clientIP;
+
+    // Check rate limit
+    const rateLimitResult = await checkRateLimit(c.env.SCAN_CACHE, rateLimitIdentifier, tier);
+
+    if (!rateLimitResult.allowed) {
+      return c.json({
+        error: rateLimitResult.error,
+        tier,
+        remaining: rateLimitResult.remaining,
+        limit: rateLimitResult.limit,
+        resetAt: rateLimitResult.resetAt,
+      }, 429);
+    }
+
+    // Add rate limit headers to response
+    c.header('X-RateLimit-Limit', String(rateLimitResult.limit));
+    c.header('X-RateLimit-Remaining', String(rateLimitResult.remaining));
+    c.header('X-RateLimit-Reset', String(rateLimitResult.resetAt));
+    c.header('X-User-Tier', tier);
 
     // Check KV cache first (unless force refresh requested)
     const cacheKey = `scan:${body.tokenAddress}`;

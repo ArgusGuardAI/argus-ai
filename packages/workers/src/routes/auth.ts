@@ -6,6 +6,7 @@ import { Hono } from 'hono';
 import type { Bindings } from '../index';
 import { checkTokenBalance } from '../services/auth';
 import { createSupabaseClient } from '../services/supabase';
+import { getUsage, getClientIP } from '../services/rate-limit';
 
 export const authRoutes = new Hono<{ Bindings: Bindings }>();
 
@@ -75,6 +76,74 @@ authRoutes.get('/status', async (c) => {
   } catch (error) {
     console.error('Auth status error:', error);
     return c.json({ error: 'Failed to check auth status' }, 500);
+  }
+});
+
+// Get rate limit usage for a user
+authRoutes.get('/usage', async (c) => {
+  const wallet = c.req.query('wallet');
+  const clientIP = getClientIP(c.req.raw);
+
+  try {
+    // Check token balance and determine tier
+    let tokenBalance = 0;
+    let isSubscribed = false;
+    const mintAddress = c.env.ARGUSGUARD_MINT;
+
+    if (wallet && mintAddress && mintAddress !== 'TBD_AFTER_LAUNCH') {
+      const balanceResult = await checkTokenBalance(
+        wallet,
+        mintAddress,
+        0,
+        c.env.HELIUS_API_KEY
+      );
+      tokenBalance = balanceResult.balance;
+    }
+
+    // Check subscription status
+    if (wallet) {
+      try {
+        const supabase = createSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_ANON_KEY);
+        const { data } = await supabase
+          .from('subscriptions')
+          .select('status, current_period_end')
+          .eq('wallet_address', wallet)
+          .single();
+
+        if (data && data.status === 'active') {
+          const periodEnd = new Date(data.current_period_end);
+          isSubscribed = periodEnd > new Date();
+        }
+      } catch {
+        // No subscription found
+      }
+    }
+
+    // Calculate tier
+    let tier: 'free' | 'holder' | 'pro' = 'free';
+    if (isSubscribed || tokenBalance >= PRO_THRESHOLD) {
+      tier = 'pro';
+    } else if (tokenBalance >= HOLDER_THRESHOLD) {
+      tier = 'holder';
+    }
+
+    // Get usage stats
+    const identifier = wallet || clientIP;
+    const usage = await getUsage(c.env.SCAN_CACHE, identifier, tier);
+
+    return c.json({
+      tier,
+      tokenBalance,
+      isSubscribed,
+      usage: {
+        used: usage.used,
+        limit: usage.limit === Infinity ? 'unlimited' : usage.limit,
+        remaining: usage.remaining === Infinity ? 'unlimited' : usage.remaining,
+      },
+    });
+  } catch (error) {
+    console.error('Usage check error:', error);
+    return c.json({ error: 'Failed to check usage' }, 500);
   }
 });
 
