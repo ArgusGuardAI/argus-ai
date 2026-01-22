@@ -453,15 +453,71 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
     const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]);
-      const score = Math.max(0, Math.min(100, parsed.riskScore || 50));
+      let score = Math.max(0, Math.min(100, parsed.riskScore || 50));
+      const aiFlags = parsed.flags || [];
+      const aiInsights = parsed.networkInsights || [];
+
+      // ============================================
+      // POST-AI COMPOUNDING (always applies)
+      // ============================================
+      const isNewWallet = creatorInfo?.walletAge !== undefined && creatorInfo.walletAge < 7;
+      const hasBundleDetection = bundleInfo.confidence === 'HIGH' || bundleInfo.confidence === 'MEDIUM';
+      const hasWhale = whales.length > 0;
+      const topWhalePercent = whales[0]?.holdingsPercent || 0;
+
+      console.log(`[Sentinel] Post-AI check: newWallet=${isNewWallet}, bundle=${hasBundleDetection} (${bundleInfo.confidence}), whale=${hasWhale} (${topWhalePercent.toFixed(1)}%)`);
+
+      // Count risk factors
+      let riskFactors = 0;
+      if (isNewWallet) riskFactors++;
+      if (hasBundleDetection) riskFactors++;
+      if (hasWhale && topWhalePercent >= 10) riskFactors++;
+
+      // Apply compounding based on number of factors (non-stacking)
+      if (riskFactors >= 3) {
+        // Triple threat: New wallet + Bundle + Whale
+        score += 20;
+        aiFlags.push({
+          type: 'SCAM PATTERN',
+          severity: 'CRITICAL',
+          message: `🚨 High-risk combo: New wallet + Bundle + Whale (${topWhalePercent.toFixed(1)}%)`,
+        });
+        console.log(`[Sentinel] TRIPLE THREAT = +20 (now ${score})`);
+      } else if (riskFactors === 2) {
+        // Double threat
+        score += 10;
+        console.log(`[Sentinel] Double risk factor = +10 (now ${score})`);
+      }
+
+      // Enforce minimums based on patterns
+      // Triple threat = minimum 65 (DANGEROUS)
+      if (riskFactors >= 3 && score < 65) {
+        console.log(`[Sentinel] Enforcing minimum 65 for triple threat (was ${score})`);
+        score = 65;
+      }
+
+      // HIGH confidence bundle = minimum 70 (DANGEROUS)
+      if (bundleInfo.confidence === 'HIGH' && score < 70) {
+        console.log(`[Sentinel] Enforcing minimum 70 for HIGH bundle (was ${score})`);
+        score = 70;
+      }
+
+      score = Math.min(100, score);
+
+      // Recalculate risk level based on adjusted score
+      let riskLevel: 'SAFE' | 'SUSPICIOUS' | 'DANGEROUS' | 'SCAM' = 'SAFE';
+      if (score >= 80) riskLevel = 'SCAM';
+      else if (score >= 60) riskLevel = 'DANGEROUS';
+      else if (score >= 40) riskLevel = 'SUSPICIOUS';
+
       return {
         riskScore: score,
-        riskLevel: parsed.riskLevel || 'SUSPICIOUS',
+        riskLevel,
         summary: parsed.summary || 'Analysis completed.',
         prediction: parsed.prediction || 'Unable to predict.',
         recommendation: generateRecommendation(score, bundleInfo.detected, bundleInfo.count),
-        flags: parsed.flags || [],
-        networkInsights: parsed.networkInsights || [],
+        flags: aiFlags,
+        networkInsights: aiInsights,
       };
     }
   } catch (error) {
@@ -576,6 +632,90 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
   networkInsights.push(`${network.nodes.length} wallets in network`);
   if (whales.length > 0) {
     networkInsights.push(`Top whale holds ${whales[0]?.holdingsPercent?.toFixed(1)}%`);
+  }
+
+  // ============================================
+  // COMPOUNDING RISK FACTORS
+  // ============================================
+  // When multiple red flags combine, the risk is much higher
+  const isNewWallet = creatorInfo?.walletAge !== undefined && creatorInfo.walletAge < 7;
+  const hasBundleDetection = bundleInfo.confidence === 'HIGH' || bundleInfo.confidence === 'MEDIUM';
+  const hasWhale = whales.length > 0;
+  const topWhalePercent = whales[0]?.holdingsPercent || 0;
+
+  console.log(`[Sentinel] Compounding check: newWallet=${isNewWallet}, bundle=${hasBundleDetection} (${bundleInfo.confidence}), whale=${hasWhale} (${topWhalePercent.toFixed(1)}%)`);
+
+  // New wallet + Bundle = coordinated scam setup
+  if (isNewWallet && hasBundleDetection) {
+    riskScore += 15;
+    console.log(`[Sentinel] Compounding: New wallet + Bundle = +15`);
+  }
+
+  // New wallet + Whale = likely insider accumulation
+  if (isNewWallet && hasWhale && topWhalePercent >= 10) {
+    riskScore += 15;
+    console.log(`[Sentinel] Compounding: New wallet + Whale = +15`);
+  }
+
+  // Bundle + Whale = coordinated pump before dump
+  if (hasBundleDetection && hasWhale && topWhalePercent >= 10) {
+    riskScore += 15;
+    console.log(`[Sentinel] Compounding: Bundle + Whale = +15`);
+  }
+
+  // Triple threat: New wallet + Bundle + Whale = HIGHLY LIKELY SCAM
+  if (isNewWallet && hasBundleDetection && hasWhale && topWhalePercent >= 10) {
+    riskScore += 20; // Additional on top of the above
+    flags.push({
+      type: 'SCAM PATTERN',
+      severity: 'CRITICAL',
+      message: `🚨 High-risk combo: New wallet + Bundle + Whale concentration`,
+    });
+    console.log(`[Sentinel] TRIPLE THREAT: New wallet + Bundle + Whale = +20 additional`);
+  }
+
+  // For very new tokens (< 1 day), whale concentration is MORE dangerous
+  const ageInDays = dexData?.pairCreatedAt
+    ? (Date.now() - dexData.pairCreatedAt) / (1000 * 60 * 60 * 24)
+    : undefined;
+
+  if (ageInDays !== undefined && ageInDays < 1 && hasWhale && topWhalePercent >= 15) {
+    riskScore += 10;
+    flags.push({
+      type: 'NEW TOKEN RISK',
+      severity: 'HIGH',
+      message: `Token is < 1 day old with ${topWhalePercent.toFixed(1)}% whale - high dump risk`,
+    });
+    console.log(`[Sentinel] New token + whale = +10`);
+  }
+
+  // ============================================
+  // MINIMUM SCORE ENFORCEMENT
+  // ============================================
+  // Ensure certain patterns get minimum scores regardless of AI output
+
+  // Triple threat (new wallet + bundle + whale) = minimum 70 (DANGEROUS)
+  if (isNewWallet && hasBundleDetection && hasWhale && topWhalePercent >= 10) {
+    if (riskScore < 70) {
+      console.log(`[Sentinel] Enforcing minimum 70 for triple threat (was ${riskScore})`);
+      riskScore = 70;
+    }
+  }
+
+  // High confidence bundle = minimum 65 (DANGEROUS)
+  if (bundleInfo.confidence === 'HIGH') {
+    if (riskScore < 65) {
+      console.log(`[Sentinel] Enforcing minimum 65 for HIGH bundle (was ${riskScore})`);
+      riskScore = 65;
+    }
+  }
+
+  // New wallet (<7 days) + any whale (>10%) = minimum 55 (SUSPICIOUS)
+  if (isNewWallet && hasWhale && topWhalePercent >= 10) {
+    if (riskScore < 55) {
+      console.log(`[Sentinel] Enforcing minimum 55 for new wallet + whale (was ${riskScore})`);
+      riskScore = 55;
+    }
   }
 
   riskScore = Math.min(100, riskScore);
