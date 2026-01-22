@@ -121,6 +121,17 @@ export async function fetchTokenData(
     .slice(0, 10)
     .reduce((sum, h) => sum + h.percentage, 0);
 
+  // Log holder concentration for debugging
+  console.log(`[Holders] Summary for ${tokenAddress.slice(0, 8)}...:`);
+  console.log(`[Holders] - Total holders: ${holders.length}, LP holders filtered: ${holders.length - nonLpHolders.length}`);
+  console.log(`[Holders] - Top 1 holder: ${top1HolderPercent.toFixed(2)}%, Top 1 non-LP: ${top1NonLpPercent.toFixed(2)}%`);
+  console.log(`[Holders] - Top 10 holders: ${top10HolderPercent.toFixed(2)}%, Top 10 non-LP: ${top10NonLpPercent.toFixed(2)}%`);
+
+  // Warn if LP filtering removed a lot of concentration
+  if (top1HolderPercent - top1NonLpPercent > 20) {
+    console.log(`[Holders] WARNING: Large difference after LP filtering (${(top1HolderPercent - top1NonLpPercent).toFixed(2)}%) - verify LP detection`);
+  }
+
   // Analyze trading patterns
   const { buyCount24h, sellCount24h, uniqueBuyers24h, uniqueSellers24h } =
     analyzeTradingPatterns(recentTransactions);
@@ -299,7 +310,7 @@ async function fetchTopHolders(
     const remainingAccounts = accounts.slice(10).map(acc => ({ ...acc, owner: null }));
     const allAccounts = [...accountsWithOwners, ...remainingAccounts];
 
-    return allAccounts.map((acc) => {
+    return allAccounts.map((acc, index) => {
       // Check if this is a liquidity pool by multiple methods:
       // 1. Token account address matches known LP programs
       // 2. Owner of this token account is a known LP wallet (bonding curve)
@@ -310,38 +321,51 @@ async function fetchTopHolders(
       let isLp = knownLpPrograms.has(acc.address) ||
         Boolean(acc.owner && knownLpWallets.has(acc.owner));
 
+      let lpReason = '';
+      if (knownLpPrograms.has(acc.address)) {
+        lpReason = 'address is known LP program';
+      } else if (acc.owner && knownLpWallets.has(acc.owner)) {
+        lpReason = 'owner is known LP wallet (bonding curve)';
+      }
+
       // Check owner for LP patterns (for Raydium/Pumpswap graduated tokens)
-      if (acc.owner) {
+      if (acc.owner && !isLp) {
         // Raydium AMM pool authorities typically start with '5Q544'
         if (acc.owner.startsWith('5Q544')) {
           isLp = true;
+          lpReason = 'owner starts with 5Q544 (Raydium AMM)';
         }
         // Check if owner is a known AMM program
         if (knownLpPrograms.has(acc.owner)) {
           isLp = true;
+          lpReason = 'owner is known AMM program';
         }
         // Raydium CLMM and Pumpswap pool patterns
         // Pool authorities are PDAs that often have specific patterns
         // Check for common Raydium/Pumpswap pool authority prefixes
+        // IMPORTANT: These must be EXACT prefixes, not partial matches
         const lpPoolPrefixes = [
           '5Q544',  // Raydium AMM
-          'HWy1',   // Raydium
-          'Gnt2',   // Raydium
-          'BVCh',   // Raydium
-          'DQyr',   // Raydium
-          'BDc8',   // Pumpswap LP
           '39azU',  // Meteora
-          'FoSD',   // Common LP pattern
         ];
-        if (lpPoolPrefixes.some(prefix => acc.owner!.startsWith(prefix))) {
+        const matchedPrefix = lpPoolPrefixes.find(prefix => acc.owner!.startsWith(prefix));
+        if (matchedPrefix && !isLp) {
           isLp = true;
+          lpReason = `owner starts with ${matchedPrefix}`;
         }
+      }
+
+      const percentage = denominator > 0 ? ((acc.uiAmount || 0) / denominator) * 100 : 0;
+
+      // Log top 5 holders for debugging
+      if (index < 5) {
+        console.log(`[Holders] #${index + 1}: ${acc.address.slice(0, 8)}... owner=${acc.owner?.slice(0, 8) || 'null'}... ${percentage.toFixed(2)}% isLp=${isLp}${lpReason ? ` (${lpReason})` : ''}`);
       }
 
       return {
         address: acc.address,
         balance: acc.uiAmount || 0,
-        percentage: denominator > 0 ? ((acc.uiAmount || 0) / denominator) * 100 : 0,
+        percentage,
         isDeployer: false, // Will be set by caller if known
         isLiquidityPool: isLp,
       };

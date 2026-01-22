@@ -75,6 +75,21 @@ export interface AuthoritiesData {
   freezeRevoked?: boolean;
 }
 
+export interface BundleInfo {
+  detected: boolean;
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW' | 'NONE';
+  count: number;
+  txBundlePercent?: number;
+  suspiciousPatterns?: string[];
+  description?: string;
+}
+
+export interface VerificationInfo {
+  verified: boolean;
+  source?: 'jupiter' | 'coingecko' | 'both';
+  originalRiskScore?: number; // Risk score before verification cap
+}
+
 // This matches the actual API response
 export interface AnalysisResult {
   tokenAddress: string;
@@ -92,6 +107,10 @@ export interface AnalysisResult {
   insiders?: unknown;
   socials?: SocialsData;
   authorities?: AuthoritiesData;
-  // Optional network data (not currently returned by API)
+  // Network data from Sentinel API
   network?: NetworkData;
+  // Bundle detection from backend (transaction-based + holder pattern analysis)
+  bundleInfo?: BundleInfo;
+  // Token verification from trusted sources (Jupiter, CoinGecko)
+  verification?: VerificationInfo;
 }

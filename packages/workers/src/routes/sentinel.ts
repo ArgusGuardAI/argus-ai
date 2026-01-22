@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Bindings } from '../index';
 import { fetchHeliusTokenMetadata, analyzeTokenTransactions } from '../services/helius';
 import { fetchDexScreenerData } from '../services/dexscreener';
+import { fetchPumpFunData, isPumpFunToken } from '../services/pumpfun';
 
 const HELIUS_RPC_BASE = 'https://mainnet.helius-rpc.com';
 
@@ -45,8 +46,11 @@ const sentinelRoutes = new Hono<{ Bindings: Bindings }>();
 async function fetchTopHolders(
   tokenAddress: string,
   apiKey: string,
-  limit: number = 20
+  limit: number = 20,
+  knownLpAddresses: string[] = []
 ): Promise<HolderInfo[]> {
+  // Create a set of known LP addresses for quick lookup
+  const knownLpSet = new Set(knownLpAddresses.map(a => a.toLowerCase()));
   try {
     // Get token largest accounts
     const response = await fetch(`${HELIUS_RPC_BASE}/?api-key=${apiKey}`, {
@@ -132,11 +136,14 @@ async function fetchTopHolders(
           // Detect LP by checking BOTH owner and token account address for LP patterns
           // Token account address is what getTokenLargestAccounts returns
           // Owner is who controls that account
+          // IMPORTANT: Do NOT mark high % holders as LP - that's the bug!
+          // High % holders could be whales or deployers, which are HIGH RISK
           const isLp = LP_PREFIXES.some(prefix => owner.startsWith(prefix)) ||
             LP_PREFIXES.some(prefix => tokenAccountAddress.startsWith(prefix)) ||
-            owner.includes('pool') ||
-            tokenAccountAddress.includes('pool') ||
-            (percent > 30 && !owner.includes('pump')); // Very high % and not bonding curve
+            owner.toLowerCase().includes('pool') ||
+            tokenAccountAddress.toLowerCase().includes('pool') ||
+            knownLpSet.has(owner.toLowerCase()) ||
+            knownLpSet.has(tokenAccountAddress.toLowerCase())
 
           if (isLp) {
             console.log(`[Sentinel] Detected LP: owner=${owner.slice(0,8)}, tokenAcc=${tokenAccountAddress.slice(0,8)}, ${percent.toFixed(1)}%`);
@@ -497,12 +504,46 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
   }
 
   if (whales.length > 0) {
-    riskScore += whales.length * 10;
-    flags.push({
-      type: 'CONCENTRATION',
-      severity: 'HIGH',
-      message: `${whales.length} wallet(s) hold >10% of supply`,
-    });
+    // Get the largest whale
+    const topWhale = whales.reduce((max, w) =>
+      (w.holdingsPercent || 0) > (max.holdingsPercent || 0) ? w : max
+    , whales[0]);
+    const topWhalePercent = topWhale?.holdingsPercent || 0;
+
+    // CRITICAL: Extreme concentration (50%+) = guaranteed dump risk
+    if (topWhalePercent >= 50) {
+      riskScore += 50; // Massive penalty
+      flags.push({
+        type: 'CONCENTRATED HOLDINGS',
+        severity: 'CRITICAL',
+        message: `🚨 CRITICAL: One whale holds ${topWhalePercent.toFixed(2)}% of the total supply`,
+      });
+      networkInsights.push(`Concentrated holdings with one whale holding ${topWhalePercent.toFixed(2)}% of the total supply`);
+    } else if (topWhalePercent >= 30) {
+      // HIGH: Major concentration (30-50%)
+      riskScore += 30;
+      flags.push({
+        type: 'CONCENTRATED HOLDINGS',
+        severity: 'HIGH',
+        message: `One whale holds ${topWhalePercent.toFixed(2)}% of the total supply`,
+      });
+    } else if (topWhalePercent >= 20) {
+      // MEDIUM: Significant concentration (20-30%)
+      riskScore += 20;
+      flags.push({
+        type: 'CONCENTRATED HOLDINGS',
+        severity: 'MEDIUM',
+        message: `One whale holds ${topWhalePercent.toFixed(2)}% of supply`,
+      });
+    } else {
+      // Basic whale penalty for 10-20%
+      riskScore += whales.length * 10;
+      flags.push({
+        type: 'CONCENTRATION',
+        severity: 'HIGH',
+        message: `${whales.length} wallet(s) hold >10% of supply`,
+      });
+    }
   }
 
   if (creatorInfo?.ruggedTokens && creatorInfo.ruggedTokens > 0) {
@@ -582,10 +623,21 @@ sentinelRoutes.post('/analyze', async (c) => {
     // Fetch data in parallel - including transaction analysis for bundle detection
     console.log('[Sentinel] Starting parallel fetch...');
     const fetchStart = Date.now();
-    const [dexData, metadata, holders, txAnalysis] = await Promise.all([
-      fetchDexScreenerData(tokenAddress),
+
+    // First fetch DexScreener to get LP pair address
+    const dexData = await fetchDexScreenerData(tokenAddress);
+
+    // Build known LP addresses list
+    const knownLpAddresses: string[] = [];
+    if (dexData?.pairAddress) {
+      knownLpAddresses.push(dexData.pairAddress);
+      console.log(`[Sentinel] Known LP from DexScreener: ${dexData.pairAddress.slice(0, 8)}...`);
+    }
+
+    // Now fetch remaining data with known LPs
+    const [metadata, holders, txAnalysis] = await Promise.all([
       fetchHeliusTokenMetadata(tokenAddress, heliusKey),
-      fetchTopHolders(tokenAddress, heliusKey, 20),
+      fetchTopHolders(tokenAddress, heliusKey, 20, knownLpAddresses),
       analyzeTokenTransactions(tokenAddress, heliusKey),
     ]);
     console.log(`[Sentinel] Parallel fetch took ${Date.now() - fetchStart}ms`);

@@ -2,17 +2,29 @@ import { useState, useCallback, useEffect } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { analyzeToken } from './lib/api';
-import { buyToken, sellToken, getTokenBalance, formatTokenAmount, getTokenPrice, PriceWebSocket, getUserPurchasePrice } from './lib/jupiter';
+import { buyToken, sellToken, getTokenBalance, formatTokenAmount, getTokenPrice, PriceWebSocket, getUserPurchasePrice, getTokenValueInSol } from './lib/jupiter';
 import { useAuth } from './contexts/AuthContext';
-import { NetworkGraph } from './components/NetworkGraph';
-import type { AnalysisResult } from './types';
+import { AIBrainDashboard } from './components/AIBrainDashboard';
+import { PerformanceChart } from './components/PerformanceChart';
+import { NeuralFlow } from './components/NeuralFlow';
+import { DecisionMatrix } from './components/DecisionMatrix';
+import type { AnalysisResult, BundleInfo } from './types';
 
-// Risk level colors
-const riskColors = {
-  SAFE: { bg: 'bg-green-500', text: 'text-green-400', border: 'border-green-500' },
-  SUSPICIOUS: { bg: 'bg-yellow-500', text: 'text-yellow-400', border: 'border-yellow-500' },
-  DANGEROUS: { bg: 'bg-orange-500', text: 'text-orange-400', border: 'border-orange-500' },
-  SCAM: { bg: 'bg-red-500', text: 'text-red-400', border: 'border-red-500' },
+// AI Visualization types
+type VisualizationType = 'brain' | 'chart' | 'neural' | 'matrix';
+
+const visualizations: { id: VisualizationType; name: string; icon: string }[] = [
+  { id: 'brain', name: 'AI Brain', icon: 'fa-brain' },
+  { id: 'chart', name: 'Performance', icon: 'fa-chart-area' },
+  { id: 'neural', name: 'Neural Flow', icon: 'fa-network-wired' },
+  { id: 'matrix', name: 'Matrix', icon: 'fa-table-cells' },
+];
+
+// Default bundle info when not available
+const defaultBundleInfo: BundleInfo = {
+  detected: false,
+  confidence: 'NONE',
+  count: 0,
 };
 
 // Tier badge component
@@ -36,13 +48,24 @@ function TradePanel({
   connected,
   tier,
   publicKey,
-  signTransaction
+  signTransaction,
+  bundleInfo,
+  onStateChange
 }: {
   result: AnalysisResult;
   connected: boolean;
   tier: 'free' | 'holder' | 'pro';
   publicKey: ReturnType<typeof useWallet>['publicKey'];
   signTransaction: ReturnType<typeof useWallet>['signTransaction'];
+  bundleInfo: BundleInfo;
+  onStateChange?: (state: {
+    enabled: boolean;
+    entryPrice: number | null;
+    currentPrice: number | null;
+    pnl: number;
+    settings: { takeProfitPercent: number; stopLossPercent: number; rugProtection: boolean };
+    log: Array<{ time: Date; message: string; type: 'info' | 'success' | 'warning' | 'error' }>;
+  }) => void;
 }) {
   const [amount, setAmount] = useState('0.01');
   const [slippage, setSlippage] = useState('1');
@@ -59,10 +82,12 @@ function TradePanel({
   const [entryPrice, setEntryPrice] = useState<number | null>(null);
   const [entrySource, setEntrySource] = useState<'current' | 'purchase'>('current');
   const [aiSettings, setAiSettings] = useState({
-    takeProfitMultiplier: 2, // 2x = 100% profit
+    takeProfitPercent: 10, // +10% profit target
     stopLossPercent: 30, // -30%
     rugProtection: true,
   });
+  const [entrySol, setEntrySol] = useState<number | null>(null); // Track SOL spent for accurate P&L
+  const [currentSolValue, setCurrentSolValue] = useState<number | null>(null); // Current SOL value of position
   const [aiLog, setAiLog] = useState<Array<{ time: Date; message: string; type: 'info' | 'success' | 'warning' | 'error' }>>([]);
   const [aiExecuting, setAiExecuting] = useState(false);
   const [lastRiskCheck, setLastRiskCheck] = useState<number | null>(null);
@@ -76,12 +101,35 @@ function TradePanel({
   const currentPriceChange = livePrice?.priceChange24h ?? result.market?.priceChange24h;
 
   // Calculate P&L when AI is active
-  const pnlPercent = entryPrice && currentPrice ? ((currentPrice - entryPrice) / entryPrice) * 100 : null;
+  // USD P&L = price change percentage (updates in real-time)
+  const usdPnlPercent = entryPrice && currentPrice ? ((currentPrice - entryPrice) / entryPrice) * 100 : null;
+  // SOL P&L from Jupiter quote (more accurate but updates every 30s)
+  const solPnlPercent = entrySol && currentSolValue ? ((currentSolValue - entrySol) / entrySol) * 100 : null;
+  // Use USD P&L for display (real-time), SOL P&L for trade decisions when available
+  const pnlPercent = usdPnlPercent;
 
   // Add to AI log
   const addAiLog = (message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info') => {
     setAiLog(prev => [...prev.slice(-9), { time: new Date(), message, type }]);
   };
+
+  // Sync AI state to parent for visualization components
+  useEffect(() => {
+    if (onStateChange) {
+      onStateChange({
+        enabled: argusAiEnabled,
+        entryPrice,
+        currentPrice: currentPrice ?? null,
+        pnl: pnlPercent ?? 0,
+        settings: {
+          takeProfitPercent: aiSettings.takeProfitPercent,
+          stopLossPercent: aiSettings.stopLossPercent,
+          rugProtection: aiSettings.rugProtection,
+        },
+        log: aiLog,
+      });
+    }
+  }, [argusAiEnabled, entryPrice, currentPrice, pnlPercent, aiSettings, aiLog, onStateChange]);
 
   // Fetch token balance when connected
   useEffect(() => {
@@ -90,36 +138,78 @@ function TradePanel({
     }
   }, [connected, publicKey, result.tokenAddress]);
 
-  // Set entry price when AI is enabled - try to fetch actual purchase price
+  // Fetch purchase price when user has a position (regardless of AI state)
   useEffect(() => {
-    if (argusAiEnabled && currentPrice && !entryPrice && publicKey) {
+    if (currentPrice && !entryPrice && publicKey && tokenBalance && tokenBalance.balance > 0) {
       // Try to get actual purchase price from transaction history
-      addAiLog(`Fetching your purchase price...`, 'info');
+      if (argusAiEnabled) {
+        addAiLog(`Fetching your purchase price...`, 'info');
+      }
 
       getUserPurchasePrice(result.tokenAddress, publicKey.toString()).then(purchaseData => {
         if (purchaseData && purchaseData.avgPrice > 0) {
-          // Use actual purchase price
+          // Use actual purchase price and SOL spent
           setEntryPrice(purchaseData.avgPrice);
+          setEntrySol(purchaseData.totalSolSpent); // Store SOL for reference
           setEntrySource('purchase');
-          addAiLog(`Found entry: $${purchaseData.avgPrice.toFixed(8)} (from tx history)`, 'success');
-          addAiLog(`Take profit: ${aiSettings.takeProfitMultiplier}x ($${(purchaseData.avgPrice * aiSettings.takeProfitMultiplier).toFixed(8)})`, 'info');
-          addAiLog(`Stop loss: -${aiSettings.stopLossPercent}% ($${(purchaseData.avgPrice * (1 - aiSettings.stopLossPercent / 100)).toFixed(8)})`, 'info');
+          if (argusAiEnabled) {
+            addAiLog(`Found entry: $${purchaseData.avgPrice.toFixed(8)} (from tx)`, 'success');
+            addAiLog(`Take profit: +${aiSettings.takeProfitPercent}% ($${(purchaseData.avgPrice * (1 + aiSettings.takeProfitPercent / 100)).toFixed(8)})`, 'info');
+            addAiLog(`Stop loss: -${aiSettings.stopLossPercent}% ($${(purchaseData.avgPrice * (1 - aiSettings.stopLossPercent / 100)).toFixed(8)})`, 'info');
+          }
         } else {
           // Fallback to current price
           setEntryPrice(currentPrice);
+          setEntrySol(null);
           setEntrySource('current');
-          addAiLog(`Entry: $${currentPrice.toFixed(8)} (current price)`, 'info');
-          addAiLog(`Take profit: ${aiSettings.takeProfitMultiplier}x ($${(currentPrice * aiSettings.takeProfitMultiplier).toFixed(8)})`, 'info');
-          addAiLog(`Stop loss: -${aiSettings.stopLossPercent}% ($${(currentPrice * (1 - aiSettings.stopLossPercent / 100)).toFixed(8)})`, 'info');
+          if (argusAiEnabled) {
+            addAiLog(`Entry: $${currentPrice.toFixed(8)} (current price)`, 'info');
+            addAiLog(`Take profit: +${aiSettings.takeProfitPercent}%`, 'info');
+            addAiLog(`Stop loss: -${aiSettings.stopLossPercent}%`, 'info');
+          }
         }
       });
     }
-    if (!argusAiEnabled) {
-      setEntryPrice(null);
-      setEntrySource('current');
+    // Only clear entry when AI is disabled AND we want to reset
+    if (!argusAiEnabled && entryPrice) {
+      // Keep entry price for display, just clear AI-specific state
       setAiLog([]);
     }
-  }, [argusAiEnabled, currentPrice, publicKey, result.tokenAddress]);
+  }, [currentPrice, publicKey, result.tokenAddress, tokenBalance, argusAiEnabled]);
+
+  // Fetch current SOL value of position periodically for accurate P&L
+  // Use 30s interval to avoid Helius rate limits (Jupiter quote uses RPC)
+  useEffect(() => {
+    if (!argusAiEnabled || !entrySol || !tokenBalance || tokenBalance.balance === 0) {
+      return;
+    }
+
+    let isMounted = true;
+    let retryCount = 0;
+
+    const fetchSolValue = async () => {
+      try {
+        const solValue = await getTokenValueInSol(result.tokenAddress, tokenBalance.balance);
+        if (solValue !== null && isMounted) {
+          setCurrentSolValue(solValue);
+          retryCount = 0; // Reset on success
+          console.log(`[AI] SOL value: ${solValue.toFixed(6)} SOL (entry: ${entrySol.toFixed(6)} SOL)`);
+        }
+      } catch (err) {
+        retryCount++;
+        console.warn(`[AI] SOL value fetch failed (attempt ${retryCount})`);
+      }
+    };
+
+    // Fetch immediately and then every 30 seconds to avoid rate limits
+    fetchSolValue();
+    const interval = setInterval(fetchSolValue, 30000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [argusAiEnabled, entrySol, tokenBalance, result.tokenAddress]);
 
   // Argus AI automation - monitor and execute
   useEffect(() => {
@@ -131,8 +221,9 @@ function TradePanel({
     }
 
     const checkAndExecute = async () => {
+      // Use USD P&L for decisions (real-time) - SOL P&L is too slow to update
       const pnl = ((currentPrice - entryPrice) / entryPrice) * 100;
-      const takeProfitTarget = (aiSettings.takeProfitMultiplier - 1) * 100; // e.g., 2x = 100%
+      const takeProfitTarget = aiSettings.takeProfitPercent; // e.g., 10%
 
       // Check Take Profit
       if (pnl >= takeProfitTarget) {
@@ -141,9 +232,9 @@ function TradePanel({
 
         try {
           const sellAmt = tokenBalance.balance; // Sell 100%
-          const slippageBps = 200; // 2% slippage for auto-trades
+          const slippageBps = 500; // 5% slippage for AI auto-sells (low liquidity tokens need more)
 
-          addAiLog(`Selling 100% of position...`, 'info');
+          addAiLog(`Selling 100% (${slippageBps/100}% slippage)...`, 'info');
           const swapResult = await sellToken(
             result.tokenAddress,
             sellAmt,
@@ -154,7 +245,7 @@ function TradePanel({
           );
 
           if (swapResult.success) {
-            addAiLog(`SOLD! TX: ${swapResult.signature?.slice(0, 8)}...`, 'success');
+            addAiLog(`SOLD! TX: ${swapResult.signature?.slice(0, 8)}... +${pnl.toFixed(1)}%`, 'success');
             setArgusAiEnabled(false);
             setTradeResult({
               success: true,
@@ -183,9 +274,9 @@ function TradePanel({
 
         try {
           const sellAmt = tokenBalance.balance; // Sell 100%
-          const slippageBps = 300; // 3% slippage for emergency sells
+          const slippageBps = 700; // 7% slippage for emergency stop loss (must exit!)
 
-          addAiLog(`Emergency selling 100%...`, 'warning');
+          addAiLog(`Emergency selling 100% (${slippageBps/100}% slippage)...`, 'warning');
           const swapResult = await sellToken(
             result.tokenAddress,
             sellAmt,
@@ -196,7 +287,7 @@ function TradePanel({
           );
 
           if (swapResult.success) {
-            addAiLog(`SOLD! TX: ${swapResult.signature?.slice(0, 8)}...`, 'success');
+            addAiLog(`SOLD! TX: ${swapResult.signature?.slice(0, 8)}... ${pnl.toFixed(1)}%`, 'success');
             setArgusAiEnabled(false);
             setTradeResult({
               success: true,
@@ -233,9 +324,9 @@ function TradePanel({
               setAiExecuting(true);
 
               const sellAmt = tokenBalance.balance;
-              const slippageBps = 500; // 5% slippage for emergency rug escape
+              const slippageBps = 1000; // 10% slippage for rug escape (must exit immediately!)
 
-              addAiLog(`EMERGENCY SELL - Potential rug detected!`, 'error');
+              addAiLog(`EMERGENCY SELL - Potential rug! (10% slippage)`, 'error');
               const swapResult = await sellToken(
                 result.tokenAddress,
                 sellAmt,
@@ -267,17 +358,69 @@ function TradePanel({
           }
         }
       }
+
+      // Check Bundle Pattern - DUMP IMMINENT detection (uses backend analysis)
+      // HIGH/MEDIUM confidence = definitive bundle, take action
+      // LOW confidence = possible bundle, just warn
+      const isDumpImminent = bundleInfo.detected && (bundleInfo.confidence === 'HIGH' || bundleInfo.confidence === 'MEDIUM');
+
+      if (isDumpImminent && pnl > 0) {
+        const confidenceLabel = bundleInfo.confidence === 'HIGH' ? 'CONFIRMED' : 'LIKELY';
+        addAiLog(`BUNDLE ${confidenceLabel}! ${bundleInfo.count} coordinated wallets`, 'warning');
+        if (bundleInfo.description) {
+          addAiLog(bundleInfo.description, 'warning');
+        }
+        addAiLog(`Securing profits before potential dump...`, 'warning');
+        setAiExecuting(true);
+
+        try {
+          const sellAmt = tokenBalance.balance;
+          const slippageBps = bundleInfo.confidence === 'HIGH' ? 800 : 600; // High slippage for dump escape (8%/6%)
+
+          addAiLog(`Selling 100% (${slippageBps/100}% slippage)...`, 'warning');
+          const swapResult = await sellToken(
+            result.tokenAddress,
+            sellAmt,
+            publicKey,
+            signTransaction,
+            slippageBps,
+            true
+          );
+
+          if (swapResult.success) {
+            addAiLog(`SECURED! TX: ${swapResult.signature?.slice(0, 8)}... +${pnl.toFixed(1)}%`, 'success');
+            setArgusAiEnabled(false);
+            setTradeResult({
+              success: true,
+              message: `AI Dump Protection: Secured +${pnl.toFixed(1)}% before dump!`,
+              signature: swapResult.signature
+            });
+            setTimeout(() => {
+              getTokenBalance(result.tokenAddress, publicKey.toString()).then(setTokenBalance);
+            }, 2000);
+          } else {
+            addAiLog(`Sell failed: ${swapResult.error}`, 'error');
+          }
+        } catch (err) {
+          addAiLog(`Error: ${err instanceof Error ? err.message : 'Unknown'}`, 'error');
+        } finally {
+          setAiExecuting(false);
+        }
+      } else if (bundleInfo.confidence === 'LOW' && pnl > 0) {
+        // Just warn for LOW confidence, don't auto-sell
+        addAiLog(`Possible bundle pattern (low confidence) - monitoring...`, 'info');
+      }
     };
 
     // Check conditions on every price update
     checkAndExecute();
-  }, [argusAiEnabled, currentPrice, entryPrice, tokenBalance, aiSettings, connected, publicKey, signTransaction, aiExecuting, lastRiskCheck, result.tokenAddress, result.riskScore]);
+  }, [argusAiEnabled, currentPrice, entryPrice, tokenBalance, aiSettings, connected, publicKey, signTransaction, aiExecuting, lastRiskCheck, result.tokenAddress, result.riskScore, bundleInfo]);
 
   // WebSocket + polling for real-time price
   useEffect(() => {
     let priceWs: PriceWebSocket | null = null;
     let pollInterval: NodeJS.Timeout | null = null;
-    let wsConnected = false;
+    let isWsConnected = false;
 
     const fetchPrice = async () => {
       const price = await getTokenPrice(result.tokenAddress);
@@ -298,17 +441,17 @@ function TradePanel({
         setLastPriceUpdate(new Date());
       });
 
-      wsConnected = await priceWs.connect();
-      setWsConnected(wsConnected);
+      isWsConnected = await priceWs.connect();
+      setWsConnected(isWsConnected);
 
-      if (wsConnected) {
+      if (isWsConnected) {
         console.log('[Price] Using WebSocket for real-time updates');
-        // Still poll every 5s for volume/liquidity updates
-        pollInterval = setInterval(fetchPrice, 5000);
+        // Poll every 10s for volume/liquidity updates
+        pollInterval = setInterval(fetchPrice, 10000);
       } else {
-        console.log('[Price] WebSocket failed, using 1s polling');
-        // Fallback to fast polling
-        pollInterval = setInterval(fetchPrice, 1000);
+        console.log('[Price] WebSocket failed, using 5s polling');
+        // Fallback to polling (not too fast to avoid rate limits)
+        pollInterval = setInterval(fetchPrice, 5000);
       }
     };
 
@@ -435,6 +578,25 @@ function TradePanel({
                       ${((tokenBalance.balance / Math.pow(10, tokenBalance.decimals)) * currentPrice).toFixed(2)}
                     </span>
                   </div>
+                  {/* P&L Display - Always show when we have entry price */}
+                  {pnlPercent !== null && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-zinc-500">
+                        P&L {entrySource === 'purchase' ? '(from tx)' : ''}
+                      </span>
+                      <span className={`text-sm font-bold ${pnlPercent >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        {pnlPercent >= 0 ? '+' : ''}{pnlPercent.toFixed(2)}%
+                      </span>
+                    </div>
+                  )}
+                  {entryPrice && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-zinc-500">Entry Price</span>
+                      <span className="text-xs text-zinc-400">
+                        ${entryPrice < 0.00001 ? entryPrice.toExponential(2) : entryPrice.toFixed(6)}
+                      </span>
+                    </div>
+                  )}
                   {currentPriceChange !== undefined && (
                     <div className="flex justify-between items-center">
                       <span className="text-xs text-zinc-500">24h Change</span>
@@ -660,16 +822,21 @@ function TradePanel({
                         )}
                         {' → '}Now: ${currentPrice?.toFixed(8)}
                       </div>
+                      {entrySol && currentSolValue && (
+                        <div className="text-[10px] text-zinc-600 mt-1">
+                          SOL: {entrySol.toFixed(4)} → {currentSolValue.toFixed(4)} ({solPnlPercent !== null ? (solPnlPercent >= 0 ? '+' : '') + solPnlPercent.toFixed(1) + '%' : '...'})
+                        </div>
+                      )}
                     </div>
                   )}
 
                   {/* Settings */}
                   <div className="grid grid-cols-3 gap-2 text-[10px]">
                     <button
-                      onClick={() => setAiSettings(s => ({ ...s, takeProfitMultiplier: s.takeProfitMultiplier === 2 ? 3 : s.takeProfitMultiplier === 3 ? 5 : 2 }))}
+                      onClick={() => setAiSettings(s => ({ ...s, takeProfitPercent: s.takeProfitPercent === 10 ? 25 : s.takeProfitPercent === 25 ? 50 : 10 }))}
                       className="bg-argus-bg rounded p-2 text-center hover:bg-argus-bg/80 transition-colors"
                     >
-                      <div className="text-green-400 font-medium">{aiSettings.takeProfitMultiplier}x</div>
+                      <div className="text-green-400 font-medium">+{aiSettings.takeProfitPercent}%</div>
                       <div className="text-zinc-500">Take Profit</div>
                     </button>
                     <button
@@ -722,99 +889,6 @@ function TradePanel({
   );
 }
 
-// Risk Score Display
-function RiskScoreOverlay({ result }: { result: AnalysisResult }) {
-  const colors = riskColors[result.riskLevel] || riskColors.SUSPICIOUS;
-
-  return (
-    <div className="absolute top-4 left-4 z-10">
-      <div className={`${colors.bg}/20 border ${colors.border}/50 rounded-xl p-4 backdrop-blur-sm`}>
-        <div className="flex items-center gap-3">
-          <div className={`text-4xl font-bold ${colors.text}`}>
-            {result.riskScore}
-          </div>
-          <div>
-            <div className={`text-sm font-semibold ${colors.text}`}>
-              {result.riskLevel}
-            </div>
-            <div className="text-xs text-zinc-400">Risk Score</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Key Flags Display
-function KeyFlags({ result }: { result: AnalysisResult }) {
-  const criticalFlags = result.flags?.filter(f => f.severity === 'CRITICAL' || f.severity === 'HIGH') || [];
-
-  if (criticalFlags.length === 0) return null;
-
-  return (
-    <div className="absolute top-4 right-4 z-10 max-w-xs">
-      <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 backdrop-blur-sm space-y-2">
-        {criticalFlags.slice(0, 3).map((flag, i) => (
-          <div key={i} className="flex items-start gap-2 text-xs">
-            <i className="fa-solid fa-triangle-exclamation text-red-400 mt-0.5" />
-            <span className="text-red-300">{flag.message}</span>
-          </div>
-        ))}
-        {criticalFlags.length > 3 && (
-          <div className="text-xs text-red-400">+{criticalFlags.length - 3} more warnings</div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// Token Info Bar
-function TokenInfoBar({ result }: { result: AnalysisResult }) {
-  const market = result.market;
-
-  const formatNumber = (n: number) => {
-    if (n >= 1e9) return `$${(n / 1e9).toFixed(1)}B`;
-    if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
-    if (n >= 1e3) return `$${(n / 1e3).toFixed(1)}K`;
-    return `$${n.toFixed(0)}`;
-  };
-
-  return (
-    <div className="absolute bottom-4 left-4 right-4 z-10">
-      <div className="bg-argus-card/90 border border-argus-border rounded-xl px-4 py-3 backdrop-blur-sm flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div>
-            <span className="text-white font-semibold">{market?.name || 'Unknown'}</span>
-            <span className="text-zinc-500 ml-2">${market?.symbol || '???'}</span>
-          </div>
-          {market?.marketCap && (
-            <div className="text-sm">
-              <span className="text-zinc-500">MC:</span>
-              <span className="text-white ml-1">{formatNumber(market.marketCap)}</span>
-            </div>
-          )}
-          {market?.liquidity && (
-            <div className="text-sm">
-              <span className="text-zinc-500">Liq:</span>
-              <span className="text-white ml-1">{formatNumber(market.liquidity)}</span>
-            </div>
-          )}
-        </div>
-        <div className="flex items-center gap-4">
-          {market?.priceChange24h !== undefined && (
-            <span className={market.priceChange24h >= 0 ? 'text-green-400' : 'text-red-400'}>
-              {market.priceChange24h >= 0 ? '+' : ''}{market.priceChange24h.toFixed(1)}%
-            </span>
-          )}
-          <span className="text-xs text-zinc-500">
-            {result.network?.nodes?.length || 0} wallets
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function App() {
   const { connected, publicKey, signTransaction } = useWallet();
   const { tier, scansToday, maxScans, canScan, incrementScan, isLoading: authLoading } = useAuth();
@@ -823,6 +897,77 @@ function App() {
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeViz, setActiveViz] = useState<VisualizationType>('brain');
+
+  // Use backend's sophisticated bundle detection (transaction-based + holder analysis)
+  const bundleInfo = result?.bundleInfo || defaultBundleInfo;
+
+  // Shared AI state (lifted from TradePanel for visualization access)
+  const [sharedAiState, setSharedAiState] = useState<{
+    enabled: boolean;
+    entryPrice: number | null;
+    currentPrice: number | null;
+    pnl: number;
+    settings: { takeProfitPercent: number; stopLossPercent: number; rugProtection: boolean };
+    log: Array<{ time: Date; message: string; type: 'info' | 'success' | 'warning' | 'error' }>;
+  }>({
+    enabled: false,
+    entryPrice: null,
+    currentPrice: null,
+    pnl: 0,
+    settings: { takeProfitPercent: 10, stopLossPercent: 30, rugProtection: true },
+    log: [],
+  });
+
+  // Callback for TradePanel to update shared AI state
+  const updateAiState = useCallback((state: typeof sharedAiState) => {
+    setSharedAiState(state);
+  }, []);
+
+  // Render the active AI visualization
+  const renderVisualization = () => {
+    if (!result) return null;
+
+    const vizProps = {
+      riskScore: result.riskScore,
+      riskLevel: result.riskLevel,
+      bundleInfo,
+      currentPrice: sharedAiState.currentPrice,
+      entryPrice: sharedAiState.entryPrice,
+      pnl: sharedAiState.pnl,
+      aiEnabled: sharedAiState.enabled,
+      aiSettings: sharedAiState.settings,
+      aiLog: sharedAiState.log,
+      tokenSymbol: result.market?.symbol,
+      liquidity: result.market?.liquidity,
+      volume24h: result.market?.volume24h,
+      holders: result.holders?.totalHolders,
+    };
+
+    switch (activeViz) {
+      case 'brain':
+        return <AIBrainDashboard {...vizProps} />;
+      case 'chart':
+        return (
+          <PerformanceChart
+            currentPrice={sharedAiState.currentPrice}
+            entryPrice={sharedAiState.entryPrice}
+            pnl={sharedAiState.pnl}
+            takeProfitPercent={sharedAiState.settings.takeProfitPercent}
+            stopLossPercent={sharedAiState.settings.stopLossPercent}
+            aiEnabled={sharedAiState.enabled}
+            aiLog={sharedAiState.log}
+            tokenSymbol={result.market?.symbol}
+          />
+        );
+      case 'neural':
+        return <NeuralFlow {...vizProps} />;
+      case 'matrix':
+        return <DecisionMatrix {...vizProps} />;
+      default:
+        return <AIBrainDashboard {...vizProps} />;
+    }
+  };
 
   const handleAnalyze = useCallback(async () => {
     if (!tokenAddress.trim()) return;
@@ -919,89 +1064,199 @@ function App() {
           </div>
         )}
 
-        {/* Results */}
+        {/* Results - Bento Grid Layout */}
         {result && !loading && (
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-            {/* Main Visualization - 3 columns */}
-            <div className="lg:col-span-3 bg-argus-card border border-argus-border rounded-xl overflow-hidden relative" style={{ height: '700px' }}>
-              {result.network ? (
-                <>
-                  <RiskScoreOverlay result={result} />
-                  <KeyFlags result={result} />
-                  <TokenInfoBar result={result} />
-                  <NetworkGraph data={result.network} />
-                </>
-              ) : (
-                <div className="h-full flex items-center justify-center text-zinc-500">
-                  <p>No network data available</p>
+          <div className="grid gap-4" style={{ gridTemplateColumns: '280px 1fr 320px', gridTemplateRows: 'auto 1fr', height: 'calc(100vh - 180px)' }}>
+
+            {/* LEFT COLUMN - AI Analysis */}
+            <div className="row-span-2 flex flex-col gap-4">
+              {/* Risk Score Card */}
+              <div className={`bg-argus-card border rounded-xl p-4 ${
+                result.riskScore >= 80 ? 'border-red-500/50' :
+                result.riskScore >= 60 ? 'border-orange-500/50' :
+                result.riskScore >= 40 ? 'border-yellow-500/50' :
+                'border-green-500/50'
+              }`}>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                      result.riskScore >= 80 ? 'bg-red-500/20' :
+                      result.riskScore >= 60 ? 'bg-orange-500/20' :
+                      result.riskScore >= 40 ? 'bg-yellow-500/20' :
+                      'bg-green-500/20'
+                    }`}>
+                      <i className={`fa-solid fa-shield-halved ${
+                        result.riskScore >= 80 ? 'text-red-400' :
+                        result.riskScore >= 60 ? 'text-orange-400' :
+                        result.riskScore >= 40 ? 'text-yellow-400' :
+                        'text-green-400'
+                      }`} />
+                    </div>
+                    <span className="text-xs text-zinc-400 uppercase tracking-wider">AI Risk Analysis</span>
+                  </div>
+                  {/* Verification Badge */}
+                  {result.verification?.verified ? (
+                    <div className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-medium ${
+                      result.verification.source === 'both'
+                        ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                        : result.verification.source === 'jupiter'
+                          ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                          : 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
+                    }`}>
+                      <i className="fa-solid fa-badge-check" />
+                      <span>
+                        {result.verification.source === 'both' ? 'Verified' :
+                         result.verification.source === 'jupiter' ? 'Jupiter' : 'CoinGecko'}
+                      </span>
+                    </div>
+                  ) : result.verification && !result.verification.verified ? (
+                    <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-medium bg-red-500/20 text-red-400 border border-red-500/30">
+                      <i className="fa-solid fa-triangle-exclamation" />
+                      <span>Unverified</span>
+                    </div>
+                  ) : null}
                 </div>
-              )}
+                <div className="flex items-center gap-4">
+                  <div className={`text-4xl font-bold ${
+                    result.riskScore >= 80 ? 'text-red-400' :
+                    result.riskScore >= 60 ? 'text-orange-400' :
+                    result.riskScore >= 40 ? 'text-yellow-400' :
+                    'text-green-400'
+                  }`}>
+                    {result.riskScore}
+                  </div>
+                  <div>
+                    <div className={`text-sm font-semibold ${
+                      result.riskScore >= 80 ? 'text-red-400' :
+                      result.riskScore >= 60 ? 'text-orange-400' :
+                      result.riskScore >= 40 ? 'text-yellow-400' :
+                      'text-green-400'
+                    }`}>
+                      {result.riskLevel}
+                    </div>
+                    <div className="text-xs text-zinc-500">
+                      {result.verification?.originalRiskScore
+                        ? `Capped from ${result.verification.originalRiskScore}`
+                        : `Confidence: ${Math.max(60, 100 - result.riskScore)}%`}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* AI Summary */}
+              <div className="bg-argus-card border border-argus-border rounded-xl p-4 flex-1">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-6 h-6 rounded bg-argus-accent/20 flex items-center justify-center">
+                    <i className="fa-solid fa-brain text-argus-accent text-xs" />
+                  </div>
+                  <span className="text-xs text-zinc-400 uppercase tracking-wider">AI Summary</span>
+                </div>
+                <p className="text-sm text-zinc-300 leading-relaxed">{result.summary}</p>
+
+                {/* Key Flags */}
+                {result.flags && result.flags.filter(f => f.severity === 'CRITICAL' || f.severity === 'HIGH').length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-argus-border space-y-2">
+                    {result.flags.filter(f => f.severity === 'CRITICAL' || f.severity === 'HIGH').slice(0, 3).map((flag, i) => (
+                      <div key={i} className={`flex items-start gap-2 text-xs p-2 rounded ${
+                        flag.severity === 'CRITICAL' ? 'bg-red-500/10 text-red-300' : 'bg-orange-500/10 text-orange-300'
+                      }`}>
+                        <i className="fa-solid fa-triangle-exclamation mt-0.5" />
+                        <span>{flag.message}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Stats Grid */}
+              <div className="grid grid-cols-2 gap-2">
+                {result.holders && (
+                  <>
+                    <div className="bg-argus-card border border-argus-border rounded-lg p-3">
+                      <div className="text-xs text-zinc-500 mb-1">Top Holder</div>
+                      <div className={`text-lg font-bold ${(result.holders.topHolder || 0) > 20 ? 'text-red-400' : 'text-white'}`}>
+                        {result.holders.topHolder?.toFixed(1)}%
+                      </div>
+                    </div>
+                    <div className="bg-argus-card border border-argus-border rounded-lg p-3">
+                      <div className="text-xs text-zinc-500 mb-1">Holders</div>
+                      <div className="text-lg font-bold text-white">{result.holders.totalHolders}</div>
+                    </div>
+                  </>
+                )}
+                {result.creator && (
+                  <>
+                    <div className="bg-argus-card border border-argus-border rounded-lg p-3">
+                      <div className="text-xs text-zinc-500 mb-1">Creator Tokens</div>
+                      <div className="text-lg font-bold text-white">{result.creator.tokensCreated}</div>
+                    </div>
+                    {result.creator.ruggedTokens !== undefined && result.creator.ruggedTokens > 0 && (
+                      <div className="bg-argus-card border border-red-500/30 rounded-lg p-3">
+                        <div className="text-xs text-zinc-500 mb-1">Previous Rugs</div>
+                        <div className="text-lg font-bold text-red-400">{result.creator.ruggedTokens}</div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
 
-            {/* Side Panel - 1 column */}
-            <div className="space-y-4">
-              {/* Trade Panel */}
+            {/* CENTER - Visualization with Tabs */}
+            <div className="row-span-2 bg-argus-card border border-argus-border rounded-xl overflow-hidden relative flex flex-col">
+              {/* Visualization Tabs */}
+              <div className="flex items-center justify-between px-4 py-2.5 border-b border-argus-border">
+                <div className="flex items-center gap-2">
+                  {visualizations.map((viz) => (
+                    <button
+                      key={viz.id}
+                      onClick={() => setActiveViz(viz.id)}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                        activeViz === viz.id
+                          ? 'bg-argus-accent text-black'
+                          : 'text-zinc-400 hover:text-white hover:bg-argus-bg border border-argus-border'
+                      }`}
+                    >
+                      <i className={`fa-solid ${viz.icon}`} />
+                      {viz.name}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-3">
+                  {bundleInfo.detected && (bundleInfo.confidence === 'HIGH' || bundleInfo.confidence === 'MEDIUM') && (
+                    <span className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-semibold animate-pulse ${
+                      bundleInfo.confidence === 'HIGH'
+                        ? 'bg-red-500/20 text-red-400 border-red-500/50'
+                        : 'bg-orange-500/20 text-orange-400 border-orange-500/50'
+                    }`}>
+                      <i className="fa-solid fa-triangle-exclamation" />
+                      {bundleInfo.confidence === 'HIGH' ? 'DUMP IMMINENT' : 'BUNDLE DETECTED'}
+                    </span>
+                  )}
+                  <span className="text-zinc-500 text-sm">{result.network?.nodes?.length || 0} wallets connected</span>
+                  <button className="px-3 py-1.5 bg-argus-accent text-black rounded-lg text-sm font-semibold hover:bg-argus-accent/90 transition-colors">
+                    <i className="fa-solid fa-chart-line mr-1.5" />
+                    Analysis
+                  </button>
+                </div>
+              </div>
+
+              {/* Visualization Content */}
+              <div className="flex-1 relative">
+                {renderVisualization()}
+              </div>
+            </div>
+
+            {/* RIGHT COLUMN - Trade Panel */}
+            <div className="row-span-2 overflow-y-auto">
               <TradePanel
                 result={result}
                 connected={connected}
                 tier={tier}
                 publicKey={publicKey}
                 signTransaction={signTransaction}
+                bundleInfo={bundleInfo}
+                onStateChange={updateAiState}
               />
-
-              {/* Summary */}
-              <div className="bg-argus-card border border-argus-border rounded-xl p-4">
-                <h3 className="text-sm font-semibold text-white mb-2">AI Summary</h3>
-                <p className="text-sm text-zinc-400 leading-relaxed">{result.summary}</p>
-              </div>
-
-              {/* Holder Stats */}
-              {result.holders && (
-                <div className="bg-argus-card border border-argus-border rounded-xl p-4">
-                  <h3 className="text-sm font-semibold text-white mb-3">Holder Distribution</h3>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-zinc-500">Top Holder</span>
-                      <span className={`font-medium ${(result.holders.topHolder || 0) > 20 ? 'text-red-400' : 'text-white'}`}>
-                        {result.holders.topHolder?.toFixed(1)}%
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-zinc-500">Top 10 Combined</span>
-                      <span className={`font-medium ${(result.holders.top10Holders || 0) > 50 ? 'text-red-400' : 'text-white'}`}>
-                        {result.holders.top10Holders?.toFixed(1)}%
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-zinc-500">Total Holders</span>
-                      <span className="text-white font-medium">{result.holders.totalHolders}</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Creator Info */}
-              {result.creator && (
-                <div className="bg-argus-card border border-argus-border rounded-xl p-4">
-                  <h3 className="text-sm font-semibold text-white mb-3">Creator</h3>
-                  <div className="space-y-2 text-sm">
-                    {result.creator.ruggedTokens !== undefined && result.creator.ruggedTokens > 0 && (
-                      <div className="flex justify-between">
-                        <span className="text-zinc-500">Previous Rugs</span>
-                        <span className="text-red-400 font-medium">{result.creator.ruggedTokens}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between">
-                      <span className="text-zinc-500">Tokens Created</span>
-                      <span className="text-white">{result.creator.tokensCreated}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-zinc-500">Current Holdings</span>
-                      <span className="text-white">{result.creator.currentHoldings?.toFixed(1)}%</span>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         )}

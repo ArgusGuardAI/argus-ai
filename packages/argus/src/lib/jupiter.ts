@@ -410,7 +410,8 @@ async function getHeliusPrice(tokenMint: string): Promise<{
 }
 
 /**
- * Get live token price - combines Helius (accurate price/MC) + DexScreener (volume/liquidity)
+ * Get live token price - uses DexScreener primarily to avoid Helius rate limits
+ * Helius is only used as fallback
  */
 export async function getTokenPrice(tokenMint: string): Promise<{
   priceUsd: number;
@@ -419,26 +420,26 @@ export async function getTokenPrice(tokenMint: string): Promise<{
   liquidity: number;
   marketCap?: number;
 } | null> {
-  // Fetch from both sources in parallel
-  const [heliusData, dexData] = await Promise.all([
-    getHeliusPrice(tokenMint),
-    getDexScreenerData(tokenMint)
-  ]);
+  // Prefer DexScreener to avoid Helius rate limits
+  const dexData = await getDexScreenerData(tokenMint);
 
-  // Prefer Helius for price and market cap (more accurate)
-  // Use DexScreener for volume, liquidity, and price change
+  if (dexData) {
+    return dexData;
+  }
+
+  // Fallback to Helius only if DexScreener fails
+  const heliusData = await getHeliusPrice(tokenMint);
   if (heliusData) {
     return {
       priceUsd: heliusData.priceUsd,
-      priceChange24h: dexData?.priceChange24h || 0,
-      volume24h: dexData?.volume24h || 0,
-      liquidity: dexData?.liquidity || 0,
+      priceChange24h: 0,
+      volume24h: 0,
+      liquidity: 0,
       marketCap: heliusData.marketCap,
     };
   }
 
-  // Fallback to DexScreener only
-  return dexData;
+  return null;
 }
 
 /**
@@ -497,7 +498,7 @@ async function getDexScreenerData(tokenMint: string): Promise<{
 export async function getUserPurchasePrice(
   tokenMint: string,
   walletAddress: string
-): Promise<{ avgPrice: number; totalCost: number; totalTokens: number } | null> {
+): Promise<{ avgPrice: number; totalCost: number; totalTokens: number; totalSolSpent: number } | null> {
   try {
     console.log('[Purchase] Fetching transaction history for', walletAddress);
 
@@ -581,7 +582,8 @@ export async function getUserPurchasePrice(
       return {
         avgPrice: avgPriceUsd,
         totalCost: totalSolSpent * solPrice,
-        totalTokens: totalTokensReceived
+        totalTokens: totalTokensReceived,
+        totalSolSpent: totalSolSpent, // Return actual SOL spent for accurate P&L
       };
     }
 
@@ -603,6 +605,32 @@ async function getSolPrice(): Promise<number> {
     return data.solana?.usd || 200; // Fallback to $200 if API fails
   } catch {
     return 200;
+  }
+}
+
+/**
+ * Get the current SOL value of a token position via Jupiter quote
+ * This is the most accurate way to determine how much SOL you'd receive if you sold
+ */
+export async function getTokenValueInSol(
+  tokenMint: string,
+  tokenAmount: number // In smallest token units
+): Promise<number | null> {
+  try {
+    // Get a quote for selling all tokens for SOL
+    const quote = await getSwapQuote(tokenMint, SOL_MINT, tokenAmount, 100); // 1% slippage
+    if (!quote) {
+      console.warn('[Value] No quote available');
+      return null;
+    }
+
+    // outAmount is in lamports
+    const solValue = parseInt(quote.outAmount) / LAMPORTS_PER_SOL;
+    console.log(`[Value] ${tokenAmount} tokens → ${solValue.toFixed(6)} SOL`);
+    return solValue;
+  } catch (error) {
+    console.error('[Value] Failed to get token value:', error);
+    return null;
   }
 }
 

@@ -765,7 +765,11 @@ function applyHardcodedRules(
   // This catches whales that accumulated during bonding curve
   if (data.holderData) {
     const top1NonLp = data.holderData.top1NonLpHolderPercent;
+    const top1Raw = data.holderData.top1HolderPercent;
 
+    console.log(`[Rules] Holder concentration: top1NonLp=${top1NonLp.toFixed(1)}%, top1Raw=${top1Raw.toFixed(1)}%`);
+
+    // First check: Use non-LP holder percentage (normal case)
     if (top1NonLp >= 30) {
       // CRITICAL: One wallet holds 30%+ - guaranteed crash if they sell
       if (adjustedScore < 80) {
@@ -799,6 +803,72 @@ function applyHardcodedRules(
         message: `Single wallet holds ${top1NonLp.toFixed(1)}% of supply - moderate dump risk`,
       });
       console.log(`[Rules] Single whale >15% penalty applied (${top1NonLp.toFixed(1)}%) - score: ${adjustedScore}`);
+    }
+
+    // FALLBACK CHECK: If top1Raw is very high but top1NonLp is low,
+    // either LP detection is wrong OR something suspicious is happening
+    // For tokens that are NOT on bonding curve (graduated), extreme concentration is always dangerous
+    const isGraduated = !isPumpFun || (pumpFun && pumpFun.complete);
+    const lpDetectionSeemsWrong = top1Raw >= 50 && top1NonLp < 10;
+
+    if (lpDetectionSeemsWrong && isGraduated) {
+      // If we think the top holder is LP but it holds 50%+ on a graduated token,
+      // that's VERY suspicious - LP pools don't usually hold that much
+      console.log(`[Rules] LP detection suspicious: top1Raw=${top1Raw.toFixed(1)}% but top1NonLp=${top1NonLp.toFixed(1)}%`);
+      if (adjustedScore < 70) {
+        adjustedScore = 70;
+      }
+      additionalFlags.push({
+        type: 'HOLDERS',
+        severity: 'HIGH',
+        message: `⚠️ Suspicious holder concentration: ${top1Raw.toFixed(1)}% held by top wallet`,
+      });
+    }
+
+    // RULE 12.6: Check top holders individually from raw data
+    // This catches cases where LP detection fails completely
+    if (data.holderData.topHolders && data.holderData.topHolders.length > 0) {
+      for (const holder of data.holderData.topHolders.slice(0, 5)) {
+        // Skip if explicitly marked as LP
+        if (holder.isLiquidityPool) continue;
+
+        // If any single holder has extreme concentration, flag it
+        if (holder.percentage >= 50) {
+          console.log(`[Rules] EXTREME concentration: ${holder.address.slice(0, 8)}... holds ${holder.percentage.toFixed(1)}%`);
+          if (adjustedScore < 85) {
+            adjustedScore = 85;
+          }
+          // Check if this flag already exists
+          const flagExists = additionalFlags.some(f =>
+            f.message.includes('CRITICAL') && f.message.includes('wallet holds')
+          );
+          if (!flagExists) {
+            additionalFlags.push({
+              type: 'HOLDERS',
+              severity: 'CRITICAL',
+              message: `🚨 EXTREME: Single wallet (${holder.address.slice(0, 8)}...) holds ${holder.percentage.toFixed(1)}% of supply`,
+            });
+          }
+        } else if (holder.percentage >= 30) {
+          console.log(`[Rules] HIGH concentration: ${holder.address.slice(0, 8)}... holds ${holder.percentage.toFixed(1)}%`);
+          if (adjustedScore < 80) {
+            adjustedScore = 80;
+          }
+        }
+      }
+    }
+  } else {
+    // No holder data available - this is suspicious for new tokens
+    console.log(`[Rules] WARNING: No holder data available`);
+    if (isPumpFun && ageInDays < 1) {
+      if (adjustedScore < 65) {
+        adjustedScore = 65;
+        additionalFlags.push({
+          type: 'HOLDERS',
+          severity: 'HIGH',
+          message: `Unable to verify holder distribution - exercise caution`,
+        });
+      }
     }
   }
 

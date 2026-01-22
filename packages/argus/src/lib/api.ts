@@ -1,4 +1,5 @@
-import type { AnalysisResult } from '../types';
+import type { AnalysisResult, VerificationInfo } from '../types';
+import { getTokenVerification, getVerifiedMaxRiskScore } from './verified-tokens';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'https://api.argusguard.io';
 
@@ -50,16 +51,28 @@ interface SentinelResponse {
     percent: number;
     type: string;
   }>;
+  bundleInfo?: {
+    detected: boolean;
+    confidence: 'HIGH' | 'MEDIUM' | 'LOW' | 'NONE';
+    count: number;
+    txBundlePercent?: number;
+    suspiciousPatterns?: string[];
+    description?: string;
+  };
 }
 
 export async function analyzeToken(tokenAddress: string): Promise<AnalysisResult> {
-  const response = await fetch(`${API_BASE}/sentinel/analyze`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ tokenAddress }),
-  });
+  // Check verification status in parallel with API call
+  const [response, verificationResult] = await Promise.all([
+    fetch(`${API_BASE}/sentinel/analyze`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ tokenAddress }),
+    }),
+    getTokenVerification(tokenAddress),
+  ]);
 
   if (!response.ok) {
     const error = await response.text();
@@ -68,11 +81,43 @@ export async function analyzeToken(tokenAddress: string): Promise<AnalysisResult
 
   const data: SentinelResponse = await response.json();
 
+  // Get original risk score
+  let riskScore = data.analysis.riskScore;
+  let riskLevel = data.analysis.riskLevel;
+  const originalRiskScore = riskScore;
+
+  // Build verification info
+  let verification: VerificationInfo | undefined;
+
+  if (verificationResult.verified && verificationResult.source) {
+    const maxScore = getVerifiedMaxRiskScore(verificationResult.source);
+
+    // Cap risk score for verified tokens
+    if (riskScore > maxScore) {
+      riskScore = maxScore;
+      // Recalculate risk level based on capped score
+      if (riskScore < 40) riskLevel = 'SAFE';
+      else if (riskScore < 60) riskLevel = 'SUSPICIOUS';
+      else if (riskScore < 80) riskLevel = 'DANGEROUS';
+      else riskLevel = 'SCAM';
+
+      console.log(`[Verified] Token ${data.tokenInfo.symbol} is verified (${verificationResult.source}). Risk capped: ${originalRiskScore} → ${riskScore}`);
+    }
+
+    verification = {
+      verified: true,
+      source: verificationResult.source,
+      originalRiskScore: originalRiskScore !== riskScore ? originalRiskScore : undefined,
+    };
+  } else {
+    verification = { verified: false };
+  }
+
   // Transform sentinel response to AnalysisResult format
   return {
     tokenAddress: data.tokenInfo.address,
-    riskLevel: data.analysis.riskLevel,
-    riskScore: data.analysis.riskScore,
+    riskLevel,
+    riskScore,
     flags: data.analysis.flags.map(f => ({
       type: f.type,
       severity: f.severity as 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL',
@@ -103,5 +148,7 @@ export async function analyzeToken(tokenAddress: string): Promise<AnalysisResult
       currentHoldings: data.creatorInfo.currentHoldings,
     } : undefined,
     network: data.network,
+    bundleInfo: data.bundleInfo,
+    verification,
   };
 }
