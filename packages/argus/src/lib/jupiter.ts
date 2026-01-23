@@ -285,6 +285,54 @@ export function getAiFeePercent(): number {
 }
 
 /**
+ * Get ALL token balances for a wallet (for detecting untracked positions)
+ */
+export async function getAllTokenBalances(
+  walletAddress: string
+): Promise<Array<{ mint: string; balance: number; decimals: number }>> {
+  const rpcEndpoints = [
+    HELIUS_RPC,
+    'https://api.mainnet-beta.solana.com',
+  ];
+
+  for (const rpc of rpcEndpoints) {
+    try {
+      console.log(`[Jupiter] Scanning all token balances via ${rpc.includes('helius') ? 'Helius' : 'public'} RPC`);
+      const connection = new Connection(rpc, { commitment: 'confirmed' });
+      const walletPubkey = new PublicKey(walletAddress);
+
+      // Get ALL token accounts for this wallet
+      const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
+        walletPubkey,
+        { programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA') }
+      );
+
+      const tokens: Array<{ mint: string; balance: number; decimals: number }> = [];
+
+      for (const account of tokenAccounts.value) {
+        const parsedInfo = account.account.data.parsed?.info;
+        if (parsedInfo?.tokenAmount && Number(parsedInfo.tokenAmount.amount) > 0) {
+          tokens.push({
+            mint: parsedInfo.mint,
+            balance: Number(parsedInfo.tokenAmount.amount),
+            decimals: parsedInfo.tokenAmount.decimals,
+          });
+        }
+      }
+
+      console.log(`[Jupiter] Found ${tokens.length} tokens with balances`);
+      return tokens;
+    } catch (error) {
+      console.warn(`[Jupiter] RPC failed for token scan:`, error);
+      continue;
+    }
+  }
+
+  console.error('[Jupiter] All RPC endpoints failed for token scan');
+  return [];
+}
+
+/**
  * Get token balance for a wallet
  * Uses Helius RPC for reliability
  */
@@ -415,10 +463,15 @@ async function getHeliusPrice(tokenMint: string): Promise<{
  */
 export async function getTokenPrice(tokenMint: string): Promise<{
   priceUsd: number;
-  priceChange24h: number;
+  priceChange5m: number;   // 5-minute change (best for rug detection)
+  priceChange1h: number;   // 1-hour change
+  priceChange24h: number;  // 24-hour change
   volume24h: number;
   liquidity: number;
   marketCap?: number;
+  tokenAgeMinutes: number;  // How old the token is
+  txnsBuys5m: number;       // Buy transactions in last 5 min
+  txnsSells5m: number;      // Sell transactions in last 5 min
 } | null> {
   // Prefer DexScreener to avoid Helius rate limits
   const dexData = await getDexScreenerData(tokenMint);
@@ -432,10 +485,15 @@ export async function getTokenPrice(tokenMint: string): Promise<{
   if (heliusData) {
     return {
       priceUsd: heliusData.priceUsd,
+      priceChange5m: 0,  // Helius doesn't provide this
+      priceChange1h: 0,
       priceChange24h: 0,
       volume24h: 0,
       liquidity: 0,
       marketCap: heliusData.marketCap,
+      tokenAgeMinutes: 999, // Unknown, assume old
+      txnsBuys5m: 0,
+      txnsSells5m: 0,
     };
   }
 
@@ -447,10 +505,15 @@ export async function getTokenPrice(tokenMint: string): Promise<{
  */
 async function getDexScreenerData(tokenMint: string): Promise<{
   priceUsd: number;
+  priceChange5m: number;
+  priceChange1h: number;
   priceChange24h: number;
   volume24h: number;
   liquidity: number;
   marketCap?: number;
+  tokenAgeMinutes: number;  // How old the token is
+  txnsBuys5m: number;       // Buy transactions in last 5 min
+  txnsSells5m: number;      // Sell transactions in last 5 min
 } | null> {
   try {
     const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`);
@@ -478,12 +541,23 @@ async function getDexScreenerData(tokenMint: string): Promise<{
       return best;
     }, data.pairs[0]);
 
+    // Calculate token age in minutes
+    const pairCreatedAt = bestPair.pairCreatedAt || 0;
+    const tokenAgeMinutes = pairCreatedAt > 0
+      ? Math.floor((Date.now() - pairCreatedAt) / 60000)
+      : 999; // Unknown age, assume old
+
     return {
       priceUsd: parseFloat(bestPair.priceUsd) || 0,
+      priceChange5m: bestPair.priceChange?.m5 || 0,
+      priceChange1h: bestPair.priceChange?.h1 || 0,
       priceChange24h: bestPair.priceChange?.h24 || 0,
       volume24h: bestPair.volume?.h24 || 0,
       liquidity: bestPair.liquidity?.usd || 0,
       marketCap: bestPair.marketCap || bestPair.fdv || 0,
+      tokenAgeMinutes,
+      txnsBuys5m: bestPair.txns?.m5?.buys || 0,
+      txnsSells5m: bestPair.txns?.m5?.sells || 0,
     };
   } catch (error) {
     console.warn('[DexScreener] Failed to fetch:', error);
@@ -609,25 +683,172 @@ async function getSolPrice(): Promise<number> {
 }
 
 /**
- * Get the current SOL value of a token position via Jupiter quote
- * This is the most accurate way to determine how much SOL you'd receive if you sold
+ * Pump.fun bonding curve constants
+ * These are the fixed parameters for the pump.fun AMM
  */
-export async function getTokenValueInSol(
-  tokenMint: string,
-  tokenAmount: number // In smallest token units
-): Promise<number | null> {
+const PUMP_FUN_PROGRAM_ID = '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P';
+
+/**
+ * Derive the pump.fun bonding curve PDA from token mint
+ */
+function deriveBondingCurvePDA(tokenMint: string): string {
+  // The bonding curve PDA is derived from:
+  // seeds: ["bonding-curve", mint_pubkey]
+  // program: pump.fun program
+  const mintPubkey = new PublicKey(tokenMint);
+  const programId = new PublicKey(PUMP_FUN_PROGRAM_ID);
+
+  const [bondingCurvePDA] = PublicKey.findProgramAddressSync(
+    [Buffer.from('bonding-curve'), mintPubkey.toBuffer()],
+    programId
+  );
+
+  return bondingCurvePDA.toString();
+}
+
+/**
+ * Get pump.fun token data from on-chain bonding curve
+ * Reads the bonding curve account directly - bypasses Cloudflare-blocked API!
+ */
+async function getPumpFunTokenData(tokenMint: string): Promise<{
+  solPerToken: number;  // SOL per token - use this directly for P&L, no USD conversion!
+  virtualSolReserves: number;
+  virtualTokenReserves: number;
+  complete: boolean;
+} | null> {
   try {
-    // Get a quote for selling all tokens for SOL
-    const quote = await getSwapQuote(tokenMint, SOL_MINT, tokenAmount, 100); // 1% slippage
-    if (!quote) {
-      console.warn('[Value] No quote available');
+    const bondingCurvePDA = deriveBondingCurvePDA(tokenMint);
+    console.log(`[PumpFun] Reading bonding curve PDA: ${bondingCurvePDA}`);
+
+    // Read the bonding curve account data
+    const response = await fetch(HELIUS_RPC, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'getAccountInfo',
+        params: [bondingCurvePDA, { encoding: 'base64' }]
+      })
+    });
+
+    if (!response.ok) {
+      console.warn('[PumpFun] RPC error:', response.status);
       return null;
     }
 
-    // outAmount is in lamports
-    const solValue = parseInt(quote.outAmount) / LAMPORTS_PER_SOL;
-    console.log(`[Value] ${tokenAmount} tokens → ${solValue.toFixed(6)} SOL`);
-    return solValue;
+    const result = await response.json();
+
+    if (!result.result?.value) {
+      console.warn('[PumpFun] Bonding curve not found - token may have graduated to Raydium');
+      return null;
+    }
+
+    // Decode the bonding curve account data
+    // Bonding curve layout (simplified):
+    // - 8 bytes: discriminator
+    // - 8 bytes: virtual_token_reserves (u64)
+    // - 8 bytes: virtual_sol_reserves (u64)
+    // - 8 bytes: real_token_reserves (u64)
+    // - 8 bytes: real_sol_reserves (u64)
+    // - 8 bytes: token_total_supply (u64)
+    // - 1 byte: complete (bool)
+
+    const data = Buffer.from(result.result.value.data[0], 'base64');
+
+    // Read virtual reserves (after 8-byte discriminator)
+    const virtualTokenReserves = Number(data.readBigUInt64LE(8));
+    const virtualSolReserves = Number(data.readBigUInt64LE(16));
+    const complete = data[49] === 1; // complete flag
+
+    console.log(`[PumpFun] Raw reserves - SOL: ${virtualSolReserves}, Tokens: ${virtualTokenReserves}, Complete: ${complete}`);
+
+    if (complete) {
+      console.log('[PumpFun] Token has graduated - bonding curve complete');
+      return null; // Use Jupiter for graduated tokens
+    }
+
+    if (virtualTokenReserves === 0) {
+      console.warn('[PumpFun] Zero token reserves');
+      return null;
+    }
+
+    // Calculate price: SOL per token (this is the KEY value for P&L!)
+    // virtualSolReserves is in lamports, virtualTokenReserves is in token units (6 decimals)
+    const solPerToken = (virtualSolReserves / LAMPORTS_PER_SOL) / (virtualTokenReserves / 1e6);
+
+    console.log(`[PumpFun] Price: ${solPerToken.toFixed(12)} SOL/token`);
+
+    return {
+      solPerToken, // Return SOL price directly - no USD conversion needed for P&L!
+      virtualSolReserves: virtualSolReserves / LAMPORTS_PER_SOL,
+      virtualTokenReserves: virtualTokenReserves / 1e6,
+      complete,
+    };
+  } catch (error) {
+    console.warn('[PumpFun] Error reading bonding curve:', error);
+    return null;
+  }
+}
+
+/**
+ * Get the current SOL value of a token position
+ * IMPORTANT: Checks bonding curve FIRST for pump.fun tokens, then Jupiter for graduated tokens
+ */
+export async function getTokenValueInSol(
+  tokenMint: string,
+  tokenAmount: number, // In smallest token units
+  tokenDecimals: number = 6 // Token decimals for price calculation
+): Promise<number | null> {
+  try {
+    // Method 1: Check pump.fun bonding curve FIRST (most accurate for non-graduated tokens)
+    // This is critical because Jupiter returns WRONG quotes for bonding curve tokens!
+    console.log(`[Value] Checking pump.fun bonding curve for ${tokenMint.slice(0, 8)}...`);
+    const pumpData = await getPumpFunTokenData(tokenMint);
+
+    if (pumpData && !pumpData.complete && pumpData.solPerToken > 0) {
+      // Token is still on bonding curve - use on-chain SOL price directly (most accurate!)
+      // NO USD CONVERSION - this avoids getSolPrice() rate limiting issues!
+      const humanTokenAmount = tokenAmount / Math.pow(10, tokenDecimals);
+      const solValue = humanTokenAmount * pumpData.solPerToken;
+      console.log(`[Value] ✅ BONDING CURVE: ${humanTokenAmount.toFixed(2)} tokens × ${pumpData.solPerToken.toFixed(12)} SOL/token = ${solValue.toFixed(6)} SOL`);
+      return solValue;
+    }
+
+    // Token has graduated (bonding curve complete or not found) - use Jupiter
+    if (pumpData?.complete) {
+      console.log(`[Value] Token graduated, using Jupiter...`);
+    } else {
+      console.log(`[Value] No bonding curve found, trying Jupiter...`);
+    }
+
+    // Method 2: Try Jupiter quote (for graduated tokens with DEX liquidity)
+    const quote = await getSwapQuote(tokenMint, SOL_MINT, tokenAmount, 100); // 1% slippage
+    if (quote) {
+      const solValue = parseInt(quote.outAmount) / LAMPORTS_PER_SOL;
+      if (solValue > 0.0001) { // More than dust
+        console.log(`[Value] ✅ JUPITER: ${tokenAmount} tokens → ${solValue.toFixed(6)} SOL`);
+        return solValue;
+      }
+      console.warn(`[Value] Jupiter quote too low (${solValue}), trying DexScreener...`);
+    }
+
+    // Method 3: Fallback to DexScreener
+    console.log(`[Value] Trying DexScreener fallback...`);
+    const dexData = await getDexScreenerData(tokenMint);
+    if (dexData && dexData.priceUsd > 0) {
+      const humanTokenAmount = tokenAmount / Math.pow(10, tokenDecimals);
+      const valueUsd = humanTokenAmount * dexData.priceUsd;
+      const solPrice = await getSolPrice();
+      if (solPrice > 0) {
+        const solValue = valueUsd / solPrice;
+        console.log(`[Value] ✅ DEXSCREENER: ${humanTokenAmount.toFixed(2)} tokens × $${dexData.priceUsd.toFixed(8)} = $${valueUsd.toFixed(4)} = ${solValue.toFixed(6)} SOL`);
+        return solValue;
+      }
+    }
+
+    console.warn('[Value] ❌ No quote available from bonding curve, Jupiter, or DexScreener');
+    return null;
   } catch (error) {
     console.error('[Value] Failed to get token value:', error);
     return null;

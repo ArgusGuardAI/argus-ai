@@ -4,26 +4,13 @@ export default {
   theme: {
     extend: {
       colors: {
-        argus: {
-          bg: '#0a0d12',
-          card: '#151c24',
-          border: '#1c252f',
-          accent: '#f97316',
-          'accent-light': '#fb923c',
-          danger: '#ef4444',
-          warning: '#f59e0b',
-        },
-        storm: {
-          950: '#0a0d12',
-          900: '#0f1419',
-          800: '#151c24',
-          700: '#1c252f',
-          600: '#242f3a',
-          500: '#3d4f5f',
+        zinc: {
+          925: '#121215',
         },
       },
       fontFamily: {
-        myth: ['Cinzel', 'serif'],
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+        mono: ['JetBrains Mono', 'monospace'],
       },
     },
   },

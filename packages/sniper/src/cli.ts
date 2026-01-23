@@ -11,6 +11,7 @@
  */
 
 import { SniperEngine } from './engine/sniper';
+import type { NewTokenEvent } from './types';
 
 const RPC_URL = process.env.HELIUS_RPC_URL || 'https://api.mainnet-beta.solana.com';
 const WALLET_KEY = process.env.WALLET_PRIVATE_KEY || '';
@@ -92,8 +93,8 @@ async function main() {
   // Start in watch-only or live mode
   if (WATCH_ONLY) {
     // In watch-only, just listen without executing trades
-    const { PumpFunListener } = await import('./listeners/pump-fun');
-    const { TokenAnalyzer } = await import('./engine/analyzer');
+    const { PumpFunListener } = await import('./listeners/pump-fun.js');
+    const { TokenAnalyzer } = await import('./engine/analyzer.js');
 
     const listener = new PumpFunListener();
     const analyzer = new TokenAnalyzer({
@@ -110,9 +111,10 @@ async function main() {
       takeProfitPercent: 0,
       stopLossPercent: 0,
       maxHoldTimeMinutes: 0,
+      manualModeOnly: true,
     });
 
-    listener.on('newToken', async (token) => {
+    listener.on('newToken', async (token: NewTokenEvent) => {
       console.log(`\n🆕 New token: ${token.symbol} (${token.address})`);
       console.log(`   Source: ${token.source} | Creator: ${token.creator.slice(0, 8)}...`);
 

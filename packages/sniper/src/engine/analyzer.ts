@@ -128,7 +128,7 @@ export class TokenAnalyzer {
         return this.createDecision(token, false, 'API request failed', 100);
       }
 
-      const analysis = await response.json();
+      const analysis = await response.json() as { riskScore?: number; flags?: Array<{ message: string }>; summary?: string };
       const riskScore = analysis.riskScore || 100;
 
       // Check against config thresholds

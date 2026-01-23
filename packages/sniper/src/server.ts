@@ -3,6 +3,7 @@
  * Serves the web dashboard and WebSocket connections
  */
 
+import 'dotenv/config';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { serve } from '@hono/node-server';
@@ -10,7 +11,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { SniperEngine } from './engine/sniper';
 import type { SniperConfig } from './types';
 
-const PORT = parseInt(process.env.PORT || '8787');
+const PORT = parseInt(process.env.PORT || '8788'); // Use 8788 to not conflict with workers on 8787
 const RPC_URL = process.env.HELIUS_RPC_URL || 'https://api.mainnet-beta.solana.com';
 
 // Extract Helius API key from RPC URL if available
@@ -43,15 +44,21 @@ app.get('/api/status', (c) => {
 // Start sniper
 app.post('/api/start', async (c) => {
   try {
-    const { config } = await c.req.json<{ config: Partial<SniperConfig> }>();
+    const { config, preFilterConfig } = await c.req.json<{ config: Partial<SniperConfig>; preFilterConfig?: Record<string, unknown> }>();
 
     if (!sniper) {
-      sniper = new SniperEngine(RPC_URL, config);
+      sniper = new SniperEngine(RPC_URL, config, preFilterConfig || {});
 
       // Forward all messages to WebSocket clients
       sniper.on('message', (msg) => {
         broadcast(msg);
       });
+    } else {
+      // Update pre-filter config if sniper already exists
+      if (preFilterConfig) {
+        console.log('[API] Updating pre-filter config:', preFilterConfig);
+        sniper.updatePreFilterConfig(preFilterConfig);
+      }
     }
 
     await sniper.start();
@@ -116,7 +123,7 @@ app.post('/api/analyze', async (c) => {
       return c.json({ error: 'Analysis failed' }, 500);
     }
 
-    const result = await response.json();
+    const result = await response.json() as { riskScore: number; riskLevel: string };
     console.log(`[API] Analysis complete: ${result.riskScore} (${result.riskLevel})`);
 
     return c.json(result);
@@ -148,10 +155,10 @@ app.get('/api/jupiter/quote', async (c) => {
     if (!response.ok) {
       const errorText = await response.text();
       console.error('[API] Quote failed:', response.status, errorText);
-      return c.json({ error: errorText }, response.status);
+      return c.json({ error: errorText }, response.status as 400 | 500);
     }
 
-    const data = await response.json();
+    const data = await response.json() as { inAmount: string; outAmount: string };
     console.log(`[API] Quote success: ${data.inAmount} -> ${data.outAmount}`);
     return c.json(data);
   } catch (error) {
@@ -179,10 +186,10 @@ app.post('/api/jupiter/swap', async (c) => {
     if (!response.ok) {
       const errorText = await response.text();
       console.error('[API] Swap failed:', response.status, errorText);
-      return c.json({ error: errorText }, response.status);
+      return c.json({ error: errorText }, response.status as 400 | 500);
     }
 
-    const data = await response.json();
+    const data = await response.json() as { swapTransaction: string };
     console.log('[API] Swap transaction built successfully');
     return c.json(data);
   } catch (error) {
@@ -214,7 +221,7 @@ app.get('/api/price/:tokenMint', async (c) => {
       return c.json({ price: null, error: 'No route' }, 200);
     }
 
-    const data = await response.json();
+    const data = await response.json() as { inAmount: string; outAmount: string };
 
     // Price = outAmount (in lamports) / inAmount (tokens)
     const priceInSol = parseFloat(data.outAmount) / 1e9 / (parseFloat(data.inAmount) / 1e6);
@@ -256,7 +263,7 @@ app.post('/api/prices', async (c) => {
           });
 
           if (response.ok) {
-            const data = await response.json();
+            const data = await response.json() as { inAmount: string; outAmount: string };
             prices[tokenMint] = parseFloat(data.outAmount) / 1e9 / (parseFloat(data.inAmount) / 1e6);
           } else {
             prices[tokenMint] = null;
@@ -272,6 +279,73 @@ app.post('/api/prices', async (c) => {
     console.error('[API] Prices error:', error);
     return c.json({ error: String(error) }, 500);
   }
+});
+
+// ============================================
+// PRE-FILTER & AUTO-TRADE ENDPOINTS
+// ============================================
+
+// Get pre-filter stats
+app.get('/api/prefilter/stats', (c) => {
+  if (!sniper) {
+    return c.json({ error: 'Sniper not initialized' }, 400);
+  }
+  return c.json(sniper.getPreFilterStats());
+});
+
+// Get pre-filter config
+app.get('/api/prefilter/config', (c) => {
+  if (!sniper) {
+    return c.json({ error: 'Sniper not initialized' }, 400);
+  }
+  return c.json(sniper.getPreFilterConfig());
+});
+
+// Update pre-filter config
+app.put('/api/prefilter/config', async (c) => {
+  if (!sniper) {
+    return c.json({ error: 'Sniper not initialized' }, 400);
+  }
+  const config = await c.req.json();
+  sniper.updatePreFilterConfig(config);
+  return c.json({ success: true, config: sniper.getPreFilterConfig() });
+});
+
+// Reset pre-filter stats
+app.post('/api/prefilter/reset', (c) => {
+  if (!sniper) {
+    return c.json({ error: 'Sniper not initialized' }, 400);
+  }
+  sniper.resetPreFilterStats();
+  return c.json({ success: true });
+});
+
+// Flag a creator as scammer
+app.post('/api/prefilter/flag-creator', async (c) => {
+  if (!sniper) {
+    return c.json({ error: 'Sniper not initialized' }, 400);
+  }
+  const { creatorAddress } = await c.req.json() as { creatorAddress: string };
+  sniper.flagCreator(creatorAddress);
+  return c.json({ success: true, flagged: creatorAddress });
+});
+
+// Toggle auto-trade
+app.post('/api/autotrade', async (c) => {
+  if (!sniper) {
+    return c.json({ error: 'Sniper not initialized' }, 400);
+  }
+  const { enabled } = await c.req.json() as { enabled: boolean };
+  sniper.setAutoTrade(enabled);
+  return c.json({ success: true, autoTradeEnabled: sniper.isAutoTradeEnabled() });
+});
+
+// Get auto-trade status
+app.get('/api/autotrade', (c) => {
+  if (!sniper) {
+    return c.json({ error: 'Sniper not initialized' }, 400);
+  }
+  return c.json({ autoTradeEnabled: sniper.isAutoTradeEnabled() });
 });
 
 function handleClientMessage(msg: any, _ws: WebSocket) {
@@ -300,6 +374,33 @@ function handleClientMessage(msg: any, _ws: WebSocket) {
       if (sniper) {
         console.log(`[WS] Manual snipe request for ${msg.tokenAddress}`);
         sniper.manualBuy(msg.tokenAddress);
+      }
+      break;
+
+    case 'SET_AUTO_TRADE':
+      if (sniper) {
+        sniper.setAutoTrade(msg.enabled);
+        broadcast({ type: 'AUTO_TRADE_STATUS', data: { enabled: sniper.isAutoTradeEnabled() } });
+      }
+      break;
+
+    case 'UPDATE_PREFILTER':
+      if (sniper) {
+        sniper.updatePreFilterConfig(msg.config);
+        broadcast({ type: 'PREFILTER_CONFIG', data: sniper.getPreFilterConfig() });
+      }
+      break;
+
+    case 'GET_PREFILTER_STATS':
+      if (sniper) {
+        broadcast({ type: 'PREFILTER_STATS', data: sniper.getPreFilterStats() });
+      }
+      break;
+
+    case 'FLAG_CREATOR':
+      if (sniper && msg.creatorAddress) {
+        sniper.flagCreator(msg.creatorAddress);
+        console.log(`[WS] Flagged creator: ${msg.creatorAddress}`);
       }
       break;
   }

@@ -1,18 +1,24 @@
 # CLAUDE.md
 
-Development guidance for AI assistants working on the ArgusGuard codebase.
+Development guidance for AI assistants working on the Solana Safeguard AI codebase.
 
 ---
 
 ## Project Overview
 
-**ArgusGuard** is an AI-powered browser extension that provides security analysis for Solana tokens on Pump.fun and DexScreener. It detects honeypots, rug pulls, and scam indicators using Together AI for analysis and Helius for on-chain data.
+**Solana Safeguard AI** is an automated AI-powered trading system for Solana tokens. It scans new tokens on Pump.fun, analyzes them for risk using AI, and automatically executes trades on approved tokens.
 
-### Core Value Proposition
-- Instant risk scoring (0-100) for any Solana token
-- Community "Graffiti" notes visible to token holders
-- Creator wallet history tracking
-- Bundle detection for coordinated attacks
+### Core Components
+- **Argus** (`packages/argus`) - AI Trading Dashboard (React + Vite)
+- **Sniper** (`packages/sniper`) - Token scanner and analysis backend
+- **Workers** (`packages/workers`) - Cloudflare Workers API for analysis
+
+### Key Features
+- Real-time Pump.fun token scanning
+- AI-powered risk analysis (0-100 score)
+- Fully automated trading with dedicated wallet
+- Auto-sell: Take profit, stop loss, trailing stop
+- Position tracking with P&L
 
 ---
 
@@ -20,16 +26,17 @@ Development guidance for AI assistants working on the ArgusGuard codebase.
 
 ```
 packages/
-├── extension/       # Plasmo browser extension (React)
-│   ├── src/contents/   # Content scripts for Pump.fun, DexScreener
-│   ├── src/popup/      # Extension popup UI
-│   └── src/background/ # Service worker
-├── workers/         # Cloudflare Workers API (Hono)
-│   ├── src/routes/     # API endpoints
-│   ├── src/services/   # External API integrations
-│   └── src/prompts/    # AI system prompts
-└── shared/          # Shared types and constants
-    └── src/types/      # TypeScript interfaces
+├── argus/           # AI Trading Dashboard (React + Vite)
+│   ├── src/App.tsx      # Main dashboard UI
+│   ├── src/hooks/       # useAutoTrade hook
+│   └── src/lib/         # Jupiter swap, trading wallet
+├── sniper/          # Token Scanner Backend
+│   ├── src/engine/      # Scanner, analyzer, pre-filter
+│   ├── src/trading/     # Trade executor
+│   └── src/server.ts    # WebSocket server
+└── workers/         # Cloudflare Workers API
+    ├── src/routes/      # API endpoints
+    └── src/services/    # Helius, DexScreener, Together AI
 ```
 
 ---
@@ -39,225 +46,180 @@ packages/
 ```bash
 # Development
 pnpm install              # Install dependencies
-pnpm dev:workers          # Start Workers locally
-pnpm dev:extension        # Start extension dev server
-pnpm dev                  # Start all packages
 
-# Build & Deploy
-pnpm build                # Build all packages
-pnpm deploy:workers       # Deploy to Cloudflare
+# Argus (Trading Dashboard)
+cd packages/argus
+pnpm dev                  # Start dashboard at localhost:3000
+
+# Sniper (Scanner Backend)
+cd packages/sniper
+pnpm dev                  # Start scanner at localhost:8788
+
+# Workers (API)
+cd packages/workers
+pnpm dev                  # Start workers at localhost:8787
 ```
 
 ---
 
 ## Key Files
 
-### Workers Package (`packages/workers/`)
+### Argus Package (`packages/argus/`)
 
 | File | Purpose |
 |------|---------|
-| `src/routes/analyze.ts` | Main analysis endpoint, orchestrates all data fetching and AI analysis |
-| `src/services/together-ai.ts` | Together AI integration, response parsing, retry logic |
-| `src/services/helius.ts` | Helius DAS API for token metadata, creator analysis, bundle detection |
-| `src/services/dexscreener.ts` | Market data: price, volume, liquidity, age, socials |
-| `src/services/pumpfun.ts` | Pump.fun bonding curve data, creator info |
-| `src/services/solana-data.ts` | On-chain holder analysis via Solana RPC |
-| `src/prompts/honeypot-prompt.ts` | AI system prompt with scoring rules |
+| `src/App.tsx` | Main dashboard with pages: Dashboard, Positions, Settings |
+| `src/hooks/useAutoTrade.ts` | Core trading logic: buy, sell, position tracking |
+| `src/lib/jupiter.ts` | Jupiter swap integration for buys/sells |
+| `src/lib/tradingWallet.ts` | Dedicated trading wallet (encrypted localStorage) |
+| `src/contexts/AuthContext.tsx` | Wallet adapter context provider |
 
-### Analysis Pipeline (analyze.ts)
+### Sniper Package (`packages/sniper/`)
 
+| File | Purpose |
+|------|---------|
+| `src/server.ts` | WebSocket server, broadcasts token events |
+| `src/engine/sniper.ts` | Main scanner engine |
+| `src/engine/analyzer.ts` | AI risk analysis |
+| `src/engine/pre-filter.ts` | Fast pre-filtering (age, liquidity, etc.) |
+
+---
+
+## Trading System
+
+### Auto-Trade Flow
 ```
-1. Receive token address
-2. Check KV cache (return if hit)
-3. Fetch data in parallel:
-   - DexScreener (market data)
-   - Pump.fun (bonding curve)
-   - Helius (metadata, authorities)
-4. Analyze creator wallet history
-5. Detect bundle patterns
-6. Build context string
-7. Call Together AI
-8. Apply hardcoded rules (caps, minimums)
-9. Cache result (KV + Supabase)
+1. Sniper detects new token on Pump.fun
+2. Pre-filter checks (age, liquidity, market cap)
+3. AI analyzes for risk score (0-100)
+4. If score <= maxRiskScore AND auto-trade enabled:
+   - Execute buy via Jupiter
+   - Create position for tracking
+5. Price monitoring loop (every 10s):
+   - Check take profit condition
+   - Check stop loss condition
+   - Check trailing stop condition
+6. Execute sell when condition met
 ```
+
+### Trading Wallet
+- Dedicated wallet stored encrypted in localStorage
+- Signs transactions instantly (no popup confirmations)
+- User's main wallet stays safe
+- Can import/export private key
+
+### Safety Limits
+- `reserveBalanceSol` - Always keep minimum SOL
+- `maxTradesPerSession` - Limit trades (0 = unlimited)
+- `maxRiskScore` - Only trade low-risk tokens
+
+### Auto-Sell Settings
+- **Take Profit**: Sell when position up X%
+- **Stop Loss**: Sell when position down X%
+- **Trailing Stop**: Sell when drops X% from peak
 
 ---
 
 ## Risk Analysis System
 
 ### Risk Levels
-| Level | Score | Color | Meaning |
-|-------|-------|-------|---------|
-| SAFE | 0-49 | Green | Low risk |
-| SUSPICIOUS | 50-69 | Yellow | Caution |
-| DANGEROUS | 70-89 | Orange | High risk |
-| SCAM | 90-100 | Red | Critical |
+| Level | Score | Meaning |
+|-------|-------|---------|
+| SAFE | 0-49 | Low risk, tradeable |
+| SUSPICIOUS | 50-69 | Caution |
+| DANGEROUS | 70-89 | High risk |
+| SCAM | 90-100 | Do not trade |
 
-### Flag Types
-```typescript
-type FlagType =
-  | 'LIQUIDITY'   // LP locks, liquidity depth
-  | 'OWNERSHIP'   // Mint/freeze authority
-  | 'CONTRACT'    // Bonding curve, program issues
-  | 'SOCIAL'      // Website, Twitter, Telegram
-  | 'DEPLOYER'    // Wallet age, history, rug count
-  | 'BUNDLE'      // Coordinated transactions
-  | 'HOLDERS'     // Concentration risk
-  | 'TRADING';    // Buy/sell patterns
+### Pre-Filter Checks
+- Token age (minimum age requirement)
+- Liquidity (minimum liquidity)
+- Market cap (min/max bounds)
+- Holder concentration
 
-type Severity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+---
+
+## Data Flow
+
 ```
-
-### Scoring Rules
-
-**Base Score Factors:**
-- Token age <1 day: +20
-- Unknown deployer: +15
-- Missing socials: +10
-- Single wallet >50%: +25
-- Bundle detected: +10-20
-
-**Score Caps (established tokens):**
-- $100M+ MC, 30+ days: max 35
-- $50M+ MC, 14+ days: max 45
-- $10M+ MC, 7+ days: max 55
+Pump.fun WebSocket
+       │
+       ▼
+┌─────────────┐
+│   Sniper    │ ──▶ Pre-filter (fast checks)
+│   Backend   │ ──▶ AI Analysis (risk score)
+└──────┬──────┘
+       │ WebSocket
+       ▼
+┌─────────────┐
+│   Argus     │ ──▶ Display in Live Feed
+│  Dashboard  │ ──▶ Auto-trade if approved
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐
+│  Jupiter    │ ──▶ Execute swap
+│    API      │ ──▶ Return signature
+└─────────────┘
+```
 
 ---
 
 ## Environment Variables
 
+### Sniper (.env)
+```env
+HELIUS_API_KEY=          # Required for RPC
+TOGETHER_AI_API_KEY=     # Required for AI analysis
+```
+
 ### Workers (.dev.vars)
 ```env
 TOGETHER_AI_API_KEY=     # Required
-TOGETHER_AI_MODEL=       # Default: meta-llama/Llama-3.3-70B-Instruct-Turbo
-SUPABASE_URL=            # Required
-SUPABASE_ANON_KEY=       # Required
-HELIUS_API_KEY=          # Required for full analysis
-```
-
-### Setting Production Secrets
-```bash
-wrangler secret put TOGETHER_AI_API_KEY
-wrangler secret put SUPABASE_URL
-wrangler secret put SUPABASE_ANON_KEY
-wrangler secret put HELIUS_API_KEY
+HELIUS_API_KEY=          # Required
+SUPABASE_URL=            # Optional
+SUPABASE_ANON_KEY=       # Optional
 ```
 
 ---
 
-## AI Prompt Engineering
+## LocalStorage Keys
 
-Located in `src/prompts/honeypot-prompt.ts`:
+Argus stores data in browser localStorage:
 
-### Anti-Hallucination Rules
-- Only cite data explicitly in context
-- Say "UNKNOWN" for missing data
-- Never invent percentages or statistics
-
-### User-Facing Messages
-- No internal scoring formulas
-- Human-readable flag messages
-- Good: "Deployer wallet could not be identified"
-- Bad: "Unknown deployer = +15 to score"
-
-### Social Link Verification
-- Check for "Website:", "Twitter:", "Telegram:" with URLs
-- Only flag missing socials if NO URLs present
-
----
-
-## Data Sources
-
-| Source | Data Provided |
-|--------|---------------|
-| **DexScreener** | Market cap, liquidity, volume, age, socials |
-| **Helius DAS** | Token metadata, authorities, supply |
-| **Helius Transactions** | Creator history, bundle detection |
-| **Solana RPC** | Holder distribution, concentration |
-| **Pump.fun** | Bonding curve, creator address |
-
----
-
-## Common Issues & Fixes
-
-### "Analysis Failed" Response
-- Check Together AI API key validity
-- Verify model ID exists (try `meta-llama/Llama-3.3-70B-Instruct-Turbo`)
-- Check `together-ai.ts` parsing logic
-
-### Missing/Zero Holder Data
-- Requires HELIUS_API_KEY for accurate data
-- Without Helius, falls back to basic RPC (less accurate)
-
-### AI Hallucination
-- Check `honeypot-prompt.ts` for missing rules
-- Verify context string contains cited data
-- Add explicit "DO NOT" instructions if needed
-
-### False "No Social Links" Flag
-- AI may ignore socials in context
-- Check SOCIAL LINKS section in prompt
-- Verify DexScreener is returning social URLs
-
----
-
-## Testing
-
-```bash
-# Test analysis endpoint
-curl -X POST http://localhost:8787/analyze \
-  -H "Content-Type: application/json" \
-  -d '{"tokenAddress": "TOKEN_ADDRESS", "forceRefresh": true}'
-
-# Check health
-curl http://localhost:8787/health
-```
-
-### Test Tokens
-- **BONK** (established): `DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263`
-- **ARC** (pump.fun graduated): `61V8vBaqAGMpgDQi4JcAwo1dmBGHsyhzodcPqnEVpump`
-
----
-
-## Database Schema (Supabase)
-
-```sql
-CREATE TABLE graffiti_notes (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  token_address TEXT NOT NULL,
-  author_wallet TEXT NOT NULL,
-  content TEXT NOT NULL,
-  note_type TEXT CHECK (note_type IN ('WARNING', 'INFO', 'POSITIVE')),
-  upvotes INTEGER DEFAULT 0,
-  downvotes INTEGER DEFAULT 0,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE TABLE scan_results (
-  token_address TEXT PRIMARY KEY,
-  risk_score INTEGER,
-  risk_level TEXT,
-  flags JSONB,
-  summary TEXT,
-  checked_at TIMESTAMPTZ
-);
-```
+| Key | Purpose |
+|-----|---------|
+| `argus_trading_wallet` | Encrypted trading wallet keypair |
+| `argus_trading_state` | Positions, P&L, trade history |
 
 ---
 
 ## Code Style
 
 - TypeScript strict mode
-- Hono for Workers routing
-- React + Tailwind for extension UI
+- React functional components with hooks
+- Tailwind CSS for styling
 - pnpm workspaces monorepo
 - No emojis in code unless user requests
 
 ---
 
-## Security
+## Common Issues
 
-- Never commit `.dev.vars` or API keys
-- Use `wrangler secret` for production
-- Validate token addresses (base58, correct length)
-- Rate limit endpoints in production
+### "Auto-trade disabled, skipping"
+- Auto-trade toggle is OFF
+- Enable in Dashboard or Settings
+
+### Duplicate trades
+- Fixed with triple protection:
+  1. `isBuyingRef` - blocks during buy
+  2. `tradedTokensRef` - tracks all attempts
+  3. Position check - verifies no existing position
+
+### Sell not working
+- Check browser console for errors
+- May need higher slippage for volatile tokens
+- Use "Clear All" if tokens were sold externally
+
+### Position stuck
+- Token may have been sold via Phantom
+- Use "Clear All" to remove stale positions

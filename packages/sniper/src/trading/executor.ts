@@ -17,6 +17,17 @@ const JUPITER_QUOTE_API = 'https://quote-api.jup.ag/v6';
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
 const LAMPORTS_PER_SOL = 1_000_000_000;
 
+interface JupiterQuote {
+  inAmount: string;
+  outAmount: string;
+  outputMintDecimals?: number;
+  error?: string;
+}
+
+interface JupiterSwapResponse {
+  swapTransaction: string;
+}
+
 export class TradeExecutor {
   private connection: Connection;
   private wallet: Keypair;
@@ -52,7 +63,7 @@ export class TradeExecutor {
         throw new Error(`Quote failed: ${quoteResponse.status}`);
       }
 
-      const quote = await quoteResponse.json();
+      const quote = await quoteResponse.json() as JupiterQuote;
 
       if (!quote || quote.error) {
         throw new Error(quote?.error || 'No quote available');
@@ -74,7 +85,7 @@ export class TradeExecutor {
         throw new Error(`Swap request failed: ${swapResponse.status}`);
       }
 
-      const { swapTransaction } = await swapResponse.json();
+      const { swapTransaction } = await swapResponse.json() as JupiterSwapResponse;
 
       // Deserialize and sign
       const swapTxBuf = Buffer.from(swapTransaction, 'base64');
@@ -140,7 +151,7 @@ export class TradeExecutor {
         throw new Error(`Quote failed: ${quoteResponse.status}`);
       }
 
-      const quote = await quoteResponse.json();
+      const quote = await quoteResponse.json() as JupiterQuote;
 
       if (!quote || quote.error) {
         throw new Error(quote?.error || 'No quote available');
@@ -162,7 +173,7 @@ export class TradeExecutor {
         throw new Error(`Swap request failed: ${swapResponse.status}`);
       }
 
-      const { swapTransaction } = await swapResponse.json();
+      const { swapTransaction } = await swapResponse.json() as JupiterSwapResponse;
 
       // Deserialize and sign
       const swapTxBuf = Buffer.from(swapTransaction, 'base64');

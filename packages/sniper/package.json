@@ -5,19 +5,18 @@
   "description": "ArgusGuard Smart Sniper - AI-powered safe token sniping",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "concurrently \"pnpm dev:server\" \"pnpm dev:web\"",
-    "dev:server": "tsx watch src/server.ts",
-    "dev:web": "cd web && pnpm dev",
-    "build": "tsc && cd web && pnpm build",
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
     "start": "node dist/server.js",
     "cli": "tsx src/cli.ts"
   },
   "dependencies": {
+    "@argusguard/shared": "workspace:*",
     "@hono/node-server": "^1.8.0",
     "@hono/node-ws": "^1.0.0",
     "@jup-ag/api": "^6.0.0",
     "@solana/web3.js": "^1.95.0",
-    "@argusguard/shared": "workspace:*",
+    "dotenv": "^17.2.3",
     "hono": "^4.0.0",
     "ws": "^8.16.0"
   },

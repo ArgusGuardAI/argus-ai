@@ -34,10 +34,21 @@ export interface NewTokenEvent {
   address: string;
   name: string;
   symbol: string;
-  source: 'pump.fun' | 'raydium';
-  creator: string;
+  source: 'pump.fun' | 'raydium' | 'dexscreener-boost' | 'dexscreener-trending';
+  creator?: string;
   liquidityUsd: number;
   timestamp: number;
+  // Extended fields for analysis
+  decimals?: number;
+  supply?: number;
+  initialMarketCap?: number;
+  priceUsd?: number;
+  volume24h?: number;
+  volume1h?: number;
+  buys1h?: number;
+  sells1h?: number;
+  priceChange1h?: number;
+  priceChange24h?: number;
 }
 
 export interface SnipeDecision {
