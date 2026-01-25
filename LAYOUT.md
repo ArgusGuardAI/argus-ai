@@ -107,4 +107,3 @@ solana-safeguard-ai/
 │   │       └── constants/
 │   │           └── chains.ts       # Chain constants
 │
-└── marketing/                  # Marketing assets (screenshots, video)
