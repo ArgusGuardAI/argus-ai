@@ -565,6 +565,353 @@ const styles = `
     color: #A1A1AA;
   }
 
+  /* --- HOW IT WORKS --- */
+  .landing-page .how-it-works {
+    padding: 100px 0;
+    background: var(--bg-card);
+    border-top: 1px solid var(--border);
+  }
+
+  .landing-page .steps-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 32px;
+    position: relative;
+  }
+
+  .landing-page .steps-grid::before {
+    content: '';
+    position: absolute;
+    top: 40px;
+    left: 60px;
+    right: 60px;
+    height: 2px;
+    background: var(--border);
+  }
+
+  .landing-page .step {
+    text-align: center;
+    position: relative;
+  }
+
+  .landing-page .step-number {
+    width: 80px;
+    height: 80px;
+    background: linear-gradient(135deg, #09090B 0%, #27272A 100%);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 24px;
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: white;
+    position: relative;
+    z-index: 1;
+  }
+
+  .landing-page .step-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+
+  .landing-page .step-desc {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    line-height: 1.6;
+  }
+
+  /* --- TOKENOMICS --- */
+  .landing-page .tokenomics {
+    padding: 100px 0;
+    border-top: 1px solid var(--border);
+  }
+
+  .landing-page .token-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 60px;
+    align-items: center;
+  }
+
+  .landing-page .token-info h3 {
+    font-size: 1.8rem;
+    font-weight: 800;
+    margin-bottom: 16px;
+    letter-spacing: -0.02em;
+  }
+
+  .landing-page .token-info p {
+    font-size: 1rem;
+    color: var(--text-muted);
+    line-height: 1.7;
+    margin-bottom: 24px;
+  }
+
+  .landing-page .token-stats {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+  }
+
+  .landing-page .token-stat {
+    background: var(--border-light);
+    padding: 20px;
+    border-radius: var(--radius-md);
+  }
+
+  .landing-page .token-stat-value {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: var(--accent);
+    margin-bottom: 4px;
+  }
+
+  .landing-page .token-stat-label {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+
+  .landing-page .token-chart {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 32px;
+  }
+
+  .landing-page .chart-title {
+    font-size: 1rem;
+    font-weight: 700;
+    margin-bottom: 24px;
+    text-align: center;
+  }
+
+  .landing-page .chart-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .landing-page .chart-bar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .landing-page .chart-label {
+    width: 120px;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+
+  .landing-page .chart-track {
+    flex: 1;
+    height: 24px;
+    background: var(--border-light);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .landing-page .chart-fill {
+    height: 100%;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 12px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: white;
+  }
+
+  .landing-page .chart-fill.community { background: linear-gradient(135deg, #10B981 0%, #059669 100%); }
+  .landing-page .chart-fill.development { background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%); }
+  .landing-page .chart-fill.team { background: linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%); }
+  .landing-page .chart-fill.liquidity { background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%); }
+  .landing-page .chart-fill.reserve { background: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%); }
+
+  /* --- ROADMAP --- */
+  .landing-page .roadmap {
+    padding: 100px 0;
+    background: var(--bg-card);
+    border-top: 1px solid var(--border);
+  }
+
+  .landing-page .roadmap-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+  }
+
+  .landing-page .roadmap-card {
+    background: var(--bg-body);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 32px;
+    position: relative;
+  }
+
+  .landing-page .roadmap-card.active {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+  }
+
+  .landing-page .roadmap-phase {
+    display: inline-block;
+    padding: 6px 12px;
+    background: var(--border-light);
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .landing-page .roadmap-card.active .roadmap-phase {
+    background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+    color: white;
+  }
+
+  .landing-page .roadmap-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin-bottom: 16px;
+  }
+
+  .landing-page .roadmap-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .landing-page .roadmap-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+  }
+
+  .landing-page .roadmap-item svg {
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .landing-page .roadmap-card.active .roadmap-item {
+    color: var(--text-main);
+  }
+
+  /* --- TEAM --- */
+  .landing-page .team {
+    padding: 100px 0;
+    border-top: 1px solid var(--border);
+  }
+
+  .landing-page .team-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 32px;
+  }
+
+  .landing-page .team-card {
+    text-align: center;
+  }
+
+  .landing-page .team-avatar {
+    width: 120px;
+    height: 120px;
+    background: linear-gradient(135deg, var(--border-light) 0%, var(--border) 100%);
+    border-radius: 50%;
+    margin: 0 auto 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: var(--text-muted);
+  }
+
+  .landing-page .team-name {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+
+  .landing-page .team-role {
+    font-size: 0.9rem;
+    color: var(--accent);
+    font-weight: 600;
+    margin-bottom: 12px;
+  }
+
+  .landing-page .team-bio {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    line-height: 1.6;
+  }
+
+  .landing-page .team-social {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 16px;
+  }
+
+  .landing-page .team-social a {
+    width: 36px;
+    height: 36px;
+    background: var(--border-light);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+  }
+
+  .landing-page .team-social a:hover {
+    background: var(--primary);
+    color: white;
+  }
+
+  /* --- CTA SECTION --- */
+  .landing-page .cta {
+    padding: 100px 0;
+    background: linear-gradient(135deg, #09090B 0%, #18181B 100%);
+    text-align: center;
+  }
+
+  .landing-page .cta h2 {
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: white;
+    margin-bottom: 16px;
+    letter-spacing: -0.03em;
+  }
+
+  .landing-page .cta p {
+    font-size: 1.1rem;
+    color: #A1A1AA;
+    margin-bottom: 32px;
+    max-width: 500px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .landing-page .cta .btn-accent {
+    background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+    color: white;
+    padding: 16px 40px;
+    font-size: 1rem;
+  }
+
+  .landing-page .cta .btn-accent:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(16, 185, 129, 0.3);
+  }
+
   /* --- RESPONSIVE --- */
   @media (max-width: 900px) {
     .landing-page .hero h1 { font-size: 2.5rem; }
@@ -572,6 +919,11 @@ const styles = `
     .landing-page .feature-grid { grid-template-columns: 1fr; }
     .landing-page .stats-grid { grid-template-columns: repeat(2, 1fr); }
     .landing-page .nav-links { display: none; }
+    .landing-page .steps-grid { grid-template-columns: repeat(2, 1fr); }
+    .landing-page .steps-grid::before { display: none; }
+    .landing-page .token-grid { grid-template-columns: 1fr; }
+    .landing-page .roadmap-grid { grid-template-columns: 1fr; }
+    .landing-page .team-grid { grid-template-columns: repeat(2, 1fr); }
   }
 `;
 
@@ -601,7 +953,8 @@ export default function Landing() {
               <div className="nav-links">
                 <a href="#features">Features</a>
                 <a href="#how-it-works">How It Works</a>
-                <a href="https://github.com" target="_blank" rel="noopener noreferrer">GitHub</a>
+                <a href="#tokenomics">Token</a>
+                <a href="#roadmap">Roadmap</a>
               </div>
               <a href="/app" className="btn btn-black">Launch App</a>
             </nav>
@@ -811,6 +1164,260 @@ export default function Landing() {
           </div>
         </section>
 
+        {/* HOW IT WORKS */}
+        <section id="how-it-works" className="how-it-works">
+          <div className="container">
+            <div className="section-header">
+              <h2>How It Works</h2>
+              <p>Research any Solana token in four simple steps</p>
+            </div>
+
+            <div className="steps-grid">
+              <div className="step">
+                <div className="step-number">1</div>
+                <div className="step-title">Paste Address</div>
+                <div className="step-desc">Enter any Solana token mint address into the search bar</div>
+              </div>
+              <div className="step">
+                <div className="step-number">2</div>
+                <div className="step-title">AI Analysis</div>
+                <div className="step-desc">Proprietary AI performs deep analysis using trade-secret algorithms</div>
+              </div>
+              <div className="step">
+                <div className="step-number">3</div>
+                <div className="step-title">Review Results</div>
+                <div className="step-desc">See security status, holder distribution, and risk score</div>
+              </div>
+              <div className="step">
+                <div className="step-number">4</div>
+                <div className="step-title">Trade</div>
+                <div className="step-desc">Buy with one click using your dedicated trading wallet</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* TOKENOMICS */}
+        <section id="tokenomics" className="tokenomics">
+          <div className="container">
+            <div className="section-header">
+              <h2>Tokenomics</h2>
+              <p>Fair launch with community-first distribution</p>
+            </div>
+
+            <div className="token-grid">
+              <div className="token-info">
+                <h3>$ARGUS Token</h3>
+                <p>
+                  The $ARGUS token powers the ecosystem, providing holders with premium features,
+                  reduced trading fees, and governance rights over protocol decisions.
+                </p>
+                <div className="token-stats">
+                  <div className="token-stat">
+                    <div className="token-stat-value">1B</div>
+                    <div className="token-stat-label">Total Supply</div>
+                  </div>
+                  <div className="token-stat">
+                    <div className="token-stat-value">0%</div>
+                    <div className="token-stat-label">Buy/Sell Tax</div>
+                  </div>
+                  <div className="token-stat">
+                    <div className="token-stat-value">100%</div>
+                    <div className="token-stat-label">LP Locked</div>
+                  </div>
+                  <div className="token-stat">
+                    <div className="token-stat-value">Revoked</div>
+                    <div className="token-stat-label">Mint Authority</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="token-chart">
+                <div className="chart-title">Token Distribution</div>
+                <div className="chart-bars">
+                  <div className="chart-bar">
+                    <span className="chart-label">Community</span>
+                    <div className="chart-track">
+                      <div className="chart-fill community" style={{ width: '50%' }}>50%</div>
+                    </div>
+                  </div>
+                  <div className="chart-bar">
+                    <span className="chart-label">Liquidity</span>
+                    <div className="chart-track">
+                      <div className="chart-fill liquidity" style={{ width: '25%' }}>25%</div>
+                    </div>
+                  </div>
+                  <div className="chart-bar">
+                    <span className="chart-label">Development</span>
+                    <div className="chart-track">
+                      <div className="chart-fill development" style={{ width: '15%' }}>15%</div>
+                    </div>
+                  </div>
+                  <div className="chart-bar">
+                    <span className="chart-label">Team</span>
+                    <div className="chart-track">
+                      <div className="chart-fill team" style={{ width: '10%' }}>10%</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ROADMAP */}
+        <section id="roadmap" className="roadmap">
+          <div className="container">
+            <div className="section-header">
+              <h2>Roadmap</h2>
+              <p>Our vision for the future of token research</p>
+            </div>
+
+            <div className="roadmap-grid">
+              <div className="roadmap-card active">
+                <div className="roadmap-phase">Phase 1 - Current</div>
+                <div className="roadmap-title">Foundation</div>
+                <div className="roadmap-list">
+                  <div className="roadmap-item">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>
+                    <span>Token research dashboard</span>
+                  </div>
+                  <div className="roadmap-item">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>
+                    <span>AI-powered analysis</span>
+                  </div>
+                  <div className="roadmap-item">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>
+                    <span>Bundle detection</span>
+                  </div>
+                  <div className="roadmap-item">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>
+                    <span>One-click trading</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="roadmap-card">
+                <div className="roadmap-phase">Phase 2</div>
+                <div className="roadmap-title">Enhancement</div>
+                <div className="roadmap-list">
+                  <div className="roadmap-item">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/></svg>
+                    <span>Portfolio analytics</span>
+                  </div>
+                  <div className="roadmap-item">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/></svg>
+                    <span>Wallet tracking</span>
+                  </div>
+                  <div className="roadmap-item">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/></svg>
+                    <span>Price alerts</span>
+                  </div>
+                  <div className="roadmap-item">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/></svg>
+                    <span>Mobile app</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="roadmap-card">
+                <div className="roadmap-phase">Phase 3</div>
+                <div className="roadmap-title">Expansion</div>
+                <div className="roadmap-list">
+                  <div className="roadmap-item">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/></svg>
+                    <span>Multi-chain support</span>
+                  </div>
+                  <div className="roadmap-item">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/></svg>
+                    <span>Advanced AI models</span>
+                  </div>
+                  <div className="roadmap-item">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/></svg>
+                    <span>DAO governance</span>
+                  </div>
+                  <div className="roadmap-item">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/></svg>
+                    <span>Premium features</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* TEAM */}
+        <section id="team" className="team">
+          <div className="container">
+            <div className="section-header">
+              <h2>Meet the Team</h2>
+              <p>Building the future of token research</p>
+            </div>
+
+            <div className="team-grid">
+              <div className="team-card">
+                <div className="team-avatar">JH</div>
+                <div className="team-name">Jessie H.</div>
+                <div className="team-role">Founder & Lead Dev</div>
+                <div className="team-bio">Full-stack developer with a passion for DeFi and AI technologies.</div>
+                <div className="team-social">
+                  <a href="#" aria-label="Twitter">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+                  </a>
+                  <a href="#" aria-label="GitHub">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                  </a>
+                </div>
+              </div>
+
+              <div className="team-card">
+                <div className="team-avatar">AI</div>
+                <div className="team-name">Claude</div>
+                <div className="team-role">AI Assistant</div>
+                <div className="team-bio">Anthropic's AI model helping build intelligent DeFi tools.</div>
+                <div className="team-social">
+                  <a href="https://anthropic.com" target="_blank" rel="noopener noreferrer" aria-label="Website">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                  </a>
+                </div>
+              </div>
+
+              <div className="team-card">
+                <div className="team-avatar">OS</div>
+                <div className="team-name">Open Source</div>
+                <div className="team-role">Community</div>
+                <div className="team-bio">Built with love by the open source community.</div>
+                <div className="team-social">
+                  <a href="https://github.com" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                  </a>
+                </div>
+              </div>
+
+              <div className="team-card">
+                <div className="team-avatar">+</div>
+                <div className="team-name">You?</div>
+                <div className="team-role">Contributor</div>
+                <div className="team-bio">Join us! We're always looking for contributors.</div>
+                <div className="team-social">
+                  <a href="https://github.com" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* CTA */}
+        <section className="cta">
+          <div className="container">
+            <h2>Ready to Research Smarter?</h2>
+            <p>Start analyzing tokens with AI-powered insights today.</p>
+            <a href="/app" className="btn btn-accent">Launch App</a>
+          </div>
+        </section>
+
         {/* STATS */}
         <section className="stats">
           <div className="container">
@@ -845,10 +1452,10 @@ export default function Landing() {
               <span>ARGUS<span style={{ fontWeight: 300 }}>AI</span></span>
             </div>
             <div className="footer-links">
+              <a href="#features">Features</a>
+              <a href="#tokenomics">Token</a>
+              <a href="#roadmap">Roadmap</a>
               <a href="https://github.com" target="_blank" rel="noopener noreferrer">GitHub</a>
-              <a href="#">Documentation</a>
-              <a href="#">Twitter</a>
-              <a href="#">Discord</a>
             </div>
             <div className="copyright">
               2026 Argus AI. Open Source under MIT License.
