@@ -16,8 +16,8 @@ const HELIUS_API_KEY = '54846763-d323-4cb5-8d67-23ed50c19d10';
 const HELIUS_RPC = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
 
 // Argus AI fee configuration
-// TESTING MODE: Fee collection disabled - set wallet to enable
-const ARGUS_FEE_WALLET: string | null = null; // Production: 'DvQzNPwaVAC2sKvyAkermrmvhnfGftxYdr3tTchB3NEv'
+// 0.5% fee on all trades - sent to platform wallet
+const ARGUS_FEE_WALLET = 'DvQzNPwaVAC2sKvyAkermrmvhnfGftxYdr3tTchB3NEv';
 const ARGUS_FEE_PERCENT = 0.5; // 0.5% fee on AI-executed trades
 
 export interface SwapQuote {
@@ -230,7 +230,7 @@ export async function buyToken(
   if (withAiFee && ARGUS_FEE_WALLET) {
     feeAmount = solAmount * (ARGUS_FEE_PERCENT / 100);
     actualAmount = solAmount - feeAmount;
-    console.log(`[Buy] AI fee: ${feeAmount.toFixed(6)} SOL, Trading: ${actualAmount.toFixed(6)} SOL`);
+    console.log(`[Buy] AI fee: ${feeAmount.toFixed(6)} SOL (${ARGUS_FEE_PERCENT}%), Trading: ${actualAmount.toFixed(6)} SOL`);
   }
 
   const lamports = Math.floor(actualAmount * 1e9); // Convert SOL to lamports
@@ -240,7 +240,41 @@ export async function buyToken(
     return { success: false, error: 'Failed to get quote' };
   }
 
-  return executeSwap(quote, userPublicKey, signTransaction);
+  // Execute the swap first
+  const swapResult = await executeSwap(quote, userPublicKey, signTransaction);
+
+  // If swap succeeded and fee is configured, send the fee
+  if (swapResult.success && feeAmount > 0 && ARGUS_FEE_WALLET) {
+    try {
+      const connection = new Connection(HELIUS_RPC, 'confirmed');
+      const feeLamports = Math.floor(feeAmount * LAMPORTS_PER_SOL);
+      const feeWallet = new PublicKey(ARGUS_FEE_WALLET);
+
+      // Create fee transfer instruction
+      const feeIx = SystemProgram.transfer({
+        fromPubkey: userPublicKey,
+        toPubkey: feeWallet,
+        lamports: feeLamports,
+      });
+
+      const { blockhash } = await connection.getLatestBlockhash('confirmed');
+      const feeTx = new Transaction().add(feeIx);
+      feeTx.recentBlockhash = blockhash;
+      feeTx.feePayer = userPublicKey;
+
+      // Sign as legacy transaction (fee transfer is simple)
+      const signedFeeTx = await (signTransaction as unknown as (tx: Transaction) => Promise<Transaction>)(feeTx);
+      const feeSignature = await connection.sendRawTransaction(signedFeeTx.serialize());
+      await connection.confirmTransaction(feeSignature, 'confirmed');
+
+      console.log(`[Buy] Fee collected: ${feeAmount.toFixed(6)} SOL → ${ARGUS_FEE_WALLET.slice(0, 8)}... (${feeSignature.slice(0, 16)}...)`);
+    } catch (feeError) {
+      console.error('[Buy] Fee collection failed (swap still succeeded):', feeError);
+      // Don't fail the whole trade if fee collection fails
+    }
+  }
+
+  return swapResult;
 }
 
 /**
@@ -255,19 +289,58 @@ export async function sellToken(
   slippageBps: number = 100,
   withAiFee: boolean = false
 ): Promise<SwapResult> {
-  if (withAiFee && ARGUS_FEE_WALLET) {
-    console.log(`[Sell] AI fee enabled (${ARGUS_FEE_PERCENT}% of proceeds)`);
-  }
-
   const quote = await getSwapQuote(tokenMint, SOL_MINT, tokenAmount, slippageBps);
   if (!quote) {
     return { success: false, error: 'Failed to get quote' };
   }
 
-  // Note: For sells, fee would be collected from the SOL received
-  // This requires a post-swap fee transfer which we'll implement
-  // when the fee wallet is configured
-  return executeSwap(quote, userPublicKey, signTransaction);
+  // Calculate expected SOL proceeds for fee calculation
+  const expectedSolOut = parseInt(quote.outAmount) / LAMPORTS_PER_SOL;
+  let feeAmount = 0;
+
+  if (withAiFee && ARGUS_FEE_WALLET) {
+    feeAmount = expectedSolOut * (ARGUS_FEE_PERCENT / 100);
+    console.log(`[Sell] Expected: ${expectedSolOut.toFixed(6)} SOL, AI fee: ${feeAmount.toFixed(6)} SOL (${ARGUS_FEE_PERCENT}%)`);
+  }
+
+  // Execute the swap first
+  const swapResult = await executeSwap(quote, userPublicKey, signTransaction);
+
+  // If swap succeeded and fee is configured, send the fee from proceeds
+  if (swapResult.success && feeAmount > 0 && ARGUS_FEE_WALLET) {
+    try {
+      const connection = new Connection(HELIUS_RPC, 'confirmed');
+      const feeLamports = Math.floor(feeAmount * LAMPORTS_PER_SOL);
+      const feeWallet = new PublicKey(ARGUS_FEE_WALLET);
+
+      // Small delay to ensure swap SOL has landed
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Create fee transfer instruction
+      const feeIx = SystemProgram.transfer({
+        fromPubkey: userPublicKey,
+        toPubkey: feeWallet,
+        lamports: feeLamports,
+      });
+
+      const { blockhash } = await connection.getLatestBlockhash('confirmed');
+      const feeTx = new Transaction().add(feeIx);
+      feeTx.recentBlockhash = blockhash;
+      feeTx.feePayer = userPublicKey;
+
+      // Sign as legacy transaction
+      const signedFeeTx = await (signTransaction as unknown as (tx: Transaction) => Promise<Transaction>)(feeTx);
+      const feeSignature = await connection.sendRawTransaction(signedFeeTx.serialize());
+      await connection.confirmTransaction(feeSignature, 'confirmed');
+
+      console.log(`[Sell] Fee collected: ${feeAmount.toFixed(6)} SOL → ${ARGUS_FEE_WALLET.slice(0, 8)}... (${feeSignature.slice(0, 16)}...)`);
+    } catch (feeError) {
+      console.error('[Sell] Fee collection failed (swap still succeeded):', feeError);
+      // Don't fail the whole trade if fee collection fails
+    }
+  }
+
+  return swapResult;
 }
 
 /**
@@ -334,41 +407,41 @@ export async function getAllTokenBalances(
 
 /**
  * Get token balance for a wallet
- * Uses Helius RPC for reliability
+ * Uses Helius RPC with caching to reduce rate limits
  */
+const balanceCache = new Map<string, { balance: number; decimals: number; timestamp: number }>();
+const BALANCE_CACHE_MS = 10000; // Cache for 10 seconds
+
 export async function getTokenBalance(
   tokenMint: string,
   walletAddress: string
 ): Promise<{ balance: number; decimals: number } | null> {
-  // Prioritize Helius RPC with our API key
-  const rpcEndpoints = [
-    HELIUS_RPC,
-    'https://api.mainnet-beta.solana.com',
-  ];
+  const cacheKey = `${tokenMint}-${walletAddress}`;
 
-  for (const rpc of rpcEndpoints) {
-    try {
-      console.log(`[Jupiter] Getting token balance via ${rpc.includes('helius') ? 'Helius' : 'public'} RPC`);
-      const connection = new Connection(rpc, {
-        commitment: 'confirmed',
-        confirmTransactionInitialTimeout: 15000,
-      });
-      const walletPubkey = new PublicKey(walletAddress);
-      const mintPubkey = new PublicKey(tokenMint);
+  // Check cache first
+  const cached = balanceCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < BALANCE_CACHE_MS) {
+    return { balance: cached.balance, decimals: cached.decimals };
+  }
 
-      // Get all token accounts for this wallet and filter by mint
-      const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
-        walletPubkey,
-        { mint: mintPubkey }
-      );
+  // Use only Helius - public RPC is too slow/unreliable
+  try {
+    const connection = new Connection(HELIUS_RPC, {
+      commitment: 'confirmed',
+      confirmTransactionInitialTimeout: 10000,
+    });
+    const walletPubkey = new PublicKey(walletAddress);
+    const mintPubkey = new PublicKey(tokenMint);
 
-      if (tokenAccounts.value.length === 0) {
-        return { balance: 0, decimals: 9 };
-      }
+    const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
+      walletPubkey,
+      { mint: mintPubkey }
+    );
 
-      let totalBalance = 0;
-      let decimals = 9;
+    let totalBalance = 0;
+    let decimals = 6; // Default for most tokens
 
+    if (tokenAccounts.value.length > 0) {
       for (const account of tokenAccounts.value) {
         const parsedInfo = account.account.data.parsed?.info;
         if (parsedInfo?.tokenAmount) {
@@ -376,17 +449,20 @@ export async function getTokenBalance(
           decimals = parsedInfo.tokenAmount.decimals;
         }
       }
-
-      console.log(`[Jupiter] Token balance: ${totalBalance} (${decimals} decimals)`);
-      return { balance: totalBalance, decimals };
-    } catch (error) {
-      console.warn(`[Jupiter] RPC ${rpc.includes('helius') ? 'Helius' : 'public'} failed:`, error);
-      continue; // Try next RPC
     }
-  }
 
-  console.error('[Jupiter] All RPC endpoints failed for token balance');
-  return null;
+    // Cache the result
+    balanceCache.set(cacheKey, { balance: totalBalance, decimals, timestamp: Date.now() });
+    return { balance: totalBalance, decimals };
+  } catch (error) {
+    console.warn(`[Balance] RPC error:`, error);
+    // Return cached value if available (even if stale)
+    if (cached) {
+      console.log(`[Balance] Using stale cache for ${tokenMint.slice(0, 8)}`);
+      return { balance: cached.balance, decimals: cached.decimals };
+    }
+    return null;
+  }
 }
 
 /**
@@ -530,7 +606,7 @@ async function getDexScreenerData(tokenMint: string): Promise<{
       return null;
     }
 
-    // Get the pair with highest liquidity (or highest volume for pump.fun)
+    // Get the pair with highest liquidity
     const bestPair = data.pairs.reduce((best: any, pair: any) => {
       const liquidity = pair.liquidity?.usd || 0;
       const volume = pair.volume?.h24 || 0;
@@ -670,130 +746,41 @@ export async function getUserPurchasePrice(
 }
 
 /**
- * Get current SOL price in USD
+ * Get current SOL price in USD (cached for 60 seconds)
  */
+let cachedSolPrice = 200;
+let solPriceCacheTime = 0;
+const SOL_PRICE_CACHE_MS = 60000; // 60 seconds
+
 async function getSolPrice(): Promise<number> {
+  // Return cached price if fresh
+  if (Date.now() - solPriceCacheTime < SOL_PRICE_CACHE_MS) {
+    return cachedSolPrice;
+  }
+
   try {
     const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd');
-    const data = await response.json();
-    return data.solana?.usd || 200; // Fallback to $200 if API fails
+    if (response.ok) {
+      const data = await response.json();
+      if (data.solana?.usd > 0) {
+        cachedSolPrice = data.solana.usd;
+        solPriceCacheTime = Date.now();
+        console.log(`[SOL] Price updated: $${cachedSolPrice}`);
+      }
+    }
   } catch {
-    return 200;
+    // Use cached price on error
   }
+
+  return cachedSolPrice;
 }
 
-/**
- * Pump.fun bonding curve constants
- * These are the fixed parameters for the pump.fun AMM
- */
-const PUMP_FUN_PROGRAM_ID = '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P';
-
-/**
- * Derive the pump.fun bonding curve PDA from token mint
- */
-function deriveBondingCurvePDA(tokenMint: string): string {
-  // The bonding curve PDA is derived from:
-  // seeds: ["bonding-curve", mint_pubkey]
-  // program: pump.fun program
-  const mintPubkey = new PublicKey(tokenMint);
-  const programId = new PublicKey(PUMP_FUN_PROGRAM_ID);
-
-  const [bondingCurvePDA] = PublicKey.findProgramAddressSync(
-    [Buffer.from('bonding-curve'), mintPubkey.toBuffer()],
-    programId
-  );
-
-  return bondingCurvePDA.toString();
-}
-
-/**
- * Get pump.fun token data from on-chain bonding curve
- * Reads the bonding curve account directly - bypasses Cloudflare-blocked API!
- */
-async function getPumpFunTokenData(tokenMint: string): Promise<{
-  solPerToken: number;  // SOL per token - use this directly for P&L, no USD conversion!
-  virtualSolReserves: number;
-  virtualTokenReserves: number;
-  complete: boolean;
-} | null> {
-  try {
-    const bondingCurvePDA = deriveBondingCurvePDA(tokenMint);
-    console.log(`[PumpFun] Reading bonding curve PDA: ${bondingCurvePDA}`);
-
-    // Read the bonding curve account data
-    const response = await fetch(HELIUS_RPC, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'getAccountInfo',
-        params: [bondingCurvePDA, { encoding: 'base64' }]
-      })
-    });
-
-    if (!response.ok) {
-      console.warn('[PumpFun] RPC error:', response.status);
-      return null;
-    }
-
-    const result = await response.json();
-
-    if (!result.result?.value) {
-      console.warn('[PumpFun] Bonding curve not found - token may have graduated to Raydium');
-      return null;
-    }
-
-    // Decode the bonding curve account data
-    // Bonding curve layout (simplified):
-    // - 8 bytes: discriminator
-    // - 8 bytes: virtual_token_reserves (u64)
-    // - 8 bytes: virtual_sol_reserves (u64)
-    // - 8 bytes: real_token_reserves (u64)
-    // - 8 bytes: real_sol_reserves (u64)
-    // - 8 bytes: token_total_supply (u64)
-    // - 1 byte: complete (bool)
-
-    const data = Buffer.from(result.result.value.data[0], 'base64');
-
-    // Read virtual reserves (after 8-byte discriminator)
-    const virtualTokenReserves = Number(data.readBigUInt64LE(8));
-    const virtualSolReserves = Number(data.readBigUInt64LE(16));
-    const complete = data[49] === 1; // complete flag
-
-    console.log(`[PumpFun] Raw reserves - SOL: ${virtualSolReserves}, Tokens: ${virtualTokenReserves}, Complete: ${complete}`);
-
-    if (complete) {
-      console.log('[PumpFun] Token has graduated - bonding curve complete');
-      return null; // Use Jupiter for graduated tokens
-    }
-
-    if (virtualTokenReserves === 0) {
-      console.warn('[PumpFun] Zero token reserves');
-      return null;
-    }
-
-    // Calculate price: SOL per token (this is the KEY value for P&L!)
-    // virtualSolReserves is in lamports, virtualTokenReserves is in token units (6 decimals)
-    const solPerToken = (virtualSolReserves / LAMPORTS_PER_SOL) / (virtualTokenReserves / 1e6);
-
-    console.log(`[PumpFun] Price: ${solPerToken.toFixed(12)} SOL/token`);
-
-    return {
-      solPerToken, // Return SOL price directly - no USD conversion needed for P&L!
-      virtualSolReserves: virtualSolReserves / LAMPORTS_PER_SOL,
-      virtualTokenReserves: virtualTokenReserves / 1e6,
-      complete,
-    };
-  } catch (error) {
-    console.warn('[PumpFun] Error reading bonding curve:', error);
-    return null;
-  }
-}
 
 /**
  * Get the current SOL value of a token position
- * IMPORTANT: Checks bonding curve FIRST for pump.fun tokens, then Jupiter for graduated tokens
+ * Uses Jupiter PRICE API (spot price, no execution impact)
+ * Falls back to DexScreener
+ * NEVER uses Jupiter QUOTE API (has price impact)
  */
 export async function getTokenValueInSol(
   tokenMint: string,
@@ -801,56 +788,60 @@ export async function getTokenValueInSol(
   tokenDecimals: number = 6 // Token decimals for price calculation
 ): Promise<number | null> {
   try {
-    // Method 1: Check pump.fun bonding curve FIRST (most accurate for non-graduated tokens)
-    // This is critical because Jupiter returns WRONG quotes for bonding curve tokens!
-    console.log(`[Value] Checking pump.fun bonding curve for ${tokenMint.slice(0, 8)}...`);
-    const pumpData = await getPumpFunTokenData(tokenMint);
+    const humanTokenAmount = tokenAmount / Math.pow(10, tokenDecimals);
+    const solPrice = await getSolPrice();
+    if (solPrice <= 0) return null;
 
-    if (pumpData && !pumpData.complete && pumpData.solPerToken > 0) {
-      // Token is still on bonding curve - use on-chain SOL price directly (most accurate!)
-      // NO USD CONVERSION - this avoids getSolPrice() rate limiting issues!
-      const humanTokenAmount = tokenAmount / Math.pow(10, tokenDecimals);
-      const solValue = humanTokenAmount * pumpData.solPerToken;
-      console.log(`[Value] ✅ BONDING CURVE: ${humanTokenAmount.toFixed(2)} tokens × ${pumpData.solPerToken.toFixed(12)} SOL/token = ${solValue.toFixed(6)} SOL`);
-      return solValue;
-    }
+    // METHOD 1: Jupiter Price API (spot price, NOT quote/execution price)
+    try {
+      console.log(`[Value] Jupiter Price API for ${tokenMint.slice(0, 8)}...`);
+      const jupResponse = await fetch(`https://price.jup.ag/v6/price?ids=${tokenMint}`);
 
-    // Token has graduated (bonding curve complete or not found) - use Jupiter
-    if (pumpData?.complete) {
-      console.log(`[Value] Token graduated, using Jupiter...`);
-    } else {
-      console.log(`[Value] No bonding curve found, trying Jupiter...`);
-    }
+      if (jupResponse.ok) {
+        const jupData = await jupResponse.json();
+        const tokenPrice = jupData.data?.[tokenMint]?.price;
 
-    // Method 2: Try Jupiter quote (for graduated tokens with DEX liquidity)
-    const quote = await getSwapQuote(tokenMint, SOL_MINT, tokenAmount, 100); // 1% slippage
-    if (quote) {
-      const solValue = parseInt(quote.outAmount) / LAMPORTS_PER_SOL;
-      if (solValue > 0.0001) { // More than dust
-        console.log(`[Value] ✅ JUPITER: ${tokenAmount} tokens → ${solValue.toFixed(6)} SOL`);
-        return solValue;
+        if (tokenPrice && tokenPrice > 0) {
+          const valueUsd = humanTokenAmount * tokenPrice;
+          const solValue = valueUsd / solPrice;
+          console.log(`[Value] JUPITER PRICE: ${humanTokenAmount.toFixed(2)} @ $${tokenPrice.toFixed(10)} = ${solValue.toFixed(6)} SOL`);
+          return solValue;
+        }
       }
-      console.warn(`[Value] Jupiter quote too low (${solValue}), trying DexScreener...`);
+    } catch (e) {
+      console.warn(`[Value] Jupiter Price API failed`);
     }
 
-    // Method 3: Fallback to DexScreener
-    console.log(`[Value] Trying DexScreener fallback...`);
-    const dexData = await getDexScreenerData(tokenMint);
-    if (dexData && dexData.priceUsd > 0) {
-      const humanTokenAmount = tokenAmount / Math.pow(10, tokenDecimals);
-      const valueUsd = humanTokenAmount * dexData.priceUsd;
-      const solPrice = await getSolPrice();
-      if (solPrice > 0) {
-        const solValue = valueUsd / solPrice;
-        console.log(`[Value] ✅ DEXSCREENER: ${humanTokenAmount.toFixed(2)} tokens × $${dexData.priceUsd.toFixed(8)} = $${valueUsd.toFixed(4)} = ${solValue.toFixed(6)} SOL`);
-        return solValue;
+    // METHOD 2: DexScreener fallback
+    try {
+      console.log(`[Value] DexScreener for ${tokenMint.slice(0, 8)}...`);
+      const dexResponse = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`);
+
+      if (dexResponse.ok) {
+        const dexData = await dexResponse.json();
+        if (dexData.pairs && dexData.pairs.length > 0) {
+          const bestPair = dexData.pairs.reduce((best: any, pair: any) => {
+            const liq = pair.liquidity?.usd || 0;
+            return liq > (best?.liquidity?.usd || 0) ? pair : best;
+          }, dexData.pairs[0]);
+
+          const priceUsd = parseFloat(bestPair.priceUsd);
+          if (priceUsd > 0) {
+            const valueUsd = humanTokenAmount * priceUsd;
+            const solValue = valueUsd / solPrice;
+            console.log(`[Value] DEXSCREENER: ${humanTokenAmount.toFixed(2)} @ $${priceUsd.toFixed(10)} = ${solValue.toFixed(6)} SOL`);
+            return solValue;
+          }
+        }
       }
+    } catch (e) {
+      console.warn(`[Value] DexScreener failed`);
     }
 
-    console.warn('[Value] ❌ No quote available from bonding curve, Jupiter, or DexScreener');
+    console.warn(`[Value] No price available for ${tokenMint.slice(0, 8)} - skipping`);
     return null;
   } catch (error) {
-    console.error('[Value] Failed to get token value:', error);
+    console.error('[Value] Error:', error);
     return null;
   }
 }
@@ -879,9 +870,8 @@ export class PriceWebSocket {
       const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${this.tokenMint}`);
       const data = await response.json();
 
-      let dexType = 'unknown';
       if (data.pairs && data.pairs.length > 0) {
-        // Get highest liquidity pool - prefer Raydium for WebSocket, but note if it's pumpswap
+        // Get highest liquidity pool - prefer Raydium for WebSocket
         const raydiumPair = data.pairs.find((p: any) =>
           p.dexId === 'raydium' && p.liquidity?.usd > 1000
         );
@@ -889,20 +879,12 @@ export class PriceWebSocket {
 
         this.poolAddress = bestPair.pairAddress;
         this.lastPrice = parseFloat(bestPair.priceUsd) || 0;
-        dexType = bestPair.dexId;
 
-        console.log('[WS] Found pool:', this.poolAddress, 'DEX:', dexType, 'Initial price:', this.lastPrice);
+        console.log('[WS] Found pool:', this.poolAddress, 'DEX:', bestPair.dexId, 'Initial price:', this.lastPrice);
       }
 
       if (!this.poolAddress) {
         console.warn('[WS] No pool found, falling back to polling');
-        return false;
-      }
-
-      // For pumpswap/pump.fun tokens, WebSocket on pool doesn't work well
-      // Return false to use polling instead
-      if (dexType === 'pumpswap' || dexType === 'pump.fun') {
-        console.log('[WS] Pumpswap token detected, using fast polling instead');
         return false;
       }
 

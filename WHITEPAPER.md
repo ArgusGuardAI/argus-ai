@@ -8,11 +8,11 @@
 
 ## Abstract
 
-The Solana memecoin ecosystem—driven largely by platforms like Pump.fun—represents the fastest, most volatile financial market in history. However, this speed comes with a catastrophic cost: **The Information Vacuum.**
+The Solana memecoin ecosystem—driven by platforms like Pump.fun, Raydium, and Meteora—represents the fastest, most volatile financial market in history. However, this speed comes with a catastrophic cost: **The Information Vacuum.**
 
 Retail investors navigate a minefield of sophisticated smart contract scams, "honeypots," and anonymous serial rug-pullers. Traditional due diligence tools (block explorers, code auditors) are too slow and complex for the high-velocity trading environment of 2026.
 
-**ArgusGuard** fills this vacuum by providing instant, AI-powered contract analysis combined with community-driven intelligence—all delivered as a browser overlay before you click "Buy."
+**ArgusGuard** fills this vacuum by providing instant, AI-powered contract analysis combined with automated trading—scanning new tokens across DEXes in real-time and only executing trades on tokens that pass safety checks.
 
 ---
 
@@ -94,7 +94,8 @@ ArgusGuard mitigates these threats through three simultaneous layers of defense.
 Powered by **Together AI** with **Helius** on-chain data, this layer provides real-time contract analysis.
 
 **Data Sources:**
-- **DexScreener:** Market cap, liquidity, volume, age, social links
+- **Helius WebSocket:** Real-time pool creation events (Raydium, Meteora)
+- **DexScreener:** Market cap, liquidity, volume, age, social links, trending tokens
 - **Helius DAS API:** Token metadata, authorities, transaction history
 - **On-chain RPC:** Holder distribution, supply concentration
 
@@ -198,51 +199,54 @@ To unlock the **Triple-Layer Shield**, users must hold **1,000 $ARGUSGUARD** tok
 
 | Component | Technology | Purpose |
 |-----------|------------|---------|
-| **Extension** | Plasmo (React) | DOM overlay, content scripts |
-| **API** | Cloudflare Workers (Hono) | Serverless routing, caching |
+| **Dashboard** | React + Vite (Argus) | Trading UI, position tracking |
+| **Scanner** | Node.js + Hono (Sniper) | Token detection, WebSocket server |
 | **AI Engine** | Together AI (Llama 3.3 70B) | Contract analysis, risk scoring |
-| **On-Chain Data** | Helius DAS API | Token metadata, transactions |
-| **Market Data** | DexScreener API | Price, volume, liquidity |
-| **Database** | Supabase (Postgres) | Graffiti notes, reputation |
-| **Cache** | Cloudflare KV | Scan results (1-hour TTL) |
+| **Token Discovery** | Helius WebSocket | Real-time pool creation (Raydium, Meteora) |
+| **Market Data** | DexScreener API | Price, volume, liquidity, trending |
+| **Trading** | Jupiter API | Swap execution |
+| **Price Data** | Jupiter, CoinGecko | SOL price for liquidity calculation |
 
 ### 6.2 Data Flow
 
 ```
-User visits Pump.fun
-       │
-       ▼
-Extension detects token address
-       │
-       ▼
-Check wallet for 1,000 $ARGUSGUARD
-       │
-       ▼
-┌──────┴──────┐
-│   Parallel  │
-└──────┬──────┘
+Token Discovery
        │
   ┌────┼────┐
   ▼    ▼    ▼
-Graffiti  KV   Fresh
- Notes  Cache  Analysis
-  │      │       │
-  └──────┼───────┘
-         ▼
-   Render Overlay
-   (Paint + Notes)
+Raydium  Meteora  DexScreener
+  WS      WS      Polling
+  │       │         │
+  └───────┼─────────┘
+          ▼
+    Launch Filter
+    (spam, liquidity, creator)
+          │
+          ▼
+    AI Risk Analysis
+    (Together AI)
+          │
+          ▼
+┌─────────┴─────────┐
+▼                   ▼
+SAFE              RISKY
+(score ≤ 40)     (score > 40)
+▼                   ▼
+Auto-Trade        Skip
+(if enabled)
 ```
 
 ### 6.3 Analysis Pipeline
 
-1. **Phase 1:** Fetch DexScreener + Pump.fun data (parallel)
-2. **Phase 2:** Fetch Helius metadata + holder data (parallel)
-3. **Phase 3:** Analyze creator wallet history
-4. **Phase 4:** Detect bundle patterns in transactions
-5. **Phase 5:** Build context string for AI
-6. **Phase 6:** AI analysis with Together AI
-7. **Phase 7:** Apply hardcoded rules (caps, minimums)
-8. **Phase 8:** Cache result in KV + Supabase
+1. **Phase 1:** Detect new token (Raydium/Meteora WebSocket or DexScreener polling)
+2. **Phase 2:** Launch filter checks (spam, liquidity bounds, creator reputation)
+3. **Phase 3:** Fetch Helius metadata + holder data (parallel)
+4. **Phase 4:** Analyze creator wallet history
+5. **Phase 5:** Detect bundle patterns in transactions
+6. **Phase 6:** Build context string for AI
+7. **Phase 7:** AI analysis with Together AI
+8. **Phase 8:** Apply hardcoded rules (caps, minimums)
+9. **Phase 9:** Broadcast to dashboard for auto-trading decision
 
 ---
 

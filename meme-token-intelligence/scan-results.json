@@ -1,0 +1,420 @@
+{
+  "timestamp": 1769306122779,
+  "lastUpdate": "2026-01-25T01:55:22.779Z",
+  "opportunities": [
+    {
+      "address": "GgBXMMKApMGKtSMwSU6Cp8Top4q7jXAHgUctNMnNpump",
+      "name": "Baby Nietzschean Penguin",
+      "symbol": "BPENGUIN",
+      "dex": "pumpswap",
+      "price": 0.000117,
+      "priceChange5m": 1.9,
+      "priceChange1h": 43.15,
+      "priceChange24h": 124,
+      "volume24h": 841183.17,
+      "liquidity": 33830.75,
+      "marketCap": 116812,
+      "buys1h": 2644,
+      "sells1h": 345,
+      "score": 91,
+      "signal": "STRONG_BUY",
+      "factors": [
+        "✅ Mint revoked",
+        "✅ Freeze revoked",
+        "✅ Liq $34k",
+        "✅ Vol $841k",
+        "🚀 +43% (1h)",
+        "✅ 88% buys"
+      ],
+      "age": "10h",
+      "onChain": {
+        "mintRevoked": true,
+        "freezeRevoked": true,
+        "topHolderPct": 14.373314054655204,
+        "top10Pct": 28.525721991197386
+      },
+      "url": "https://dexscreener.com/solana/GgBXMMKApMGKtSMwSU6Cp8Top4q7jXAHgUctNMnNpump"
+    },
+    {
+      "address": "GAYYWGbJ9pV3H1F9VKjHbXxmvhe4fyvoQA6h5mLepump",
+      "name": "Alcatraz Coyote",
+      "symbol": "COYOTE",
+      "dex": "pumpswap",
+      "price": 0.00001882,
+      "priceChange5m": -1.7,
+      "priceChange1h": 12.11,
+      "priceChange24h": -64.89,
+      "volume24h": 378159.42,
+      "liquidity": 13213.01,
+      "marketCap": 18825,
+      "buys1h": 58,
+      "sells1h": 31,
+      "score": 86,
+      "signal": "STRONG_BUY",
+      "factors": [
+        "✅ Mint revoked",
+        "✅ Freeze revoked",
+        "✅ Vol $378k",
+        "🚀 +12% (1h)",
+        "✅ 65% buys"
+      ],
+      "age": "24h",
+      "onChain": {
+        "mintRevoked": true,
+        "freezeRevoked": true,
+        "topHolderPct": 35.12955007033638,
+        "top10Pct": 57.24954703277101
+      },
+      "url": "https://dexscreener.com/solana/GAYYWGbJ9pV3H1F9VKjHbXxmvhe4fyvoQA6h5mLepump"
+    },
+    {
+      "address": "J1dU6PbhGYjYxYX6dBeqZxMgkFdsnEM2cnFEVxP1pump",
+      "name": "Penguin of the United States",
+      "symbol": "PENGUS",
+      "dex": "pumpswap",
+      "price": 0.0001595,
+      "priceChange5m": -6.24,
+      "priceChange1h": 13.58,
+      "priceChange24h": 205,
+      "volume24h": 608367.23,
+      "liquidity": 39185.99,
+      "marketCap": 159545,
+      "buys1h": 1055,
+      "sells1h": 881,
+      "score": 85,
+      "signal": "STRONG_BUY",
+      "factors": [
+        "✅ Mint revoked",
+        "✅ Freeze revoked",
+        "✅ Liq $39k",
+        "✅ Vol $608k",
+        "🚀 +14% (1h)"
+      ],
+      "age": "4h",
+      "onChain": {
+        "mintRevoked": true,
+        "freezeRevoked": true,
+        "topHolderPct": 11.933701436445869,
+        "top10Pct": 22.376224657711653
+      },
+      "url": "https://dexscreener.com/solana/J1dU6PbhGYjYxYX6dBeqZxMgkFdsnEM2cnFEVxP1pump"
+    },
+    {
+      "address": "jk1T35eWK41MBMM8AWoYVaNbjHEEQzMDetTsfnqpump",
+      "name": "Sol The Trophy Tomato",
+      "symbol": "SOL",
+      "dex": "pumpswap",
+      "price": 0.008998,
+      "priceChange5m": -0.74,
+      "priceChange1h": -2.67,
+      "priceChange24h": -8.77,
+      "volume24h": 2493853.8,
+      "liquidity": 435762.28,
+      "marketCap": 7506046,
+      "buys1h": 148,
+      "sells1h": 93,
+      "score": 85,
+      "signal": "STRONG_BUY",
+      "factors": [
+        "✅ Mint revoked",
+        "✅ Freeze revoked",
+        "✅ Liq $436k",
+        "✅ Vol $2494k",
+        "✅ 61% buys"
+      ],
+      "age": "26d",
+      "onChain": {
+        "mintRevoked": true,
+        "freezeRevoked": true,
+        "topHolderPct": 3.345395694874992,
+        "top10Pct": 18.0550748733341
+      },
+      "url": "https://dexscreener.com/solana/jk1T35eWK41MBMM8AWoYVaNbjHEEQzMDetTsfnqpump"
+    },
+    {
+      "address": "2FcRaEB4NCoUvR5NNLCrPM9iTT3pGaKTh823zjFjBAGS",
+      "name": "CircuitX",
+      "symbol": "CUIT",
+      "dex": "meteora",
+      "price": 0.0001447,
+      "priceChange5m": 0.03,
+      "priceChange1h": 5.17,
+      "priceChange24h": 127,
+      "volume24h": 192693.93,
+      "liquidity": 32665.14,
+      "marketCap": 144781,
+      "buys1h": 20,
+      "sells1h": 22,
+      "score": 70,
+      "signal": "BUY",
+      "factors": [
+        "✅ Mint revoked",
+        "✅ Freeze revoked",
+        "✅ Liq $33k",
+        "✅ Vol $193k",
+        "📈 +5.2% (1h)"
+      ],
+      "age": "11h",
+      "onChain": {
+        "mintRevoked": true,
+        "freezeRevoked": true,
+        "topHolderPct": 11.281919794427965,
+        "top10Pct": 34.47616195409247
+      },
+      "url": "https://dexscreener.com/solana/2FcRaEB4NCoUvR5NNLCrPM9iTT3pGaKTh823zjFjBAGS"
+    },
+    {
+      "address": "5e898RCuzJkv7J6N3hNxK5pK6xZWM6RzZDjS8Esdpump",
+      "name": "YOINK",
+      "symbol": "$YOINK",
+      "dex": "pumpswap",
+      "price": 0.0001807,
+      "priceChange5m": -4.65,
+      "priceChange1h": -2.4,
+      "priceChange24h": 10.47,
+      "volume24h": 53281.69,
+      "liquidity": 45039.44,
+      "marketCap": 180154,
+      "buys1h": 5,
+      "sells1h": 6,
+      "score": 61,
+      "signal": "BUY",
+      "factors": [
+        "✅ Mint revoked",
+        "✅ Freeze revoked",
+        "✅ Liq $45k"
+      ],
+      "age": "3d",
+      "onChain": {
+        "mintRevoked": true,
+        "freezeRevoked": true,
+        "topHolderPct": 12.47715535032445,
+        "top10Pct": 35.77388219164969
+      },
+      "url": "https://dexscreener.com/solana/5e898RCuzJkv7J6N3hNxK5pK6xZWM6RzZDjS8Esdpump"
+    },
+    {
+      "address": "8TVr3U85V3Uazkxd5DJbmzdUWaxhQdEGNNGJ7eNTpump",
+      "name": "Black Wallstreet ✊🏾",
+      "symbol": "TULSA",
+      "dex": "raydium",
+      "price": 0.0004298,
+      "priceChange5m": 0.01,
+      "priceChange1h": -3.65,
+      "priceChange24h": 42.74,
+      "volume24h": 91657.91,
+      "liquidity": 63915.41,
+      "marketCap": 429790,
+      "buys1h": 37,
+      "sells1h": 25,
+      "score": 61,
+      "signal": "BUY",
+      "factors": [
+        "✅ Mint revoked",
+        "✅ Freeze revoked",
+        "✅ Liq $64k"
+      ],
+      "age": "356d",
+      "onChain": {
+        "mintRevoked": true,
+        "freezeRevoked": true,
+        "topHolderPct": 7.433850609290996,
+        "top10Pct": 34.11394736721044
+      },
+      "url": "https://dexscreener.com/solana/8TVr3U85V3Uazkxd5DJbmzdUWaxhQdEGNNGJ7eNTpump"
+    },
+    {
+      "address": "HpGg25dwpNYykx8rNfZULgvMaBRC6xN5AFXmWYKapump",
+      "name": "Nietzschean Lion",
+      "symbol": "LION",
+      "dex": "pumpswap",
+      "price": 0.00002186,
+      "priceChange5m": -9.23,
+      "priceChange1h": -6.66,
+      "priceChange24h": -59.15,
+      "volume24h": 130766.44,
+      "liquidity": 14014.11,
+      "marketCap": 21866,
+      "buys1h": 21,
+      "sells1h": 21,
+      "score": 61,
+      "signal": "BUY",
+      "factors": [
+        "✅ Mint revoked",
+        "✅ Freeze revoked",
+        "✅ Vol $131k"
+      ],
+      "age": "19h",
+      "onChain": {
+        "mintRevoked": true,
+        "freezeRevoked": true,
+        "topHolderPct": 32.41976204739653,
+        "top10Pct": 58.350399823419465
+      },
+      "url": "https://dexscreener.com/solana/HpGg25dwpNYykx8rNfZULgvMaBRC6xN5AFXmWYKapump"
+    },
+    {
+      "address": "A73eJNCtVmWG87FA2maixSkBnG6gEhgiHAE8RYAfpump",
+      "name": "Marcus the sealion",
+      "symbol": "Marcus",
+      "dex": "pumpswap",
+      "price": 0.00006198,
+      "priceChange5m": 0,
+      "priceChange1h": -16.27,
+      "priceChange24h": 400,
+      "volume24h": 99107.43,
+      "liquidity": 26928.67,
+      "marketCap": 53714,
+      "buys1h": 12,
+      "sells1h": 14,
+      "score": 60,
+      "signal": "BUY",
+      "factors": [
+        "✅ Mint revoked",
+        "✅ Freeze revoked"
+      ],
+      "age": "51d",
+      "onChain": {
+        "mintRevoked": true,
+        "freezeRevoked": true,
+        "topHolderPct": 25.05542293269875,
+        "top10Pct": 54.10453942046613
+      },
+      "url": "https://dexscreener.com/solana/A73eJNCtVmWG87FA2maixSkBnG6gEhgiHAE8RYAfpump"
+    },
+    {
+      "address": "j3wtXFiudwkWfsK2xpQ4Va5hPKvfD4xS1zkiPEjpump",
+      "name": "Useless Fish",
+      "symbol": "sunfish",
+      "dex": "pumpswap",
+      "price": 0.00001818,
+      "priceChange5m": 27.31,
+      "priceChange1h": -51.69,
+      "priceChange24h": -64.8,
+      "volume24h": 195939.64,
+      "liquidity": 12789.03,
+      "marketCap": 18183,
+      "buys1h": 340,
+      "sells1h": 304,
+      "score": 56,
+      "signal": "WATCH",
+      "factors": [
+        "✅ Mint revoked",
+        "✅ Freeze revoked",
+        "✅ Vol $196k",
+        "📉 -52% (1h)"
+      ],
+      "age": "2h",
+      "onChain": {
+        "mintRevoked": true,
+        "freezeRevoked": true,
+        "topHolderPct": 35.40590981689648,
+        "top10Pct": 53.92416231353206
+      },
+      "url": "https://dexscreener.com/solana/j3wtXFiudwkWfsK2xpQ4Va5hPKvfD4xS1zkiPEjpump"
+    },
+    {
+      "address": "9XfNCXEwiJDpB8XucKp3AUrrYryFFXKdLpoQpbgupump",
+      "name": "Poppy the prairie dog",
+      "symbol": "POPPY",
+      "dex": "pumpswap",
+      "price": 0.00001354,
+      "priceChange5m": -15.38,
+      "priceChange1h": -74.68,
+      "priceChange24h": -74.68,
+      "volume24h": 126626.59,
+      "liquidity": 11067.34,
+      "marketCap": 13542,
+      "buys1h": 1254,
+      "sells1h": 1130,
+      "score": 56,
+      "signal": "WATCH",
+      "factors": [
+        "✅ Mint revoked",
+        "✅ Freeze revoked",
+        "✅ Vol $127k",
+        "📉 -75% (1h)"
+      ],
+      "age": "35m",
+      "onChain": {
+        "mintRevoked": true,
+        "freezeRevoked": true,
+        "topHolderPct": 34.79945246804295,
+        "top10Pct": 63.514131928678275
+      },
+      "url": "https://dexscreener.com/solana/9XfNCXEwiJDpB8XucKp3AUrrYryFFXKdLpoQpbgupump"
+    },
+    {
+      "address": "Vf1UMxqeAntXp5H56B6vqnY4sXytbFaXb9BDZUPpump",
+      "name": "Chip",
+      "symbol": "CHIP",
+      "dex": "pumpswap",
+      "price": 0.00002066,
+      "priceChange5m": -14.57,
+      "priceChange1h": -47.47,
+      "priceChange24h": -60.6,
+      "volume24h": 587495.09,
+      "liquidity": 14007.32,
+      "marketCap": 20662,
+      "buys1h": 306,
+      "sells1h": 304,
+      "score": 56,
+      "signal": "WATCH",
+      "factors": [
+        "✅ Mint revoked",
+        "✅ Freeze revoked",
+        "✅ Vol $587k",
+        "📉 -47% (1h)"
+      ],
+      "age": "2h",
+      "onChain": {
+        "mintRevoked": true,
+        "freezeRevoked": true,
+        "topHolderPct": 33.69890200595565,
+        "top10Pct": 53.86307383739027
+      },
+      "url": "https://dexscreener.com/solana/Vf1UMxqeAntXp5H56B6vqnY4sXytbFaXb9BDZUPpump"
+    },
+    {
+      "address": "4qr3ApZgvynwa3ZdFp3ZDPKPhTiQX9KeUenGzU9Xpump",
+      "name": "26",
+      "symbol": "26",
+      "dex": "pumpswap",
+      "price": 0.00003584,
+      "priceChange5m": 0,
+      "priceChange1h": -1.26,
+      "priceChange24h": -0.02,
+      "volume24h": 376.91,
+      "liquidity": 17904.55,
+      "marketCap": 35838,
+      "buys1h": 2,
+      "sells1h": 5,
+      "score": 36,
+      "signal": "HOLD",
+      "factors": [
+        "✅ Mint revoked",
+        "✅ Freeze revoked"
+      ],
+      "age": "12d",
+      "onChain": {
+        "mintRevoked": true,
+        "freezeRevoked": true,
+        "topHolderPct": 47.611291915706936,
+        "top10Pct": 89.91906935230223
+      },
+      "url": "https://dexscreener.com/solana/4qr3ApZgvynwa3ZdFp3ZDPKPhTiQX9KeUenGzU9Xpump",
+      "ai": {
+        "success": true,
+        "tier": "quick",
+        "watch": false,
+        "reason": "Low volume",
+        "risk": 8,
+        "tokens": 132
+      }
+    }
+  ],
+  "filtered": 0,
+  "scanned": 17,
+  "aiEnabled": true,
+  "aiTokensUsed": 132
+}

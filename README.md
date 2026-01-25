@@ -1,12 +1,19 @@
 # ArgusGuard
 
-**AI-Powered Security Layer for Solana Memecoins**
+**AI-Powered Automated Trading System for Solana Tokens**
 
-ArgusGuard is a browser extension that protects traders from honeypots, rug pulls, and scams on Pump.fun and DexScreener. It combines real-time AI analysis with community-driven intelligence to provide instant risk assessment before you trade.
+ArgusGuard is an automated trading system that scans new tokens on Raydium, Meteora, and DexScreener, analyzes them for risk using AI, and automatically executes trades on approved tokens.
 
 ---
 
 ## Features
+
+### AI Trading Dashboard (Argus)
+- **Real-time Token Feed:** Live stream of new tokens with AI risk scores
+- **Automated Trading:** Buy/sell based on configurable risk thresholds
+- **Position Tracking:** Real-time P&L with take profit, stop loss, and trailing stop
+- **Dedicated Trading Wallet:** Instant execution without popup confirmations
+- **3-Column Layout:** Dashboard, positions, settings with activity log
 
 ### Risk Analysis Engine
 - **8 Risk Categories:** Liquidity, Ownership, Contract, Social, Deployer, Bundle, Holders, Trading
@@ -14,18 +21,16 @@ ArgusGuard is a browser extension that protects traders from honeypots, rug pull
 - **Score Range:** 0-100 (higher = more risk)
 - **Risk Levels:** SAFE (0-49), SUSPICIOUS (50-69), DANGEROUS (70-89), SCAM (90-100)
 
-### Data Sources
-- **DexScreener:** Market cap, liquidity, volume, age, socials
-- **Helius DAS API:** Token metadata, authorities, transaction history
-- **On-chain RPC:** Holder distribution, supply concentration
-- **Pump.fun API:** Bonding curve status, creator info
+### Token Discovery Sources
+- **Raydium:** Real-time pool creation listener via Helius WebSocket
+- **Meteora:** DLMM and AMM pool creation detection
+- **DexScreener:** Trending tokens and boosted tokens scanner
 
-### Detection Capabilities
-- Holder concentration analysis (non-LP wallets)
-- Bundle detection (coordinated same-slot transactions)
-- Creator wallet history (previous rugs)
-- Authority status (mint/freeze)
-- Social presence verification
+### Launch Filter (New Pool Protection)
+- **Spam Detection:** Filters spam names (test, aaa, scam patterns)
+- **Liquidity Bounds:** $400 - $100K for new pools
+- **Creator Tracking:** Rejects serial launchers (>3 tokens in 24h)
+- **Auto-Blacklist:** Blacklists creators when tokens rug
 
 ---
 
@@ -33,11 +38,18 @@ ArgusGuard is a browser extension that protects traders from honeypots, rug pull
 
 ```
 packages/
-├── extension/     # @argusguard/extension - Plasmo browser extension
-├── workers/       # @argusguard/workers - Cloudflare Workers API
-├── shared/        # @argusguard/shared - Types and constants
-├── argus/         # Network visualization dashboard
-└── sniper/        # Trading bot dashboard (experimental)
+├── argus/           # AI Trading Dashboard (React + Vite)
+│   ├── src/App.tsx      # Main dashboard UI
+│   ├── src/hooks/       # useAutoTrade hook
+│   └── src/lib/         # Jupiter swap, trading wallet
+├── sniper/          # Token Scanner Backend
+│   ├── src/engine/      # Scanner, analyzer, launch-filter
+│   ├── src/listeners/   # Raydium, Meteora, DexScreener
+│   ├── src/trading/     # Trade executor
+│   └── src/server.ts    # WebSocket server
+└── workers/         # Cloudflare Workers API
+    ├── src/routes/      # API endpoints
+    └── src/services/    # Helius, DexScreener, Together AI
 ```
 
 ---
@@ -47,8 +59,7 @@ packages/
 ### Prerequisites
 - Node.js 18+
 - pnpm 8+
-- Cloudflare account (for Workers)
-- API Keys: Together AI, Helius, Supabase
+- API Keys: Together AI, Helius
 
 ### Installation
 
@@ -59,137 +70,89 @@ cd argusguard
 
 # Install dependencies
 pnpm install
-
-# Copy environment files
-cp packages/workers/.dev.vars.example packages/workers/.dev.vars
 ```
 
 ### Environment Setup
 
-Edit `packages/workers/.dev.vars`:
+Create `packages/sniper/.env`:
 
 ```env
-TOGETHER_AI_API_KEY=your-together-ai-key
-TOGETHER_AI_MODEL=meta-llama/Llama-3.3-70B-Instruct-Turbo
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_ANON_KEY=your-supabase-anon-key
 HELIUS_API_KEY=your-helius-api-key
+TOGETHER_AI_API_KEY=your-together-ai-key
 ```
 
 ### Development
 
 ```bash
-# Start Cloudflare Workers locally
-pnpm dev:workers
-
-# Start browser extension (in separate terminal)
-pnpm dev:extension
-
-# Run all packages
+# Start the Scanner Backend (Terminal 1)
+cd packages/sniper
 pnpm dev
-```
+# Runs at http://localhost:8788
 
-### Testing the API
-
-```bash
-# Analyze a token
-curl -X POST http://localhost:8787/analyze \
-  -H "Content-Type: application/json" \
-  -d '{"tokenAddress": "YOUR_TOKEN_ADDRESS"}'
-
-# Force refresh (bypass cache)
-curl -X POST http://localhost:8787/analyze \
-  -H "Content-Type: application/json" \
-  -d '{"tokenAddress": "YOUR_TOKEN_ADDRESS", "forceRefresh": true}'
-```
-
-### Production Deployment
-
-```bash
-# Deploy Workers to Cloudflare
-pnpm deploy:workers
-
-# Build extension for production
-pnpm build:extension
+# Start the Trading Dashboard (Terminal 2)
+cd packages/argus
+pnpm dev
+# Runs at http://localhost:3000
 ```
 
 ---
 
-## API Reference
+## Data Flow
 
-### POST /analyze
-
-Analyzes a Solana token for risk indicators.
-
-**Request:**
-```json
-{
-  "tokenAddress": "string (required)",
-  "forceRefresh": "boolean (optional, bypasses cache)"
-}
 ```
-
-**Response:**
-```json
-{
-  "tokenAddress": "string",
-  "riskLevel": "SAFE | SUSPICIOUS | DANGEROUS | SCAM",
-  "riskScore": "number (0-100)",
-  "confidence": "number (0-100)",
-  "flags": [
-    {
-      "type": "LIQUIDITY | OWNERSHIP | CONTRACT | SOCIAL | DEPLOYER | BUNDLE | HOLDERS | TRADING",
-      "severity": "LOW | MEDIUM | HIGH | CRITICAL",
-      "message": "string"
-    }
-  ],
-  "summary": "string",
-  "checkedAt": "number (timestamp)",
-  "cached": "boolean"
-}
+Raydium WebSocket ──┐
+                    │
+Meteora WebSocket ──┼──▶ Launch Filter ──▶ AI Analysis ──▶ Dashboard
+                    │
+DexScreener API ────┘
+        │
+        ▼
+┌───────────────┐
+│   Sniper      │ ──▶ Pre-filter (fast checks)
+│   Backend     │ ──▶ Launch filter (new pools)
+└───────┬───────┘ ──▶ AI Analysis (risk score)
+        │ WebSocket
+        ▼
+┌───────────────┐
+│   Argus       │ ──▶ Display in Live Feed
+│  Dashboard    │ ──▶ Auto-trade if approved
+└───────┬───────┘
+        │
+        ▼
+┌───────────────┐
+│   Jupiter     │ ──▶ Execute swap
+│     API       │ ──▶ Return signature
+└───────────────┘
 ```
-
-### GET /analyze/:tokenAddress
-
-Returns cached analysis result without triggering new analysis.
-
-### GET /health
-
-Health check endpoint.
 
 ---
 
-## Configuration
+## Trading System
 
-### Cloudflare Workers Secrets
-
-```bash
-wrangler secret put TOGETHER_AI_API_KEY
-wrangler secret put SUPABASE_URL
-wrangler secret put SUPABASE_ANON_KEY
-wrangler secret put HELIUS_API_KEY
+### Auto-Trade Flow
+```
+1. Listener detects new pool (Raydium/Meteora) or trending token (DexScreener)
+2. Launch filter checks (spam, liquidity, creator reputation)
+3. AI analyzes for risk score (0-100)
+4. If score <= maxRiskScore AND auto-trade enabled:
+   - Execute buy via Jupiter
+   - Create position for tracking
+5. Price monitoring loop (every 10s):
+   - Check take profit condition
+   - Check stop loss condition
+   - Check trailing stop condition
+6. Execute sell when condition met
 ```
 
-### KV Namespace
+### Safety Limits
+- `maxRiskScore` - Only trade low-risk tokens (default: 40)
+- `reserveBalanceSol` - Always keep minimum SOL
+- `maxTradesPerSession` - Limit trades (0 = unlimited)
 
-```bash
-wrangler kv:namespace create SCAN_CACHE
-wrangler kv:namespace create SCAN_CACHE --preview
-```
-
-Update `wrangler.toml` with the returned namespace IDs.
-
----
-
-## Architecture
-
-See [ARCHITECTURE.md](./ARCHITECTURE.md) for detailed system diagrams.
-
-**Key Components:**
-- **Extension:** Content scripts inject risk overlays on Pump.fun/DexScreener
-- **Workers API:** Serverless analysis engine with KV caching
-- **AI Engine:** Together AI for intelligent risk assessment
-- **Data Layer:** Helius for on-chain data, DexScreener for market data
+### Auto-Sell Settings
+- **Take Profit**: Sell when position up X%
+- **Stop Loss**: Sell when position down X%
+- **Trailing Stop**: Sell when drops X% from peak
 
 ---
 
@@ -213,27 +176,59 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for detailed system diagrams.
 
 ---
 
-## Contributing
+## API Reference
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+### WebSocket Events (ws://localhost:8788/ws)
 
-### Development Guidelines
-- Run `pnpm lint` before committing
-- Add tests for new features
-- Update documentation as needed
+```typescript
+// Server → Client
+{ type: 'NEW_TOKEN', data: { address, name, analysis } }
+{ type: 'ANALYSIS_RESULT', data: { tokenAddress, riskScore, riskLevel } }
+{ type: 'STATS_UPDATE', data: { tokensAnalyzed, approved, rejected } }
+
+// Client → Server
+{ type: 'SUBSCRIBE', channels: ['tokens', 'analysis'] }
+```
+
+### REST API
+
+```
+GET    /api/status              # Scanner status
+GET    /api/stats               # Analysis statistics
+POST   /api/analyze             # Manual token analysis
+GET    /api/launch-filter/stats # Launch filter statistics
+```
+
+---
+
+## Configuration
+
+### Sniper Environment Variables
+
+```env
+HELIUS_API_KEY=          # Required for RPC and WebSocket
+TOGETHER_AI_API_KEY=     # Required for AI analysis
+```
+
+### Dashboard Settings (via UI)
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| Buy Amount | 0.01 SOL | Amount per trade |
+| Slippage | 15% | Max slippage tolerance |
+| Max Risk Score | 40 | Only buy if score <= this |
+| Take Profit | 50% | Sell when up this % |
+| Stop Loss | 20% | Sell when down this % |
+| Trailing Stop | 15% | Sell when drops from peak |
 
 ---
 
 ## Security
 
+- Dedicated trading wallet (separate from main wallet)
+- Private key encrypted in localStorage
 - Never commit API keys or secrets
-- Use `.dev.vars` for local development (gitignored)
-- Use `wrangler secret` for production secrets
-- Report vulnerabilities to security@argusguard.io
+- Use `.env` for local development (gitignored)
 
 ---
 
@@ -246,7 +241,6 @@ MIT License - see [LICENSE](./LICENSE) for details.
 ## Links
 
 - [Whitepaper](./WHITEPAPER.md)
-- [Architecture](./ARCHITECTURE.md)
 - [Development Guide](./CLAUDE.md)
 
 **Built by ArgusGuard**

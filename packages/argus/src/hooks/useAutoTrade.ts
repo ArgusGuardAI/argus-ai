@@ -19,15 +19,13 @@ export interface AutoTradeConfig {
   enabled: boolean;
   buyAmountSol: number;      // Amount to buy per trade (in SOL)
   maxSlippageBps: number;    // Max slippage in basis points (100 = 1%)
-  maxRiskScore: number;      // Only trade if AI risk score <= this
+  minScore: number;          // Only trade if score >= this (higher = better, 60+ = BUY)
   maxTradesPerSession: number; // SAFETY: Max trades before auto-stopping
   reserveBalanceSol: number;   // SAFETY: Always keep this much SOL untouched
   maxPriceDropPercent: number; // SAFETY: Skip if price dropped more than this % in 24h
   tradeCooldownSeconds: number; // SAFETY: Min seconds between trades (0 = no limit)
   // PRE-FILTER CONFIG (sent to backend)
-  minMarketCapUsd: number;           // Min market cap for graduated tokens
-  minBondingCurveMarketCapUsd: number; // Min market cap for bonding curve tokens
-  minBondingCurvePercent: number;    // Min % progress through bonding curve
+  minMarketCapUsd: number;           // Min market cap for tokens
   maxBundleWallets: number;          // Max coordinated wallets allowed
   maxTopHolderPercent: number;       // Max % one wallet can hold (100 = disabled)
   // SELL CONFIG
@@ -83,19 +81,19 @@ export interface TradingWalletState {
   balance: number;
 }
 
+const ESTIMATED_FEE_SOL = 0.001; // Approximate transaction fee in SOL
+
 const DEFAULT_CONFIG: AutoTradeConfig = {
   enabled: false,
   buyAmountSol: 0.05,      // 0.05 SOL per trade
   maxSlippageBps: 500,     // 5% slippage
-  maxRiskScore: 75,        // Only trade tokens with risk score <= 75
+  minScore: 60,            // Only trade tokens with score >= 60 (BUY or STRONG_BUY)
   maxTradesPerSession: 0,  // 0 = UNLIMITED (keeps trading as long as there's SOL)
   reserveBalanceSol: 0.1,  // SAFETY: Always keep 0.1 SOL
   maxPriceDropPercent: 30, // SAFETY: Skip if down more than 30% in 24h
-  tradeCooldownSeconds: 5,  // SAFETY: 5 seconds between trades
+  tradeCooldownSeconds: 30,  // SAFETY: 30 seconds between trades
   // PRE-FILTER DEFAULTS
-  minMarketCapUsd: 10000,              // $10K min for graduated tokens
-  minBondingCurveMarketCapUsd: 4000,   // $4K min for bonding curve (pump.fun launch)
-  minBondingCurvePercent: 50,          // 50% through curve
+  minMarketCapUsd: 10000,              // $10K min market cap
   maxBundleWallets: 12,                // Allow up to 12 bundled wallets
   maxTopHolderPercent: 70,             // Max 70% for top holder (100 = disabled)
   // SELL DEFAULTS
@@ -444,6 +442,7 @@ export function useAutoTrade(
 
   /**
    * Monitor positions and check sell conditions
+   * Optimized: Accumulates all updates and batches setState calls to prevent re-render loops.
    */
   const checkSellConditions = useCallback(async () => {
     // Use ref for latest config
@@ -454,23 +453,34 @@ export function useAutoTrade(
     const walletAddress = tradingWallet.getAddress();
     if (!walletAddress) return;
 
+    // Accumulate state updates to avoid multiple renders in a loop
+    const updatesMap = new Map<string, Partial<Position>>();
+    const sellsToExecute: Array<{ position: Position; reason: 'take_profit' | 'stop_loss' | 'trailing_stop' }> = [];
+
     for (const position of state.positions) {
       if (position.status !== 'active') continue;
 
       try {
-        // Get current value in SOL via Jupiter quote
+        // Get current value in SOL
         const balanceInfo = await getTokenBalance(position.tokenAddress, walletAddress);
-        if (!balanceInfo || balanceInfo.balance === 0) {
-          // Position may have been sold externally
-          log(`Position ${position.tokenSymbol} has no balance, removing`, 'warning');
-          setState(prev => ({
-            ...prev,
-            positions: prev.positions.filter(p => p.tokenAddress !== position.tokenAddress),
-          }));
+        if (!balanceInfo) {
+          // RPC error - DON'T remove, just skip this cycle
+          log(`${position.tokenSymbol}: Balance check failed, skipping cycle`, 'warning');
           continue;
         }
 
-        const currentValueSol = await getTokenValueInSol(position.tokenAddress, balanceInfo.balance, position.tokenDecimals);
+        if (balanceInfo.balance === 0) {
+          // Balance is 0 - but DON'T auto-remove!
+          // Could be RPC lag, or tokens were sold externally
+          // Only log it, user can manually clear if needed
+          log(`${position.tokenSymbol}: Balance is 0 (may be sold externally)`, 'warning');
+          // Update the position to show 0 value but DON'T delete
+          updatesMap.set(position.tokenAddress, { currentValueSol: 0, pnlPercent: -100 });
+          continue;
+        }
+
+        // Use FRESH decimals from balanceInfo, not stale position.tokenDecimals
+        const currentValueSol = await getTokenValueInSol(position.tokenAddress, balanceInfo.balance, balanceInfo.decimals);
         if (currentValueSol === null) {
           // Rate limited or error - skip this position this cycle
           continue;
@@ -481,55 +491,84 @@ export function useAutoTrade(
         const newHighest = Math.max(position.highestValueSol, currentValueSol);
         const dropFromPeak = ((newHighest - currentValueSol) / newHighest) * 100;
 
-        // Update position with current values
-        setState(prev => ({
-          ...prev,
-          positions: prev.positions.map(p =>
-            p.tokenAddress === position.tokenAddress
-              ? { ...p, currentValueSol, highestValueSol: newHighest, pnlPercent }
-              : p
-          ),
-        }));
+        // Store update
+        updatesMap.set(position.tokenAddress, {
+          currentValueSol,
+          highestValueSol: newHighest,
+          pnlPercent
+        });
+
+        // Construct a temporary object with latest values for condition checking
+        const updatedPosition = { ...position, currentValueSol, highestValueSol: newHighest, pnlPercent };
 
         // Check TAKE PROFIT
         if (pnlPercent >= currentConfig.takeProfitPercent) {
           log(`${position.tokenSymbol}: +${pnlPercent.toFixed(1)}% >= ${currentConfig.takeProfitPercent}% TP`, 'success');
-          await executeSell({ ...position, currentValueSol, pnlPercent }, 'take_profit');
+          sellsToExecute.push({ position: updatedPosition, reason: 'take_profit' });
           continue;
         }
 
-        // Check STOP LOSS
+        // Check STOP LOSS (with minimum hold time protection)
+        // Don't trigger stop loss in first 60 seconds - prevents false triggers from price calculation errors
+        const holdTimeSeconds = (Date.now() - position.entryTimestamp) / 1000;
+        const MIN_HOLD_FOR_STOPLOSS = 60; // 60 seconds minimum before stop loss can trigger
+
         if (pnlPercent <= -currentConfig.stopLossPercent) {
-          log(`${position.tokenSymbol}: ${pnlPercent.toFixed(1)}% <= -${currentConfig.stopLossPercent}% SL`, 'error');
-          await executeSell({ ...position, currentValueSol, pnlPercent }, 'stop_loss');
-          continue;
+          if (holdTimeSeconds < MIN_HOLD_FOR_STOPLOSS) {
+            log(`${position.tokenSymbol}: ${pnlPercent.toFixed(1)}% but PROTECTED (${Math.ceil(MIN_HOLD_FOR_STOPLOSS - holdTimeSeconds)}s remaining)`, 'warning');
+          } else {
+            log(`${position.tokenSymbol}: ${pnlPercent.toFixed(1)}% <= -${currentConfig.stopLossPercent}% SL`, 'error');
+            sellsToExecute.push({ position: updatedPosition, reason: 'stop_loss' });
+            continue;
+          }
         }
 
         // Check TRAILING STOP (only if in profit and trailing is enabled)
         if (currentConfig.trailingStopPercent > 0 && pnlPercent > 0 && dropFromPeak >= currentConfig.trailingStopPercent) {
           log(`${position.tokenSymbol}: Dropped ${dropFromPeak.toFixed(1)}% from peak >= ${currentConfig.trailingStopPercent}% TS`, 'warning');
-          await executeSell({ ...position, currentValueSol, pnlPercent }, 'trailing_stop');
+          sellsToExecute.push({ position: updatedPosition, reason: 'trailing_stop' });
           continue;
         }
 
-        // Delay between positions to avoid rate limits (500ms between each)
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // Delay between positions to avoid rate limits (3 seconds between each)
+        await new Promise(resolve => setTimeout(resolve, 3000));
 
       } catch (error) {
         console.error(`[AutoTrade] Error checking ${position.tokenSymbol}:`, error);
       }
     }
+
+    // Apply all accumulated updates in a single render
+    if (updatesMap.size > 0) {
+      setState(prev => ({
+        ...prev,
+        positions: prev.positions.map(p => {
+          const update = updatesMap.get(p.tokenAddress);
+          return update ? { ...p, ...update } : p;
+        }),
+      }));
+    }
+
+    // Execute all pending sells after state is updated
+    for (const { position, reason } of sellsToExecute) {
+      await executeSell(position, reason);
+    }
   }, [state.positions, executeSell, log]);
+
+  // Keep ref in sync with function for stable timer
+  const checkSellConditionsRef = useRef(checkSellConditions);
+  useEffect(() => {
+    checkSellConditionsRef.current = checkSellConditions;
+  }, [checkSellConditions]);
 
   // Position price monitoring loop
   useEffect(() => {
-    // checkSellConditions uses configRef internally, so we just need to track positions
+    // Check immediately if we have positions
     if (state.positions.length > 0) {
-      // Check immediately
-      checkSellConditions();
-      // Check every 10 seconds (balance between responsiveness and rate limits)
-      // With 500ms delay per position, 7 positions takes ~3.5s, so 10s interval is safe
-      priceMonitorRef.current = setInterval(checkSellConditions, 10000);
+      checkSellConditionsRef.current();
+      // Check every 60 seconds.
+      // Dependency is ONLY positions.length, preventing timer resets when P&L updates.
+      priceMonitorRef.current = setInterval(() => checkSellConditionsRef.current(), 60000);
     }
 
     return () => {
@@ -537,7 +576,7 @@ export function useAutoTrade(
         clearInterval(priceMonitorRef.current);
       }
     };
-  }, [state.positions.length, checkSellConditions]);
+  }, [state.positions.length]); // Only restart if count changes
 
   /**
    * Generate a new trading wallet
@@ -644,67 +683,49 @@ export function useAutoTrade(
       return { success: false, error: 'Failed to get wallet balance' };
     }
 
-    if (balance < currentConfig.buyAmountSol + 0.001) { // +0.001 for fees
+    if (balance < currentConfig.buyAmountSol + ESTIMATED_FEE_SOL) {
       log(`Insufficient balance: ${balance.toFixed(4)} SOL`, 'error');
       return { success: false, error: `Insufficient balance: ${balance.toFixed(4)} SOL` };
     }
 
-    // SAFETY: Require DexScreener data for safety checks
+    // OPTIONAL SAFETY: Check DexScreener data if available
+    // For brand new tokens, DexScreener won't have data yet, so we proceed with AI validation only
     try {
       const priceData = await getTokenPrice(tokenAddress);
-      if (!priceData) {
-        log(`NO DATA: ${tokenSymbol} - waiting for DexScreener data, skipping`, 'warning');
-        return { success: false, error: 'No price data - token too new' };
-      }
+      if (priceData) {
+        // DexScreener has data - run additional safety checks
+        const buys5m = priceData.txnsBuys5m;
+        const sells5m = priceData.txnsSells5m;
 
-      // CHECK 1: Minimum buy activity - require at least 3 buys
-      const buys5m = priceData.txnsBuys5m;
-      const sells5m = priceData.txnsSells5m;
-      if (buys5m < 3) {
-        log(`LOW ACTIVITY: ${tokenSymbol} only ${buys5m} buys - skipping`, 'warning');
-        return { success: false, error: `Only ${buys5m} buys, need 3+` };
-      }
+        // CHECK 1: Sell pressure - skip if sells > 1.5x buys (with some activity)
+        if (sells5m > buys5m * 1.5 && sells5m > 5) {
+          log(`SELL PRESSURE: ${tokenSymbol} has ${sells5m} sells vs ${buys5m} buys - skipping!`, 'warning');
+          return { success: false, error: `Sell pressure: ${sells5m} sells vs ${buys5m} buys` };
+        }
 
-      // CHECK 2: Sell pressure - skip if sells > 1.5x buys
-      if (sells5m > buys5m * 1.5 && sells5m > 3) {
-        log(`SELL PRESSURE: ${tokenSymbol} has ${sells5m} sells vs ${buys5m} buys - skipping!`, 'warning');
-        return { success: false, error: `Sell pressure: ${sells5m} sells vs ${buys5m} buys` };
-      }
+        // CHECK 2: 5-minute price change (detect fresh rugs)
+        const change5m = priceData.priceChange5m;
+        if (change5m < -20) {
+          log(`DUMP: ${tokenSymbol} down ${change5m.toFixed(1)}% in 5min - skipping!`, 'warning');
+          return { success: false, error: `5min dump: ${change5m.toFixed(1)}%` };
+        }
 
-      // CHECK 3: 5-minute price change (detect fresh rugs)
-      const change5m = priceData.priceChange5m;
-      if (change5m < -15) {
-        log(`DUMP: ${tokenSymbol} down ${change5m.toFixed(1)}% in 5min - skipping!`, 'warning');
-        return { success: false, error: `5min dump: ${change5m.toFixed(1)}%` };
-      }
+        // CHECK 3: 1-hour change
+        const change1h = priceData.priceChange1h;
+        if (change1h < -40) {
+          log(`DUMP: ${tokenSymbol} down ${change1h.toFixed(1)}% in 1hr - skipping!`, 'warning');
+          return { success: false, error: `1hr dump: ${change1h.toFixed(1)}%` };
+        }
 
-      // CHECK 4: 1-hour change
-      const change1h = priceData.priceChange1h;
-      if (change1h < -30) {
-        log(`DUMP: ${tokenSymbol} down ${change1h.toFixed(1)}% in 1hr - skipping!`, 'warning');
-        return { success: false, error: `1hr dump: ${change1h.toFixed(1)}%` };
+        log(`DexScreener OK: ${buys5m} buys, ${sells5m} sells, 5m: ${change5m >= 0 ? '+' : ''}${change5m.toFixed(1)}%`, 'info');
+      } else {
+        // No DexScreener data (brand new token) - proceed with AI validation only
+        log(`NEW TOKEN: ${tokenSymbol} - no DexScreener data yet, proceeding with AI validation`, 'info');
       }
-
-      // CHECK 5: 24h for older tokens
-      const change24h = priceData.priceChange24h;
-      if (change24h < -currentConfig.maxPriceDropPercent) {
-        log(`DUMP: ${tokenSymbol} down ${change24h.toFixed(1)}% in 24h - skipping!`, 'warning');
-        return { success: false, error: `24h dump: ${change24h.toFixed(1)}%` };
-      }
-
-      // CHECK 6: Liquidity (if reported)
-      if (priceData.liquidity > 0 && priceData.liquidity < 1000) {
-        log(`LOW LIQUIDITY: ${tokenSymbol} only $${priceData.liquidity.toFixed(0)} - skipping!`, 'warning');
-        return { success: false, error: `Liquidity too low: $${priceData.liquidity.toFixed(0)}` };
-      }
-
-      log(`Safety OK: ${buys5m} buys, ${sells5m} sells, 5m: ${change5m >= 0 ? '+' : ''}${change5m.toFixed(1)}%`, 'info');
     } catch (e) {
-      log(`PRICE CHECK FAILED: ${tokenSymbol} - skipping`, 'warning');
-      return { success: false, error: 'Price check failed' };
+      // DexScreener check failed - proceed anyway since AI validated the token
+      log(`DexScreener check failed for ${tokenSymbol}, proceeding with AI validation`, 'warning');
     }
-
-    log(`EXECUTING: ${tokenSymbol} (${currentConfig.buyAmountSol} SOL)...`, 'info');
 
     // Track balance before trade to calculate actual spent
     const balanceBefore = await tradingWallet.getBalance();
@@ -756,82 +777,109 @@ export function useAutoTrade(
       if (result.success) {
         log(`BOUGHT ${tokenSymbol}! TX: ${result.signature?.slice(0, 8)}...`, 'success');
 
-        // Create position for auto-sell tracking
-        if (currentConfig.autoSellEnabled) {
-          // Try to get token balance with retries
-          const createPosition = async (retryCount = 0): Promise<void> => {
-            const maxRetries = 3;
-            const delay = 2000 + (retryCount * 1000); // 2s, 3s, 4s
+        // ALWAYS create position for tracking (regardless of autoSellEnabled)
+        // This ensures we always know what we bought
+        const createPosition = async (retryCount = 0): Promise<void> => {
+          const maxRetries = 5; // Increased retries
+          const delay = 1500 + (retryCount * 1000); // 1.5s, 2.5s, 3.5s, 4.5s, 5.5s
 
-            await new Promise(resolve => setTimeout(resolve, delay));
+          await new Promise(resolve => setTimeout(resolve, delay));
 
-            try {
-              const balanceInfo = await getTokenBalance(tokenAddress, publicKey.toString());
+          try {
+            log(`Getting balance for ${tokenSymbol}... (attempt ${retryCount + 1})`, 'info');
+            const balanceInfo = await getTokenBalance(tokenAddress, publicKey.toString());
 
-              // Calculate actual SOL spent
-              const balanceAfter = await tradingWallet.getBalance();
-              const actualSolSpent = balanceBefore - balanceAfter;
-              const entrySol = actualSolSpent > 0 && actualSolSpent < currentConfig.buyAmountSol * 1.5
-                ? actualSolSpent
-                : currentConfig.buyAmountSol;
+            // Calculate actual SOL spent
+            const balanceAfter = await tradingWallet.getBalance();
+            const actualSolSpent = balanceBefore - balanceAfter;
+            const entrySol = actualSolSpent > 0 && actualSolSpent < currentConfig.buyAmountSol * 1.5
+              ? actualSolSpent
+              : currentConfig.buyAmountSol;
 
-              if (balanceInfo && balanceInfo.balance > 0) {
-                const newPosition: Position = {
-                  tokenAddress,
-                  tokenSymbol,
-                  entryTimestamp: Date.now(),
-                  entrySolAmount: entrySol,
-                  tokenAmount: balanceInfo.balance,
-                  tokenDecimals: balanceInfo.decimals,
-                  currentValueSol: entrySol,
-                  highestValueSol: entrySol,
-                  pnlPercent: 0,
-                  txSignature: result.signature || '',
-                  status: 'active',
-                };
+            if (balanceInfo && balanceInfo.balance > 0) {
+              const newPosition: Position = {
+                tokenAddress,
+                tokenSymbol,
+                entryTimestamp: Date.now(),
+                entrySolAmount: entrySol,
+                tokenAmount: balanceInfo.balance,
+                tokenDecimals: balanceInfo.decimals,
+                currentValueSol: entrySol,
+                highestValueSol: entrySol,
+                pnlPercent: 0,
+                txSignature: result.signature || '',
+                status: 'active',
+              };
 
-                setState(prev => ({
-                  ...prev,
-                  positions: [...prev.positions, newPosition],
-                }));
+              setState(prev => ({
+                ...prev,
+                positions: [...prev.positions, newPosition],
+              }));
 
-                log(`Position created: ${tokenSymbol} (${entrySol.toFixed(4)} SOL)`, 'success');
-              } else if (retryCount < maxRetries) {
-                log(`Waiting for ${tokenSymbol} balance... (retry ${retryCount + 1})`, 'info');
-                await createPosition(retryCount + 1);
-              } else {
-                // Create position with estimated values after retries exhausted
-                log(`Creating position for ${tokenSymbol} with estimated values`, 'warning');
-                const newPosition: Position = {
-                  tokenAddress,
-                  tokenSymbol,
-                  entryTimestamp: Date.now(),
-                  entrySolAmount: entrySol,
-                  tokenAmount: 0, // Unknown
-                  tokenDecimals: 6,
-                  currentValueSol: entrySol,
-                  highestValueSol: entrySol,
-                  pnlPercent: 0,
-                  txSignature: result.signature || '',
-                  status: 'active',
-                };
+              log(`POSITION CREATED: ${tokenSymbol} (${entrySol.toFixed(4)} SOL, ${balanceInfo.balance} tokens)`, 'success');
+            } else if (retryCount < maxRetries) {
+              log(`No balance yet for ${tokenSymbol}, retrying...`, 'warning');
+              await createPosition(retryCount + 1);
+            } else {
+              // Create position with estimated values after retries exhausted
+              // ALWAYS create position even without balance - we can recover later
+              log(`Creating ${tokenSymbol} position with estimated values (balance check failed)`, 'warning');
+              const newPosition: Position = {
+                tokenAddress,
+                tokenSymbol,
+                entryTimestamp: Date.now(),
+                entrySolAmount: entrySol,
+                tokenAmount: 0, // Unknown - will be recovered on next scan
+                tokenDecimals: 6,
+                currentValueSol: entrySol,
+                highestValueSol: entrySol,
+                pnlPercent: 0,
+                txSignature: result.signature || '',
+                status: 'active',
+              };
 
-                setState(prev => ({
-                  ...prev,
-                  positions: [...prev.positions, newPosition],
-                }));
-              }
-            } catch (e) {
-              console.error('[AutoTrade] Position creation error:', e);
-              if (retryCount < maxRetries) {
-                await createPosition(retryCount + 1);
-              } else {
-                log(`Failed to track ${tokenSymbol} position`, 'error');
-              }
+              setState(prev => ({
+                ...prev,
+                positions: [...prev.positions, newPosition],
+              }));
+              log(`POSITION CREATED (estimated): ${tokenSymbol}`, 'warning');
             }
-          };
+          } catch (e) {
+            console.error('[AutoTrade] Position creation error:', e);
+            log(`Position creation error for ${tokenSymbol}: ${e}`, 'error');
+            if (retryCount < maxRetries) {
+              await createPosition(retryCount + 1);
+            } else {
+              // LAST RESORT: Create position anyway with defaults
+              log(`FORCE creating position for ${tokenSymbol} after all retries failed`, 'error');
+              const newPosition: Position = {
+                tokenAddress,
+                tokenSymbol,
+                entryTimestamp: Date.now(),
+                entrySolAmount: currentConfig.buyAmountSol,
+                tokenAmount: 0,
+                tokenDecimals: 6,
+                currentValueSol: currentConfig.buyAmountSol,
+                highestValueSol: currentConfig.buyAmountSol,
+                pnlPercent: 0,
+                txSignature: result.signature || '',
+                status: 'active',
+              };
 
-          createPosition();
+              setState(prev => ({
+                ...prev,
+                positions: [...prev.positions, newPosition],
+              }));
+            }
+          }
+        };
+
+        // AWAIT position creation so we don't lose it
+        try {
+          await createPosition();
+        } catch (e) {
+          log(`CRITICAL: Position creation failed completely for ${tokenSymbol}`, 'error');
+          console.error('[AutoTrade] CRITICAL position creation failure:', e);
         }
 
         refreshBalance(); // Update balance after trade
@@ -915,16 +963,16 @@ export function useAutoTrade(
 
     // SAFETY: Check reserve balance - don't go below minimum
     const currentBalance = await tradingWallet.getBalance();
-    const requiredBalance = currentConfig.buyAmountSol + currentConfig.reserveBalanceSol + 0.001; // +0.001 for fees
+    const requiredBalance = currentConfig.buyAmountSol + currentConfig.reserveBalanceSol + ESTIMATED_FEE_SOL;
     if (currentBalance < requiredBalance) {
       log(`RESERVE LIMIT: Balance ${currentBalance.toFixed(3)} SOL below reserve ${currentConfig.reserveBalanceSol} SOL - Stopping!`, 'warning');
       setConfig(prev => ({ ...prev, enabled: false }));
       return;
     }
 
-    // Check risk score threshold
-    if (riskScore > currentConfig.maxRiskScore) {
-      log(`Risk ${riskScore} > max ${currentConfig.maxRiskScore}, skipping ${tokenSymbol}`, 'warning');
+    // Check score threshold (higher = better in new system)
+    if (riskScore < currentConfig.minScore) {
+      log(`Score ${riskScore} < min ${currentConfig.minScore}, skipping ${tokenSymbol}`, 'warning');
       return;
     }
 
@@ -1152,7 +1200,7 @@ export function useAutoTrade(
           // Get current value in SOL
           const currentValueSol = await getTokenValueInSol(token.mint, token.balance, token.decimals);
 
-          // Use truncated address as symbol (we don't have reliable symbol data for pump.fun tokens)
+          // Use truncated address as symbol (recovered positions don't have symbol data)
           const tokenSymbol = token.mint.slice(0, 6) + '...' + token.mint.slice(-4);
 
           const position: Position = {

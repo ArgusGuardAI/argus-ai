@@ -11,7 +11,6 @@
  */
 
 import { SniperEngine } from './engine/sniper';
-import type { NewTokenEvent } from './types';
 
 const RPC_URL = process.env.HELIUS_RPC_URL || 'https://api.mainnet-beta.solana.com';
 const WALLET_KEY = process.env.WALLET_PRIVATE_KEY || '';
@@ -32,10 +31,9 @@ async function main() {
   const sniper = new SniperEngine(RPC_URL, {
     walletPrivateKey: WATCH_ONLY ? 'watch-only' : WALLET_KEY,
     buyAmountSol: 0.05, // Small amount for testing
-    maxRiskScore: 40, // Only snipe if ArgusGuard score < 40
-    minLiquidityUsd: 500,
-    allowPumpFun: true,
-    allowRaydium: false, // Start with just pump.fun
+    minScore: 60, // Only trade if score >= 60 (BUY or higher)
+    minLiquidityUsd: 5000,
+    allowRaydium: true,
     takeProfitPercent: 50, // Sell at 1.5x
     stopLossPercent: 25, // Sell if down 25%
   });
@@ -92,42 +90,9 @@ async function main() {
 
   // Start in watch-only or live mode
   if (WATCH_ONLY) {
-    // In watch-only, just listen without executing trades
-    const { PumpFunListener } = await import('./listeners/pump-fun.js');
-    const { TokenAnalyzer } = await import('./engine/analyzer.js');
-
-    const listener = new PumpFunListener();
-    const analyzer = new TokenAnalyzer({
-      walletPrivateKey: '',
-      buyAmountSol: 0,
-      maxSlippageBps: 0,
-      priorityFeeLamports: 0,
-      useJito: false,
-      maxRiskScore: 40,
-      minLiquidityUsd: 500,
-      allowPumpFun: true,
-      allowRaydium: false,
-      blacklistCreators: [],
-      takeProfitPercent: 0,
-      stopLossPercent: 0,
-      maxHoldTimeMinutes: 0,
-      manualModeOnly: true,
-    });
-
-    listener.on('newToken', async (token: NewTokenEvent) => {
-      console.log(`\n🆕 New token: ${token.symbol} (${token.address})`);
-      console.log(`   Source: ${token.source} | Creator: ${token.creator.slice(0, 8)}...`);
-
-      const decision = await analyzer.analyze(token);
-      if (decision.shouldBuy) {
-        console.log(`   ✅ WOULD SNIPE (score: ${decision.riskScore})`);
-      } else {
-        console.log(`   ❌ SKIP (score: ${decision.riskScore}) - ${decision.reason}`);
-      }
-    });
-
-    console.log('Connecting to pump.fun...\n');
-    listener.start();
+    // In watch-only, just use the sniper engine without executing trades
+    console.log('Starting in WATCH-ONLY mode (DexScreener)...\n');
+    await sniper.start();
   } else {
     if (!WALLET_KEY) {
       console.error('❌ WALLET_PRIVATE_KEY environment variable required for live trading');
