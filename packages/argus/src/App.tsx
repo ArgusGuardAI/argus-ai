@@ -19,6 +19,88 @@ const SIGNAL_COLORS: Record<SignalType, string> = {
   AVOID: '#ef4444',
 };
 
+// Loading skeleton component
+function Skeleton({ className = '' }: { className?: string }) {
+  return <div className={`animate-pulse bg-zinc-800 rounded ${className}`} />;
+}
+
+// Analysis loading skeleton
+function AnalysisSkeleton() {
+  return (
+    <div className="space-y-6">
+      {/* Token Header Skeleton */}
+      <div className="bg-zinc-900 rounded-2xl border border-zinc-800 p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-center gap-4 sm:gap-5">
+            <Skeleton className="w-12 h-12 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl" />
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Skeleton className="h-7 w-32" />
+                <Skeleton className="h-6 w-20 rounded-full" />
+              </div>
+              <Skeleton className="h-4 w-48" />
+            </div>
+          </div>
+          <div className="flex sm:block items-center gap-2">
+            <Skeleton className="h-12 w-16" />
+            <Skeleton className="h-4 w-16 mt-1" />
+          </div>
+        </div>
+      </div>
+
+      {/* Info Cards Skeleton */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {[1, 2, 3].map(i => (
+          <div key={i} className="bg-zinc-900 rounded-xl border border-zinc-800 p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <Skeleton className="w-8 h-8 rounded-lg" />
+              <Skeleton className="h-5 w-20" />
+            </div>
+            <div className="space-y-3">
+              {[1, 2, 3, 4].map(j => (
+                <div key={j} className="flex items-center justify-between">
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-4 w-16" />
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Holders & AI Skeleton */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Skeleton className="w-8 h-8 rounded-lg" />
+            <Skeleton className="h-5 w-24" />
+          </div>
+          <div className="space-y-3">
+            {[1, 2, 3, 4, 5].map(i => (
+              <div key={i} className="flex items-center gap-3">
+                <Skeleton className="h-3 w-4" />
+                <Skeleton className="h-3 flex-1 rounded-full" />
+                <Skeleton className="h-3 w-12" />
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Skeleton className="w-8 h-8 rounded-lg" />
+            <Skeleton className="h-5 w-24" />
+          </div>
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-3/4" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Sparkline SVG component
 function Sparkline({ data, color, height = 40 }: { data: number[]; color: string; height?: number }) {
   if (!data || data.length < 2) return null;
@@ -137,6 +219,16 @@ interface AnalysisResult {
 
 const API_URL = 'http://localhost:8788';
 const RECENT_SEARCHES_KEY = 'argus_recent_searches';
+const WATCHLIST_KEY = 'argus_watchlist';
+
+interface WatchlistItem {
+  address: string;
+  symbol: string;
+  name: string;
+  signal: SignalType;
+  score: number;
+  addedAt: number;
+}
 
 export default function App() {
   const [tokenInput, setTokenInput] = useState('');
@@ -144,6 +236,7 @@ export default function App() {
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [recentSearches, setRecentSearches] = useState<Array<{ address: string; symbol: string }>>([]);
+  const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [buyAmount, setBuyAmount] = useState(0.05);
   const [isBuying, setIsBuying] = useState(false);
   const [logs, setLogs] = useState<Array<{ time: Date; msg: string; type: string }>>([]);
@@ -164,11 +257,15 @@ export default function App() {
 
   const autoTrade = useAutoTrade({}, undefined, log);
 
-  // Load recent searches from localStorage
+  // Load recent searches and watchlist from localStorage
   useEffect(() => {
     try {
       const saved = localStorage.getItem(RECENT_SEARCHES_KEY);
       if (saved) setRecentSearches(JSON.parse(saved));
+    } catch {}
+    try {
+      const savedWatchlist = localStorage.getItem(WATCHLIST_KEY);
+      if (savedWatchlist) setWatchlist(JSON.parse(savedWatchlist));
     } catch {}
   }, []);
 
@@ -185,6 +282,35 @@ export default function App() {
       const filtered = prev.filter(s => s.address !== address);
       const updated = [{ address, symbol }, ...filtered].slice(0, 10);
       localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  // Watchlist functions
+  const isInWatchlist = (address: string) => watchlist.some(w => w.address === address);
+
+  const addToWatchlist = (result: AnalysisResult) => {
+    if (isInWatchlist(result.token.address)) return;
+    const item: WatchlistItem = {
+      address: result.token.address,
+      symbol: result.token.symbol,
+      name: result.token.name,
+      signal: result.ai.signal,
+      score: result.ai.score,
+      addedAt: Date.now(),
+    };
+    setWatchlist(prev => {
+      const updated = [item, ...prev].slice(0, 20);
+      localStorage.setItem(WATCHLIST_KEY, JSON.stringify(updated));
+      return updated;
+    });
+    log(`Added ${result.token.symbol} to watchlist`, 'success');
+  };
+
+  const removeFromWatchlist = (address: string) => {
+    setWatchlist(prev => {
+      const updated = prev.filter(w => w.address !== address);
+      localStorage.setItem(WATCHLIST_KEY, JSON.stringify(updated));
       return updated;
     });
   };
@@ -267,7 +393,7 @@ export default function App() {
     <div className="min-h-screen bg-[#09090B]">
       {/* Header */}
       <header className="bg-[#09090B]/90 backdrop-blur-sm border-b border-zinc-800 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 py-4">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4">
           <div className="flex items-center justify-between">
             {/* Logo */}
             <div className="flex items-center gap-3">
@@ -485,7 +611,7 @@ export default function App() {
       {showSettings && (
         <div className="bg-zinc-900 border-b border-zinc-800 shadow-sm">
           <div className="max-w-7xl mx-auto px-6 py-6">
-            <div className="grid grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
               {/* Auto-Sell Settings */}
               <div className="bg-zinc-800 rounded-xl p-5">
                 <div className="flex items-center justify-between mb-4">
@@ -630,10 +756,10 @@ export default function App() {
       )}
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-6 py-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
         {/* Token Input */}
         <div className="mb-8">
-          <div className="flex gap-3">
+          <div className="flex flex-col sm:flex-row gap-3">
             <div className="flex-1 relative">
               <div className="absolute left-4 top-1/2 -translate-y-1/2">
                 <svg className="w-5 h-5 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -681,50 +807,115 @@ export default function App() {
               ))}
             </div>
           )}
+
+          {/* Watchlist */}
+          {watchlist.length > 0 && (
+            <div className="mt-3 flex items-center gap-2 flex-wrap">
+              <span className="text-xs text-yellow-500 flex items-center gap-1">
+                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                </svg>
+                Watchlist:
+              </span>
+              {watchlist.slice(0, 6).map(w => (
+                <button
+                  key={w.address}
+                  onClick={() => { setTokenInput(w.address); analyzeToken(w.address); }}
+                  className="group px-3 py-1.5 rounded-lg text-xs font-medium bg-yellow-500/10 border border-yellow-500/30 text-yellow-500 hover:bg-yellow-500/20 transition-all flex items-center gap-1.5"
+                >
+                  {w.symbol}
+                  <span className={`text-[10px] px-1 py-0.5 rounded ${SIGNAL_BG[w.signal]}`}>
+                    {w.score}
+                  </span>
+                  <span
+                    onClick={(e) => { e.stopPropagation(); removeFromWatchlist(w.address); }}
+                    className="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-red-400 transition-opacity"
+                  >
+                    x
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Error Message */}
         {analysisError && (
-          <div className="mb-6 p-4 rounded-xl bg-red-900/30 border border-red-800 text-red-400 text-sm flex items-center gap-3">
-            <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            {analysisError}
+          <div className="mb-6 p-4 rounded-xl bg-red-900/30 border border-red-800">
+            <div className="flex items-start gap-3">
+              <svg className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div className="flex-1">
+                <div className="text-sm font-medium text-red-400 mb-1">Analysis Failed</div>
+                <div className="text-sm text-red-400/80 mb-3">{analysisError}</div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { setAnalysisError(null); analyzeToken(tokenInput); }}
+                    className="px-3 py-1.5 text-xs font-medium bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors"
+                  >
+                    Try Again
+                  </button>
+                  <button
+                    onClick={() => setAnalysisError(null)}
+                    className="px-3 py-1.5 text-xs font-medium bg-zinc-800 text-zinc-400 rounded-lg hover:bg-zinc-700 transition-colors"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
+        {/* Loading Skeleton */}
+        {isAnalyzing && <AnalysisSkeleton />}
+
         {/* Analysis Results */}
-        {analysisResult && (
+        {analysisResult && !isAnalyzing && (
           <div className="space-y-6">
             {/* Token Header Card */}
-            <div className="bg-zinc-900 rounded-2xl border border-zinc-800 p-6">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-5">
-                  <div className="w-16 h-16 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-2xl flex items-center justify-center text-white text-xl font-bold shadow-lg shadow-emerald-500/20">
+            <div className="bg-zinc-900 rounded-2xl border border-zinc-800 p-4 sm:p-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div className="flex items-center gap-4 sm:gap-5">
+                  <div className="w-12 h-12 sm:w-16 sm:h-16 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-xl sm:rounded-2xl flex items-center justify-center text-white text-lg sm:text-xl font-bold shadow-lg shadow-emerald-500/20 flex-shrink-0">
                     {analysisResult.token.symbol.slice(0, 2)}
                   </div>
-                  <div>
-                    <div className="flex items-center gap-3 mb-1">
-                      <h2 className="text-2xl font-bold text-white">${analysisResult.token.symbol}</h2>
-                      <span className={`px-3 py-1 rounded-full text-xs font-bold ${SIGNAL_BG[analysisResult.ai.signal]}`}>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 sm:gap-3 mb-1 flex-wrap">
+                      <h2 className="text-xl sm:text-2xl font-bold text-white">${analysisResult.token.symbol}</h2>
+                      <span className={`px-2 sm:px-3 py-1 rounded-full text-xs font-bold ${SIGNAL_BG[analysisResult.ai.signal]}`}>
                         {analysisResult.ai.signal.replace('_', ' ')}
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <code className="text-xs text-zinc-500 font-mono">{analysisResult.token.address}</code>
+                      <code className="text-[10px] sm:text-xs text-zinc-500 font-mono truncate max-w-[150px] sm:max-w-none">{analysisResult.token.address}</code>
                       <button
                         onClick={() => navigator.clipboard.writeText(analysisResult.token.address)}
-                        className="p-1 hover:bg-zinc-800 rounded"
+                        className="p-1 hover:bg-zinc-800 rounded flex-shrink-0"
+                        title="Copy address"
                       >
                         <svg className="w-3.5 h-3.5 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                         </svg>
                       </button>
+                      <button
+                        onClick={() => isInWatchlist(analysisResult.token.address)
+                          ? removeFromWatchlist(analysisResult.token.address)
+                          : addToWatchlist(analysisResult)
+                        }
+                        className={`p-1 rounded flex-shrink-0 transition-colors ${isInWatchlist(analysisResult.token.address) ? 'text-yellow-500 hover:bg-zinc-800' : 'text-zinc-500 hover:bg-zinc-800 hover:text-yellow-500'}`}
+                        title={isInWatchlist(analysisResult.token.address) ? 'Remove from watchlist' : 'Add to watchlist'}
+                      >
+                        <svg className="w-3.5 h-3.5" fill={isInWatchlist(analysisResult.token.address) ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                        </svg>
+                      </button>
                     </div>
                   </div>
                 </div>
-                <div className="text-right">
-                  <div className="text-5xl font-bold" style={{ color: SIGNAL_COLORS[analysisResult.ai.signal] }}>
+                <div className="text-left sm:text-right flex sm:block items-center gap-2">
+                  <div className="text-4xl sm:text-5xl font-bold" style={{ color: SIGNAL_COLORS[analysisResult.ai.signal] }}>
                     {analysisResult.ai.score}
                   </div>
                   <div className="text-xs text-zinc-500 uppercase tracking-wider">AI Score</div>
@@ -733,7 +924,7 @@ export default function App() {
             </div>
 
             {/* Info Cards Grid */}
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {/* Security Card */}
               <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-5">
                 <div className="flex items-center gap-2 mb-4">
@@ -852,7 +1043,7 @@ export default function App() {
             </div>
 
             {/* Holders & AI Analysis */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {/* Top Holders */}
               <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-5">
                 <div className="flex items-center justify-between mb-4">
@@ -970,16 +1161,16 @@ export default function App() {
             </div>
 
             {/* Buy Controls */}
-            <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
+            <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 sm:p-5">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
                   <span className="text-sm font-medium text-zinc-500">Amount:</span>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     {[0.01, 0.05, 0.1, 0.25, 0.5].map(amt => (
                       <button
                         key={amt}
                         onClick={() => setBuyAmount(amt)}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                        className={`px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                           buyAmount === amt
                             ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/20'
                             : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
@@ -993,14 +1184,14 @@ export default function App() {
                 <button
                   onClick={handleBuy}
                   disabled={!autoTrade.wallet.isLoaded || isBuying || autoTrade.wallet.balance < buyAmount}
-                  className={`px-10 py-3 rounded-xl text-sm font-bold transition-all shadow-lg hover:shadow-xl ${
+                  className={`w-full sm:w-auto px-8 sm:px-10 py-3 rounded-xl text-sm font-bold transition-all shadow-lg hover:shadow-xl ${
                     analysisResult.ai.signal === 'AVOID'
                       ? 'bg-gradient-to-r from-red-500 to-red-600 text-white'
                       : 'bg-gradient-to-r from-green-500 to-emerald-600 text-white'
                   } disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none`}
                 >
                   {isBuying ? (
-                    <span className="flex items-center gap-2">
+                    <span className="flex items-center justify-center gap-2">
                       <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
@@ -1029,20 +1220,20 @@ export default function App() {
             <p className="text-zinc-500 max-w-lg mx-auto leading-relaxed">
               Paste a Solana token address above to get comprehensive AI analysis including security checks, holder distribution, bundle detection, and trading signals.
             </p>
-            <div className="mt-8 flex justify-center gap-4 text-sm text-zinc-500">
-              <div className="flex items-center gap-2">
+            <div className="mt-8 flex flex-col sm:flex-row justify-center gap-3 sm:gap-4 text-sm text-zinc-500">
+              <div className="flex items-center justify-center gap-2">
                 <svg className="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                 </svg>
                 Security Analysis
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center justify-center gap-2">
                 <svg className="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
                 Bundle Detection
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center justify-center gap-2">
                 <svg className="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                 </svg>
@@ -1080,9 +1271,9 @@ export default function App() {
               </div>
             )}
           </div>
-          <div className="bg-zinc-900 rounded-xl border border-zinc-800 overflow-hidden">
+          <div className="bg-zinc-900 rounded-xl border border-zinc-800 overflow-x-auto">
             {autoTrade.state.positions.length > 0 ? (
-              <table className="w-full">
+              <table className="w-full min-w-[500px]">
                 <thead>
                   <tr className="bg-zinc-800 text-xs uppercase tracking-wider text-zinc-500">
                     <th className="px-5 py-3 text-left font-semibold">Token</th>
@@ -1135,6 +1326,72 @@ export default function App() {
             )}
           </div>
         </div>
+
+        {/* Trade History */}
+        {autoTrade.state.soldPositions.length > 0 && (
+          <div className="mt-8">
+            <details className="bg-zinc-900 rounded-xl border border-zinc-800">
+              <summary className="px-5 py-4 text-sm font-semibold text-zinc-300 cursor-pointer hover:bg-zinc-800 transition-colors flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  Trade History
+                  <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-zinc-700 text-zinc-300">
+                    {autoTrade.state.soldPositions.length}
+                  </span>
+                </span>
+                <span className={`text-sm font-bold ${autoTrade.state.totalProfitSol >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                  Total: {autoTrade.state.totalProfitSol >= 0 ? '+' : ''}{autoTrade.state.totalProfitSol.toFixed(4)} SOL
+                </span>
+              </summary>
+              <div className="border-t border-zinc-800 overflow-x-auto">
+                <table className="w-full min-w-[500px]">
+                  <thead>
+                    <tr className="bg-zinc-800/50 text-xs uppercase tracking-wider text-zinc-500">
+                      <th className="px-5 py-3 text-left font-semibold">Token</th>
+                      <th className="px-5 py-3 text-right font-semibold">Entry</th>
+                      <th className="px-5 py-3 text-right font-semibold">Exit</th>
+                      <th className="px-5 py-3 text-right font-semibold">P&L</th>
+                      <th className="px-5 py-3 text-right font-semibold">Reason</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {autoTrade.state.soldPositions.slice(0, 20).map((p, i) => (
+                      <tr key={`${p.tokenAddress}-${i}`} className="border-t border-zinc-800/50 hover:bg-zinc-800/30 transition-colors">
+                        <td className="px-5 py-3">
+                          <a
+                            href={`https://dexscreener.com/solana/${p.tokenAddress}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-medium text-zinc-300 hover:text-emerald-400 text-sm"
+                          >
+                            {p.tokenSymbol}
+                          </a>
+                        </td>
+                        <td className="px-5 py-3 text-right text-sm text-zinc-500">{p.entrySolAmount.toFixed(4)} SOL</td>
+                        <td className="px-5 py-3 text-right text-sm text-zinc-500">{p.currentValueSol.toFixed(4)} SOL</td>
+                        <td className={`px-5 py-3 text-right text-sm font-bold ${p.pnlPercent >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                          {p.pnlPercent >= 0 ? '+' : ''}{p.pnlPercent.toFixed(1)}%
+                        </td>
+                        <td className="px-5 py-3 text-right">
+                          <span className={`text-xs px-2 py-1 rounded ${
+                            p.sellReason === 'take_profit' ? 'bg-green-900/50 text-green-400' :
+                            p.sellReason === 'stop_loss' ? 'bg-red-900/50 text-red-400' :
+                            p.sellReason === 'trailing_stop' ? 'bg-amber-900/50 text-amber-400' :
+                            'bg-zinc-700 text-zinc-400'
+                          }`}>
+                            {p.sellReason === 'take_profit' ? 'TP' :
+                             p.sellReason === 'stop_loss' ? 'SL' :
+                             p.sellReason === 'trailing_stop' ? 'TS' :
+                             'Manual'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          </div>
+        )}
 
         {/* Activity Log */}
         {logs.length > 0 && (
