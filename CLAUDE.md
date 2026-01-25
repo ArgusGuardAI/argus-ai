@@ -6,22 +6,31 @@ Development guidance for AI assistants working on the Solana Safeguard AI codeba
 
 ## Project Overview
 
-**Solana Safeguard AI** is an automated AI-powered trading system for Solana tokens. It scans new token launches on Raydium and Meteora in real-time, analyzes them for risk using AI, and automatically executes trades on approved tokens.
+**Argus AI** is a manual token research tool for Solana. Users paste a token address, get comprehensive AI-powered analysis (security, market data, holder distribution, bundle detection), and can execute one-click trades.
+
+### Live URLs
+- **Landing Page**: https://argusguard.io
+- **App Dashboard**: https://app.argusguard.io
+- **Workers API**: https://argusguard-api.hermosillo-jessie.workers.dev
 
 ### Core Components
-- **Argus** (`packages/argus`) - AI Trading Dashboard (React + Vite)
-- **Sniper** (`packages/sniper`) - Token scanner and analysis backend
-- **Workers** (`packages/workers`) - Cloudflare Workers API for analysis
+- **Argus** (`packages/argus`) - Token Research Dashboard (React + Vite)
+- **Sniper** (`packages/sniper`) - Token scanner backend (local dev)
+- **Workers** (`packages/workers`) - Cloudflare Workers API (production)
 
 ### Key Features
-- Real-time Raydium AMM pool detection (Helius WebSocket)
-- Real-time Meteora DLMM pool detection (Helius WebSocket)
-- DexScreener trending tokens (backup source)
-- AI-powered risk analysis (0-100 score)
-- Launch filter (spam detection, creator tracking, auto-blacklist)
-- Fully automated trading with dedicated wallet
-- Auto-sell: Take profit, stop loss, trailing stop
+- Manual token address input with analysis
+- AI-powered risk scoring (0-100, inverted from API)
+- Security checks (mint/freeze authority, LP lock)
+- Holder distribution with top 10 visualization
+- Bundle detection (coordinated wallet clusters)
+- Market data (price, market cap, liquidity, volume)
+- Trading activity (buy/sell counts, ratio)
+- One-click buy via Jupiter swap
 - Position tracking with P&L
+- Dedicated trading wallet with backup safety
+- Watchlist and recent searches
+- Dark theme UI
 
 ---
 
@@ -29,19 +38,47 @@ Development guidance for AI assistants working on the Solana Safeguard AI codeba
 
 ```
 packages/
-├── argus/           # AI Trading Dashboard (React + Vite)
-│   ├── src/App.tsx      # Main dashboard UI (3-column layout)
-│   ├── src/hooks/       # useAutoTrade hook
-│   └── src/lib/         # Jupiter swap, trading wallet
-├── sniper/          # Token Scanner Backend
-│   ├── src/listeners/   # Raydium, Meteora, DexScreener listeners
-│   ├── src/engine/      # Sniper, analyzer, pre-filter, launch-filter
-│   ├── src/trading/     # Trade executor
-│   └── src/server.ts    # WebSocket server
-└── workers/         # Cloudflare Workers API
-    ├── src/routes/      # API endpoints
+├── argus/           # Token Research Dashboard (React + Vite)
+│   ├── src/App.tsx      # Main single-page dashboard
+│   ├── src/main.tsx     # Subdomain-aware routing
+│   ├── src/pages/       # Landing page
+│   ├── src/hooks/       # useAutoTrade hook (trading logic)
+│   ├── src/lib/         # Jupiter swap, trading wallet
+│   └── src/contexts/    # Wallet auth context
+├── sniper/          # Token Scanner Backend (local dev)
+│   ├── src/server.ts    # HTTP + WebSocket server
+│   ├── src/engine/      # Analyzer, pre-filter, launch-filter
+│   └── src/listeners/   # Raydium, Meteora, DexScreener
+└── workers/         # Cloudflare Workers API (production)
+    ├── src/index.ts     # Main worker entry
+    ├── src/routes/      # sentinel, analyze, jupiter, etc.
     └── src/services/    # Helius, DexScreener, Together AI
 ```
+
+---
+
+## Deployment
+
+```bash
+# Argus Dashboard (app.argusguard.io)
+cd packages/argus
+pnpm build
+npx wrangler pages deploy dist --project-name argusguard-app
+
+# Landing Page (argusguard.io) - same build, separate project
+npx wrangler pages deploy dist --project-name argusguard-website
+
+# Workers API
+cd packages/workers
+npx wrangler deploy
+```
+
+### Cloudflare Projects
+| Project | Domain | Purpose |
+|---------|--------|---------|
+| `argusguard-app` | app.argusguard.io | Dashboard app |
+| `argusguard-website` | argusguard.io | Landing page |
+| Workers | argusguard-api.hermosillo-jessie.workers.dev | API |
 
 ---
 
@@ -51,13 +88,13 @@ packages/
 # Development
 pnpm install              # Install dependencies
 
-# Argus (Trading Dashboard)
+# Argus (Dashboard)
 cd packages/argus
 pnpm dev                  # Start dashboard at localhost:3000
 
-# Sniper (Scanner Backend)
+# Sniper (Local Backend)
 cd packages/sniper
-pnpm dev                  # Start scanner at localhost:8788
+pnpm dev                  # Start backend at localhost:8788
 
 # Workers (API)
 cd packages/workers
@@ -72,167 +109,135 @@ pnpm dev                  # Start workers at localhost:8787
 
 | File | Purpose |
 |------|---------|
-| `src/App.tsx` | Main dashboard with 3-column layout (sidebar, main, right panel) |
-| `src/hooks/useAutoTrade.ts` | Core trading logic: buy, sell, position tracking |
+| `src/App.tsx` | Main dashboard: token input, analysis display, buy controls, positions, settings |
+| `src/main.tsx` | Subdomain-aware routing (app.* = dashboard, root = landing) |
+| `src/pages/Landing.tsx` | Marketing landing page with feature showcase |
+| `src/hooks/useAutoTrade.ts` | Trading logic: buy, sell, position tracking, wallet management |
 | `src/lib/jupiter.ts` | Jupiter swap integration for buys/sells |
 | `src/lib/tradingWallet.ts` | Dedicated trading wallet (encrypted localStorage) |
+| `src/contexts/AuthContext.tsx` | Wallet connection and auth tier management |
 
 ### Sniper Package (`packages/sniper/`)
 
 | File | Purpose |
 |------|---------|
-| `src/server.ts` | WebSocket server, broadcasts token events |
-| `src/engine/sniper.ts` | Main scanner engine, orchestrates all listeners |
+| `src/server.ts` | HTTP server with `/api/analyze-full` endpoint |
 | `src/engine/analyzer.ts` | AI risk analysis via Sentinel API |
-| `src/engine/pre-filter.ts` | Pre-filtering for trending tokens (age, liquidity, etc.) |
-| `src/engine/launch-filter.ts` | Launch filter for new pools (spam, creator tracking) |
-| `src/listeners/raydium.ts` | Raydium AMM pool creation listener (Helius WebSocket) |
-| `src/listeners/meteora.ts` | Meteora DLMM pool creation listener (Helius WebSocket) |
-| `src/listeners/dexscreener.ts` | DexScreener trending/boosted tokens (backup) |
+| `src/engine/pre-filter.ts` | Pre-filtering for trending tokens |
+| `src/engine/launch-filter.ts` | Launch filter for new pools |
+
+### Workers Package (`packages/workers/`)
+
+| File | Purpose |
+|------|---------|
+| `src/index.ts` | Main worker entry, route handling |
+| `src/routes/sentinel.ts` | `/sentinel/analyze` endpoint (production) |
+| `src/routes/analyze.ts` | Token analysis logic |
+| `src/routes/jupiter.ts` | Jupiter swap proxy |
 
 ---
 
-## Token Discovery Sources
+## API Endpoints
 
-### 1. Raydium Listener (Primary)
-- Connects to Helius WebSocket
-- Subscribes to Raydium AMM program: `675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8`
-- Detects new pool creation transactions (initialize2)
-- Catches tokens at launch (second 0)
+### Local Development (sniper at localhost:8788)
+```
+POST /api/analyze-full
+Body: { "address": "<token_address>" }
+Returns: AnalysisResult (direct format)
+```
 
-### 2. Meteora Listener (Primary)
-- Connects to Helius WebSocket
-- Subscribes to Meteora DLMM program: `LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo`
-- Subscribes to Meteora AMM program: `Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB`
-- Catches DLMM pool creations at launch
+### Production (Workers API)
+```
+POST /sentinel/analyze
+Body: { "tokenAddress": "<token_address>" }
+Returns: { tokenInfo, analysis, holderDistribution, bundleInfo, network, creatorInfo }
+```
 
-### 3. DexScreener (Backup)
-- Polls trending/boosted tokens every 60s
-- Catches tokens that already have momentum
-- Used as backup source when real-time listeners miss tokens
+The App.tsx `analyzeToken()` function maps the Workers API response to the local `AnalysisResult` interface format.
 
 ---
 
-## Trading System
+## Token Analysis Flow
 
-### Auto-Trade Flow (New Pools)
 ```
-1. Raydium/Meteora detects new pool creation
-2. Launch Filter checks:
-   - Spam patterns in name/symbol
-   - Liquidity bounds ($400 - $100K)
-   - Creator reputation (blacklist, token count)
-3. AI analyzes for risk score (0-100)
-4. If score <= maxRiskScore AND auto-trade enabled:
-   - Execute buy via Jupiter
-   - Create position for tracking
-5. Price monitoring loop (every 10s):
-   - Check take profit condition
-   - Check stop loss condition
-   - Check trailing stop condition
-6. Execute sell when condition met
-7. If token rugs (>90% drop), auto-blacklist creator
+User pastes token address
+       │
+       ▼
+┌─────────────┐
+│   Argus     │ ──▶ POST to API (local or Workers)
+│  Dashboard  │
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐
+│ Workers API │ ──▶ DexScreener (price, volume, txns)
+│  /sentinel  │ ──▶ RugCheck (holders, security)
+│   /analyze  │ ──▶ Together AI (risk analysis)
+└──────┬──────┘ ──▶ Bundle detection (coordinated wallets)
+       │
+       ▼
+┌─────────────┐
+│   Display   │ ──▶ Security panel
+│  Analysis   │ ──▶ Market data panel
+│   Results   │ ──▶ Trading activity panel
+└──────┬──────┘ ──▶ Holder distribution chart
+       │        ──▶ Bundle detection warnings
+       │        ──▶ AI verdict + score
+       ▼
+┌─────────────┐
+│  Buy/Sell   │ ──▶ Jupiter swap execution
+│   Action    │ ──▶ Position tracking
+└─────────────┘
 ```
 
-### Auto-Trade Flow (Trending Tokens)
-```
-1. DexScreener detects trending/boosted token
-2. Pre-filter checks:
-   - Market cap bounds ($5K - $500K)
-   - Buy count (min 10)
-   - Sell ratio (not dumping)
-   - Price trend (not crashing)
-3. AI analyzes for risk score (0-100)
-4. If approved, execute trade
-```
+---
 
-### Trading Wallet
-- Dedicated wallet stored encrypted in localStorage
+## Trading Wallet
+
+- Dedicated wallet stored encrypted in browser localStorage
 - Signs transactions instantly (no popup confirmations)
 - User's main wallet stays safe
-- Can import/export private key
-
-### Safety Limits
-- `reserveBalanceSol` - Always keep minimum SOL
-- `maxTradesPerSession` - Limit trades (0 = unlimited)
-- `maxRiskScore` - Only trade low-risk tokens
-
-### Auto-Sell Settings
-- **Take Profit**: Sell when position up X%
-- **Stop Loss**: Sell when position down X%
-- **Trailing Stop**: Sell when drops X% from peak
+- Backup modal shown on creation (must confirm)
+- Export/Import private key support
+- Delete confirmation with styled modal
 
 ---
 
-## Launch Filter (New Pools)
+## Dashboard UI
 
-The Launch Filter handles brand new pools from Raydium/Meteora that have no trading history.
+Single-page dark theme layout:
 
-### Spam Filter
-Rejects tokens with names matching:
-- `test`, `aaa`, `xxx`, `zzz`
-- Pure numbers, 1-2 character names
-- `scam`, `rug`, `honeypot`
-- Offensive terms
+### Header
+- Logo (triangle + eye) + "ARGUS AI"
+- Wallet name + balance
+- Connected wallet dropdown
 
-### Suspicious Flags (warnings, not rejections)
-- `elon`, `musk`, `trump`
-- `moon`, `rocket`, `1000x`
-- `safe`, `official`
-
-### Creator Tracking
-- Tracks tokens created per wallet (24h window)
-- Rejects if creator launched >3 tokens in 24h
-- Auto-blacklists creators when their tokens rug
-
-### SOL Price
-- Fetches real-time SOL price from Jupiter/CoinGecko
-- Calculates accurate USD liquidity values
-
----
-
-## Risk Analysis System
-
-### Risk Levels
-| Level | Score | Meaning |
-|-------|-------|---------|
-| SAFE | 0-49 | Low risk, tradeable |
-| SUSPICIOUS | 50-69 | Caution |
-| DANGEROUS | 70-89 | High risk |
-| SCAM | 90-100 | Do not trade |
-
-### Pre-Filter Checks (Trending Tokens)
-- Token age (2-60 minutes)
-- Liquidity ($5K - $500K)
-- Market cap ($5K - $500K)
-- Buy activity (min 10 buys)
-- Sell ratio (20-90%)
-- Holder concentration
+### Main Content
+- Token address input + Analyze button
+- Recent searches dropdown (localStorage)
+- Analysis results (when analyzed):
+  - Security panel (mint/freeze authority, LP lock)
+  - Market panel (price, market cap, liquidity, volume, price changes)
+  - Trading panel (buy/sell counts, buy ratio)
+  - Holder distribution (top 10 bar chart with bundle highlighting)
+  - Bundle detection warnings
+  - AI verdict (signal badge, score, reasoning)
+  - Social links (website, twitter, telegram, DexScreener)
+- Buy controls (preset amounts + custom + buy button)
+- Active positions table with sell buttons
+- Trade history (expandable)
+- Settings (trading wallet, buy settings, auto-sell)
 
 ---
 
-## Data Flow
+## Routing
 
-```
-Raydium/Meteora (Helius WebSocket)
-       │
-       ▼ (instant)
-┌─────────────┐
-│   Sniper    │ ──▶ Launch Filter (spam, creator, liquidity)
-│   Backend   │ ──▶ AI Analysis (risk score)
-└──────┬──────┘
-       │ WebSocket
-       ▼
-┌─────────────┐
-│   Argus     │ ──▶ Display in Live Feed
-│  Dashboard  │ ──▶ Auto-trade if approved
-└──────┬──────┘
-       │
-       ▼
-┌─────────────┐
-│  Jupiter    │ ──▶ Execute swap
-│    API      │ ──▶ Return signature
-└─────────────┘
+`main.tsx` detects subdomain for conditional routing:
+
+```typescript
+const isAppSubdomain = window.location.hostname.startsWith('app.');
+// app.argusguard.io → App component (dashboard) directly
+// argusguard.io → Landing page at /, with links to app.argusguard.io
 ```
 
 ---
@@ -241,7 +246,7 @@ Raydium/Meteora (Helius WebSocket)
 
 ### Sniper (.env)
 ```env
-HELIUS_API_KEY=          # Required for WebSocket listeners and RPC
+HELIUS_API_KEY=          # Required for RPC
 TOGETHER_AI_API_KEY=     # Required for AI analysis
 ```
 
@@ -257,34 +262,14 @@ SUPABASE_ANON_KEY=       # Optional
 
 ## LocalStorage Keys
 
-Argus stores data in browser localStorage:
-
 | Key | Purpose |
 |-----|---------|
 | `argus_trading_wallet` | Encrypted trading wallet keypair |
 | `argus_trading_state` | Positions, P&L, trade history |
-
----
-
-## Dashboard UI
-
-The Argus dashboard uses a 3-column layout with a light theme:
-
-### Left Sidebar
-- Logo (triangle + eye)
-- Navigation: Dashboard, Positions, Settings
-- Connection status
-
-### Main Content
-- Stats grid (Balance, Positions, P&L, Scanned)
-- Token feed table (Token, Risk, Liquidity, Market Cap, Action)
-- Positions table
-- Settings panels
-
-### Right Panel
-- Auto-trade toggle
-- Trading wallet card (black)
-- Activity log
+| `argus_recent_searches` | Last 10 analyzed tokens |
+| `argus_watchlist` | Saved tokens to watch |
+| `argus_wallet_backup_confirmed` | Whether user confirmed wallet backup |
+| `argus_wallet_name` | Custom name for trading wallet |
 
 ---
 
@@ -292,7 +277,7 @@ The Argus dashboard uses a 3-column layout with a light theme:
 
 - TypeScript strict mode
 - React functional components with hooks
-- Tailwind CSS for styling (light theme)
+- Tailwind CSS for styling (dark theme, zinc color palette)
 - pnpm workspaces monorepo
 - No emojis in code unless user requests
 
@@ -300,26 +285,19 @@ The Argus dashboard uses a 3-column layout with a light theme:
 
 ## Common Issues
 
-### "Auto-trade disabled, skipping"
-- Auto-trade toggle is OFF
-- Enable in Dashboard or Settings
+### Token analysis fails
+- Check browser console for API errors
+- Verify Workers API is deployed and reachable
+- Check if token address is valid Solana address
 
-### No pools detected
-- Raydium/Meteora listeners are connected but waiting
-- Pool creations are sporadic (can be quiet for 10-15 minutes)
-- Check logs for "WebSocket connected" and "Subscribed"
-
-### Duplicate trades
-- Fixed with triple protection:
-  1. `isBuyingRef` - blocks during buy
-  2. `tradedTokensRef` - tracks all attempts
-  3. Position check - verifies no existing position
-
-### Sell not working
-- Check browser console for errors
-- May need higher slippage for volatile tokens
-- Use "Clear All" if tokens were sold externally
+### "User rejected the request"
+- Normal - user declined wallet connection in browser extension
+- Not a bug
 
 ### Position stuck
-- Token may have been sold via Phantom
+- Token may have been sold via Phantom externally
 - Use "Clear All" to remove stale positions
+
+### Landing page links going to /dashboard
+- Links should point to https://app.argusguard.io
+- If not, update Landing.tsx href values

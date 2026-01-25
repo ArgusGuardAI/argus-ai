@@ -580,16 +580,18 @@ export function useAutoTrade(
 
   /**
    * Generate a new trading wallet
+   * Returns both address and private key for backup prompt
    */
-  const generateWallet = useCallback(() => {
+  const generateWallet = useCallback((): { address: string; privateKey: string } => {
     const address = tradingWallet.generate();
+    const privateKey = tradingWallet.exportPrivateKey() || '';
     setWallet({
       isLoaded: true,
       address,
       balance: 0,
     });
     log(`New trading wallet created: ${address.slice(0, 8)}...`, 'success');
-    return address;
+    return { address, privateKey };
   }, [log]);
 
   /**

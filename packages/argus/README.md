@@ -1,15 +1,26 @@
-# Argus AI Trading Dashboard
+# Argus AI - Token Research Dashboard
 
-Automated AI-powered trading dashboard for Solana tokens.
+Manual token research tool for Solana with AI-powered analysis and one-click trading.
+
+## Live
+
+- **Dashboard**: https://app.argusguard.io
+- **Landing Page**: https://argusguard.io
 
 ## Features
 
-- Real-time token scanning from Pump.fun
-- AI-powered risk analysis (0-100 score)
-- Fully automated trading with dedicated wallet
-- Auto-sell: Take profit, stop loss, trailing stop
-- Position tracking with live P&L
-- SaaS-style dashboard UI
+- **Token Analysis**: Paste any token address for comprehensive research
+- **Security Checks**: Mint/freeze authority status, LP lock percentage
+- **Market Data**: Price, market cap, liquidity, volume, price changes with sparkline
+- **Holder Distribution**: Top 10 holders with visual bar chart
+- **Bundle Detection**: Identifies coordinated wallet clusters (highlighted in red)
+- **Trading Activity**: Buy/sell counts and ratio
+- **AI Verdict**: Risk score (0-100) with STRONG_BUY/BUY/WATCH/HOLD/AVOID signal
+- **One-Click Buy**: Jupiter swap with configurable amounts
+- **Position Tracking**: Active positions with P&L, auto-sell support
+- **Trading Wallet**: Dedicated encrypted wallet with backup safety
+- **Watchlist**: Save tokens for later
+- **Recent Searches**: Last 10 analyzed tokens
 
 ## Quick Start
 
@@ -23,46 +34,31 @@ pnpm dev
 
 Dashboard runs at `http://localhost:3000`
 
-**Note:** Requires the sniper backend running at `localhost:8788`
+For local development with the sniper backend:
+```bash
+# Terminal 1: Start backend
+cd ../sniper && pnpm dev    # localhost:8788
 
-## Pages
+# Terminal 2: Start dashboard
+pnpm dev                     # localhost:3000
+```
 
-### Dashboard
-- Start/Stop scanner
-- Toggle Auto-Trade ON/OFF
-- View balance, positions, P&L
-- Live token feed with risk scores
-- Activity log
+In production, the dashboard uses the Cloudflare Workers API at `argusguard-api.hermosillo-jessie.workers.dev`.
 
-### Positions
-- Active positions with live P&L
-- Manual sell button per position
-- Sell All / Clear All buttons
-- Sold positions history
+## Deployment
 
-### Settings
-- Trading wallet management (create/import/export)
-- Buy settings (amount, slippage, risk score)
-- Auto-sell settings (take profit, stop loss, trailing stop)
+```bash
+pnpm build
+npx wrangler pages deploy dist --project-name argusguard-app
+```
 
 ## Trading Wallet
 
-Argus uses a dedicated trading wallet for automated trades:
-
 - Stored encrypted in browser localStorage
-- Signs transactions instantly (no popups)
-- Your main wallet stays completely safe
-- Export private key anytime for backup
-
-## Auto-Trade Settings
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| Buy Amount | 0.05 SOL | Amount per trade |
-| Max Slippage | 5% | Maximum slippage tolerance |
-| Max Risk Score | 40 | Only trade tokens scoring <= this |
-| Reserve Balance | 0.1 SOL | Always keep this amount |
-| Max Trades | Unlimited | Set to 0 for unlimited |
+- Signs transactions instantly (no popup confirmations)
+- Backup modal shown on wallet creation (must confirm)
+- Export/Import private key support
+- Styled delete confirmation modal
 
 ## Auto-Sell Settings
 
@@ -76,6 +72,8 @@ Argus uses a dedicated trading wallet for automated trades:
 
 - React 18
 - Vite
-- Tailwind CSS
+- Tailwind CSS (dark theme)
+- TypeScript
 - Jupiter API (swaps)
 - Solana Web3.js
+- Cloudflare Pages (hosting)

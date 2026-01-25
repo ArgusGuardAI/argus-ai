@@ -217,7 +217,10 @@ interface AnalysisResult {
   };
 }
 
-const API_URL = 'http://localhost:8788';
+// Use production API or localhost for development
+const API_URL = window.location.hostname === 'localhost'
+  ? 'http://localhost:8788'
+  : 'https://argusguard-api.hermosillo-jessie.workers.dev';
 const RECENT_SEARCHES_KEY = 'argus_recent_searches';
 const WATCHLIST_KEY = 'argus_watchlist';
 
@@ -250,6 +253,17 @@ export default function App() {
   const [walletName, setWalletName] = useState('Trading Wallet');
   const [isEditingName, setIsEditingName] = useState(false);
   const [editNameValue, setEditNameValue] = useState('');
+
+  // Backup modal state
+  const [showBackupModal, setShowBackupModal] = useState(false);
+  const [newWalletKey, setNewWalletKey] = useState('');
+  const [backupConfirmed, setBackupConfirmed] = useState(false);
+  const [showKey, setShowKey] = useState(false);
+  const [keyCopied, setKeyCopied] = useState(false);
+
+  // Export key and delete modal state
+  const [exportKeyCopied, setExportKeyCopied] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   const log = useCallback((msg: string, type = 'info') => {
     setLogs(prev => [...prev.slice(-49), { time: new Date(), msg, type }]);
@@ -324,10 +338,17 @@ export default function App() {
     setAnalysisResult(null);
 
     try {
-      const response = await fetch(`${API_URL}/api/analyze-full`, {
+      // Use different endpoint and payload format for local vs production
+      const isLocal = window.location.hostname === 'localhost';
+      const endpoint = isLocal ? '/api/analyze-full' : '/sentinel/analyze';
+      const payload = isLocal
+        ? { address: address.trim() }
+        : { tokenAddress: address.trim() };
+
+      const response = await fetch(`${API_URL}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ address: address.trim() }),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
@@ -335,7 +356,92 @@ export default function App() {
         throw new Error(error.error || 'Analysis failed');
       }
 
-      const result: AnalysisResult = await response.json();
+      const data = await response.json();
+
+      // Map Workers API response to our AnalysisResult format
+      let result: AnalysisResult;
+
+      if (isLocal) {
+        result = data;
+      } else {
+        // Calculate holder percentages
+        const holders = data.holderDistribution || [];
+        const top10 = holders.slice(0, 10);
+        const top5Percent = holders.slice(0, 5).reduce((sum: number, h: { percent: number }) => sum + h.percent, 0);
+        const top10Percent = top10.reduce((sum: number, h: { percent: number }) => sum + h.percent, 0);
+
+        // Invert risk score (API: higher = worse, we want: higher = better)
+        const score = Math.max(0, 100 - (data.analysis?.riskScore || 50));
+        const signal: SignalType = score >= 75 ? 'STRONG_BUY' :
+                                   score >= 60 ? 'BUY' :
+                                   score >= 45 ? 'WATCH' :
+                                   score >= 30 ? 'HOLD' : 'AVOID';
+
+        // Calculate buyRatio safely
+        const buys24h = data.tokenInfo?.txns24h?.buys || 0;
+        const sells24h = data.tokenInfo?.txns24h?.sells || 0;
+        const buyRatio = sells24h > 0 ? buys24h / sells24h : (buys24h > 0 ? 2 : 1);
+
+        result = {
+          token: {
+            address: data.tokenInfo?.address || address.trim(),
+            name: data.tokenInfo?.name || 'Unknown',
+            symbol: data.tokenInfo?.symbol || '???',
+          },
+          security: {
+            mintAuthorityRevoked: true, // Default - API doesn't provide this
+            freezeAuthorityRevoked: true,
+            lpLockedPercent: 0,
+          },
+          market: {
+            price: data.tokenInfo?.price || 0,
+            marketCap: data.tokenInfo?.marketCap || 0,
+            liquidity: data.tokenInfo?.liquidity || 0,
+            volume24h: data.tokenInfo?.volume24h || 0,
+            priceChange5m: 0,
+            priceChange1h: 0,
+            priceChange24h: data.tokenInfo?.priceChange24h || 0,
+          },
+          trading: {
+            buys5m: 0,
+            sells5m: 0,
+            buys1h: 0,
+            sells1h: 0,
+            buys24h,
+            sells24h,
+            buyRatio,
+          },
+          holders: {
+            total: data.tokenInfo?.holderCount || 0,
+            top10: top10.map((h: { address: string; percent: number; type: string }) => ({
+              address: h.address || '',
+              percent: typeof h.percent === 'number' ? h.percent : 0,
+              isBundle: h.type === 'insider' || h.type === 'whale',
+            })),
+            topHolderPercent: typeof holders[0]?.percent === 'number' ? holders[0].percent : 0,
+            top5Percent: typeof top5Percent === 'number' ? top5Percent : 0,
+            top10Percent: typeof top10Percent === 'number' ? top10Percent : 0,
+          },
+          bundles: {
+            detected: data.bundleInfo?.detected || false,
+            count: data.bundleInfo?.count || 0,
+            totalPercent: typeof data.bundleInfo?.txBundlePercent === 'number' ? data.bundleInfo.txBundlePercent : 0,
+            wallets: [],
+          },
+          ai: {
+            signal,
+            score,
+            verdict: data.analysis?.summary || 'Analysis unavailable',
+          },
+          links: {
+            website: data.tokenInfo?.website,
+            twitter: data.tokenInfo?.twitter,
+            telegram: data.tokenInfo?.telegram,
+            dexscreener: `https://dexscreener.com/solana/${address.trim()}`,
+          },
+        };
+      }
+
       setAnalysisResult(result);
       addRecentSearch(result.token.address, result.token.symbol);
       log(`Analyzed ${result.token.symbol}: ${result.ai.signal} (${result.ai.score})`, 'success');
@@ -544,13 +650,25 @@ export default function App() {
                             Refresh
                           </button>
                           <button
-                            onClick={() => { const k = autoTrade.exportPrivateKey(); if (k) { navigator.clipboard.writeText(k); log('Key copied!', 'success'); }}}
-                            className="flex-1 px-3 py-2 text-xs font-medium bg-zinc-800 text-zinc-400 rounded-lg hover:bg-zinc-700"
+                            onClick={() => {
+                              const k = autoTrade.exportPrivateKey();
+                              if (k) {
+                                navigator.clipboard.writeText(k);
+                                setExportKeyCopied(true);
+                                setTimeout(() => setExportKeyCopied(false), 2000);
+                                log('Key copied!', 'success');
+                              }
+                            }}
+                            className={`flex-1 px-3 py-2 text-xs font-medium rounded-lg transition-all ${
+                              exportKeyCopied
+                                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                            }`}
                           >
-                            Export Key
+                            {exportKeyCopied ? 'Copied!' : 'Export Key'}
                           </button>
                           <button
-                            onClick={() => { if (confirm('Delete wallet? Make sure you exported your key!')) { autoTrade.deleteWallet(); setShowWalletMenu(false); }}}
+                            onClick={() => setShowDeleteModal(true)}
                             className="flex-1 px-3 py-2 text-xs font-medium bg-red-900/50 text-red-400 rounded-lg hover:bg-red-900/70"
                           >
                             Delete
@@ -565,7 +683,14 @@ export default function App() {
                   {!showImport ? (
                     <>
                       <button
-                        onClick={() => autoTrade.generateWallet()}
+                        onClick={() => {
+                          const { privateKey } = autoTrade.generateWallet();
+                          setNewWalletKey(privateKey);
+                          setShowBackupModal(true);
+                          setShowKey(false);
+                          setKeyCopied(false);
+                          setBackupConfirmed(false);
+                        }}
                         className="px-4 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-emerald-500 to-emerald-600 text-white shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30 transition-all"
                       >
                         Create Wallet
@@ -606,6 +731,37 @@ export default function App() {
           </div>
         </div>
       </header>
+
+      {/* Backup Reminder Banner */}
+      {autoTrade.wallet.isLoaded && !localStorage.getItem('argus_backup_confirmed') && (
+        <div className="bg-amber-500/10 border-b border-amber-500/30">
+          <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <svg className="w-5 h-5 text-amber-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <p className="text-sm text-amber-200">
+                <span className="font-semibold">Backup your wallet!</span> Export your private key and store it securely. Without it, you cannot recover your funds.
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                const key = autoTrade.exportPrivateKey();
+                if (key) {
+                  setNewWalletKey(key);
+                  setShowBackupModal(true);
+                  setShowKey(false);
+                  setKeyCopied(false);
+                  setBackupConfirmed(false);
+                }
+              }}
+              className="px-4 py-1.5 text-sm font-medium bg-amber-500 text-black rounded-lg hover:bg-amber-400 transition-colors flex-shrink-0"
+            >
+              Backup Now
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Settings Panel */}
       {showSettings && (
@@ -1439,6 +1595,166 @@ export default function App() {
           className="fixed inset-0 z-40"
           onClick={() => setShowWalletMenu(false)}
         />
+      )}
+
+      {/* Backup Modal - CRITICAL: Show private key after wallet creation */}
+      {showBackupModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl max-w-md w-full p-6 shadow-2xl">
+            {/* Header */}
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 bg-amber-500/20 rounded-xl flex items-center justify-center">
+                <svg className="w-6 h-6 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white">Backup Your Wallet</h3>
+                <p className="text-sm text-zinc-400">Save this key before continuing</p>
+              </div>
+            </div>
+
+            {/* Warning */}
+            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 mb-4">
+              <p className="text-sm text-red-400 font-medium">
+                If you lose this key, you will lose access to any funds in this wallet. There is NO recovery option.
+              </p>
+            </div>
+
+            {/* Private Key Display */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-zinc-400 mb-2">Private Key</label>
+              <div className="relative">
+                <input
+                  type={showKey ? 'text' : 'password'}
+                  value={newWalletKey}
+                  readOnly
+                  className="w-full px-4 py-3 pr-20 rounded-lg border border-zinc-700 bg-zinc-800 text-white font-mono text-sm"
+                />
+                <button
+                  onClick={() => setShowKey(!showKey)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 px-2 py-1 text-xs text-zinc-400 hover:text-white"
+                >
+                  {showKey ? 'Hide' : 'Show'}
+                </button>
+              </div>
+            </div>
+
+            {/* Copy Button */}
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(newWalletKey);
+                setKeyCopied(true);
+              }}
+              className={`w-full py-3 rounded-lg font-medium mb-4 transition-all ${
+                keyCopied
+                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                  : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700 border border-zinc-700'
+              }`}
+            >
+              {keyCopied ? (
+                <span className="flex items-center justify-center gap-2">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Copied to Clipboard
+                </span>
+              ) : (
+                'Copy Private Key'
+              )}
+            </button>
+
+            {/* Confirmation Checkbox */}
+            <label className="flex items-start gap-3 mb-4 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={backupConfirmed}
+                onChange={e => setBackupConfirmed(e.target.checked)}
+                className="mt-1 w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-zinc-900"
+              />
+              <span className="text-sm text-zinc-300">
+                I have saved my private key in a secure location and understand that I cannot recover my wallet without it.
+              </span>
+            </label>
+
+            {/* Continue Button */}
+            <button
+              onClick={() => {
+                if (backupConfirmed) {
+                  localStorage.setItem('argus_backup_confirmed', 'true');
+                  setShowBackupModal(false);
+                  setNewWalletKey('');
+                  log('Wallet backup confirmed', 'success');
+                }
+              }}
+              disabled={!backupConfirmed}
+              className={`w-full py-3 rounded-lg font-semibold transition-all ${
+                backupConfirmed
+                  ? 'bg-gradient-to-r from-emerald-500 to-emerald-600 text-white shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30'
+                  : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+              }`}
+            >
+              Continue to Dashboard
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Wallet Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl max-w-md w-full p-6 shadow-2xl">
+            {/* Header */}
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 bg-red-500/20 rounded-xl flex items-center justify-center">
+                <svg className="w-6 h-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white">Delete Wallet</h3>
+                <p className="text-sm text-zinc-400">This action cannot be undone</p>
+              </div>
+            </div>
+
+            {/* Warning */}
+            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 mb-4">
+              <p className="text-sm text-red-400 font-medium">
+                Make sure you have exported and saved your private key! Without it, you will permanently lose access to any funds in this wallet.
+              </p>
+            </div>
+
+            {/* Wallet Info */}
+            <div className="bg-zinc-800 rounded-lg p-3 mb-4">
+              <div className="text-xs text-zinc-500 mb-1">Wallet Address</div>
+              <div className="text-sm font-mono text-zinc-300 truncate">{autoTrade.wallet.address}</div>
+              <div className="text-xs text-zinc-500 mt-2">Balance</div>
+              <div className="text-sm font-semibold text-white">{autoTrade.wallet.balance.toFixed(4)} SOL</div>
+            </div>
+
+            {/* Buttons */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                className="flex-1 py-3 rounded-lg font-medium bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  autoTrade.deleteWallet();
+                  setShowDeleteModal(false);
+                  setShowWalletMenu(false);
+                  localStorage.removeItem('argus_backup_confirmed');
+                  log('Wallet deleted', 'info');
+                }}
+                className="flex-1 py-3 rounded-lg font-semibold bg-red-500 text-white hover:bg-red-600 transition-colors"
+              >
+                Delete Wallet
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

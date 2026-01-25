@@ -3,7 +3,7 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", ".plasmo/**", "build/**"]
+      "outputs": ["dist/**"]
     },
     "dev": {
       "cache": false,

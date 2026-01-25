@@ -4,6 +4,8 @@
 
 Argus AI is a comprehensive token research tool that provides instant AI analysis, security checks, bundle detection, and one-click trading for Solana tokens.
 
+**Live**: [app.argusguard.io](https://app.argusguard.io) | **Landing**: [argusguard.io](https://argusguard.io)
+
 ---
 
 ## Features
@@ -44,7 +46,7 @@ Argus AI is a comprehensive token research tool that provides instant AI analysi
 ### Installation
 
 ```bash
-git clone https://github.com/your-org/argus-ai.git
+git clone https://github.com/ArgusGuardAI/argus-ai.git
 cd argus-ai
 pnpm install
 ```
@@ -139,13 +141,18 @@ Argus detects coordinated wallet clusters that may indicate:
 packages/
 ├── argus/              # Token Research Dashboard (React + Vite)
 │   ├── src/App.tsx         # Main single-page application
+│   ├── src/main.tsx        # Subdomain-aware routing
+│   ├── src/pages/          # Landing page
 │   ├── src/hooks/          # useAutoTrade hook (trading, positions)
 │   └── src/lib/            # Jupiter swap, trading wallet
-├── sniper/             # Analysis Backend
+├── sniper/             # Analysis Backend (local dev)
 │   ├── src/server.ts       # REST API + WebSocket server
 │   ├── src/engine/         # Analyzer, launch-filter, sniper
 │   └── src/listeners/      # Raydium, Meteora, DexScreener, Pumpfun
-└── workers/            # Cloudflare Workers (optional)
+├── workers/            # Cloudflare Workers API (production)
+│   ├── src/routes/         # sentinel, analyze, jupiter endpoints
+│   └── src/services/       # Helius, DexScreener, Together AI
+└── shared/             # Shared types & constants
 ```
 
 ---
@@ -254,9 +261,28 @@ MIT License - see [LICENSE](./LICENSE) for details.
 
 ---
 
+## Deployment
+
+```bash
+# Build and deploy dashboard (app.argusguard.io)
+cd packages/argus
+pnpm build
+npx wrangler pages deploy dist --project-name argusguard-app
+
+# Deploy landing page (argusguard.io) - same build
+npx wrangler pages deploy dist --project-name argusguard-website
+
+# Deploy Workers API
+cd packages/workers
+npx wrangler deploy
+```
+
+---
+
 ## Links
 
 - [Whitepaper](./WHITEPAPER.md)
 - [Development Guide](./CLAUDE.md)
+- [File Structure](./LAYOUT.md)
 
 **Built with Argus AI**

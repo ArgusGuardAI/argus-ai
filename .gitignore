@@ -4,13 +4,12 @@ node_modules/
 
 # Build outputs
 dist/
-.next/
-out/
 
 # Environment
 .env
 .env.local
 .env.*.local
+.dev.vars
 
 # IDE
 .idea/
@@ -36,11 +35,5 @@ coverage/
 # Misc
 *.tsbuildinfo
 
-# Plasmo
-.plasmo/
-build/
-*.zip
-
 # Cloudflare
 .wrangler/
-.dev.vars
