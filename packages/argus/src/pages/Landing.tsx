@@ -623,6 +623,7 @@ const styles = `
   .landing-page .benefit-icon {
     font-size: 1.5rem;
     margin-bottom: 12px;
+    color: var(--accent);
   }
 
   .landing-page .benefit-title {
@@ -1027,6 +1028,136 @@ const styles = `
     box-shadow: 0 8px 24px rgba(16, 185, 129, 0.3);
   }
 
+  /* --- COMPARISON SECTION --- */
+  .landing-page .comparison {
+    padding: 100px 0;
+    border-top: 1px solid var(--border-light);
+  }
+
+  .landing-page .category-badge {
+    display: inline-block;
+    padding: 6px 14px;
+    background: var(--accent-glow);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+
+  .landing-page .comparison-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin: 0 -24px;
+    padding: 0 24px;
+  }
+
+  .landing-page .comparison-table {
+    width: 100%;
+    min-width: 700px;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+  }
+
+  .landing-page .comparison-table th {
+    padding: 14px 16px;
+    text-align: center;
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+
+  .landing-page .comparison-table th:first-child {
+    text-align: left;
+    color: var(--text-main);
+    font-size: 0.9rem;
+  }
+
+  .landing-page .comparison-table th.highlight {
+    color: var(--accent);
+    position: relative;
+  }
+
+  .landing-page .comparison-table td {
+    padding: 14px 16px;
+    text-align: center;
+    border-bottom: 1px solid var(--border-light);
+    color: var(--text-muted);
+  }
+
+  .landing-page .comparison-table td:first-child {
+    text-align: left;
+    color: var(--text-main);
+    font-weight: 500;
+  }
+
+  .landing-page .comparison-table td.highlight {
+    background: rgba(16, 185, 129, 0.04);
+  }
+
+  .landing-page .comparison-table tr:last-child td {
+    border-bottom: none;
+  }
+
+  .landing-page .comparison-table .check {
+    color: var(--accent);
+    font-size: 1.1rem;
+  }
+
+  .landing-page .comparison-table .dash {
+    color: #3F3F46;
+  }
+
+  .landing-page .comparison-table .exclusive {
+    color: var(--accent);
+    font-weight: 600;
+    font-size: 0.8rem;
+    letter-spacing: 0.02em;
+  }
+
+  .landing-page .comparison-callout {
+    display: flex;
+    align-items: flex-start;
+    gap: 20px;
+    margin-top: 48px;
+    padding: 28px 32px;
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.06) 0%, rgba(16, 185, 129, 0.02) 100%);
+    border: 1px solid rgba(16, 185, 129, 0.15);
+    border-radius: var(--radius-lg);
+  }
+
+  .landing-page .callout-icon {
+    flex-shrink: 0;
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--accent-glow);
+    border-radius: var(--radius-md);
+    color: var(--accent);
+    font-size: 1.2rem;
+  }
+
+  .landing-page .callout-content h4 {
+    font-size: 1.05rem;
+    font-weight: 600;
+    margin: 0 0 6px;
+    color: var(--text-main);
+  }
+
+  .landing-page .callout-content p {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    margin: 0;
+    line-height: 1.6;
+  }
+
   /* --- RESPONSIVE --- */
   @media (max-width: 900px) {
     .landing-page .hero h1 { font-size: 2.5rem; }
@@ -1040,6 +1171,10 @@ const styles = `
     .landing-page .roadmap-grid { grid-template-columns: 1fr; }
     .landing-page .team-grid { grid-template-columns: repeat(2, 1fr); }
     .landing-page .teaser-benefits { grid-template-columns: 1fr; }
+    .landing-page .comparison-callout { flex-direction: column; gap: 12px; padding: 20px; }
+    .landing-page .comparison-table { font-size: 0.8rem; }
+    .landing-page .comparison-table th,
+    .landing-page .comparison-table td { padding: 10px 10px; }
   }
 `;
 
@@ -1069,6 +1204,7 @@ export default function Landing() {
               <div className="nav-links">
                 <a href="#features">Features</a>
                 <a href="#how-it-works">How It Works</a>
+                <a href="#compare">Compare</a>
                 <a href="#token">Token</a>
                 <a href="#roadmap">Roadmap</a>
               </div>
@@ -1337,6 +1473,94 @@ export default function Landing() {
           </div>
         </section>
 
+        {/* WHY ARGUS - COMPETITIVE COMPARISON */}
+        <section id="compare" className="comparison">
+          <div className="container">
+            <div className="section-header">
+              <div className="category-badge">Research-to-Trade Platform</div>
+              <h2>One Tool, Not Five</h2>
+              <p>Other traders juggle RugCheck, DexScreener, Bubble Maps, a DEX, and a price tracker. Argus replaces them all in a single interface.</p>
+            </div>
+
+            <div className="comparison-table-wrap">
+              <table className="comparison-table">
+                <thead>
+                  <tr>
+                    <th>Capability</th>
+                    <th>RugCheck</th>
+                    <th>DexScreener</th>
+                    <th>Bubble Maps</th>
+                    <th>Sniper Bots</th>
+                    <th className="highlight">Argus</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><i className="fa-solid fa-shield-halved" style={{ marginRight: 8, color: 'var(--text-muted)' }}></i>Security Analysis</td>
+                    <td><span className="check"><i className="fa-solid fa-check"></i></span></td>
+                    <td><span className="dash">&mdash;</span></td>
+                    <td><span className="dash">&mdash;</span></td>
+                    <td><span className="dash">&mdash;</span></td>
+                    <td className="highlight"><span className="check"><i className="fa-solid fa-check"></i></span></td>
+                  </tr>
+                  <tr>
+                    <td><i className="fa-solid fa-chart-line" style={{ marginRight: 8, color: 'var(--text-muted)' }}></i>Market Data</td>
+                    <td><span className="dash">&mdash;</span></td>
+                    <td><span className="check"><i className="fa-solid fa-check"></i></span></td>
+                    <td><span className="dash">&mdash;</span></td>
+                    <td><span className="dash">&mdash;</span></td>
+                    <td className="highlight"><span className="check"><i className="fa-solid fa-check"></i></span></td>
+                  </tr>
+                  <tr>
+                    <td><i className="fa-solid fa-users-between-lines" style={{ marginRight: 8, color: 'var(--text-muted)' }}></i>Bundle Detection</td>
+                    <td><span className="dash">&mdash;</span></td>
+                    <td><span className="dash">&mdash;</span></td>
+                    <td><span className="dash">&mdash;</span></td>
+                    <td><span className="dash">&mdash;</span></td>
+                    <td className="highlight"><span className="exclusive">ONLY ARGUS</span></td>
+                  </tr>
+                  <tr>
+                    <td><i className="fa-solid fa-bolt" style={{ marginRight: 8, color: 'var(--text-muted)' }}></i>One-Click Trading</td>
+                    <td><span className="dash">&mdash;</span></td>
+                    <td><span className="dash">&mdash;</span></td>
+                    <td><span className="dash">&mdash;</span></td>
+                    <td><span className="check"><i className="fa-solid fa-check"></i></span></td>
+                    <td className="highlight"><span className="check"><i className="fa-solid fa-check"></i></span></td>
+                  </tr>
+                  <tr>
+                    <td><i className="fa-solid fa-lock" style={{ marginRight: 8, color: 'var(--text-muted)' }}></i>Auto-Sell Protection</td>
+                    <td><span className="dash">&mdash;</span></td>
+                    <td><span className="dash">&mdash;</span></td>
+                    <td><span className="dash">&mdash;</span></td>
+                    <td><span className="dash">&mdash;</span></td>
+                    <td className="highlight"><span className="exclusive">ONLY ARGUS</span></td>
+                  </tr>
+                  <tr>
+                    <td><i className="fa-solid fa-brain" style={{ marginRight: 8, color: 'var(--text-muted)' }}></i>AI Risk Scoring</td>
+                    <td><span className="dash">&mdash;</span></td>
+                    <td><span className="dash">&mdash;</span></td>
+                    <td><span className="dash">&mdash;</span></td>
+                    <td><span className="dash">&mdash;</span></td>
+                    <td className="highlight"><span className="exclusive">ONLY ARGUS</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div className="comparison-callout">
+              <div className="callout-icon">
+                <i className="fa-solid fa-lightbulb"></i>
+              </div>
+              <div className="callout-content">
+                <h4>You're not comparing apples to apples</h4>
+                <p>
+                  RugCheck does security. DexScreener does charts. Sniper bots do trading. Nobody combines research <em>and</em> execution in one place. Argus is the first <strong>Research-to-Trade</strong> platform&mdash;analyze a token and act on it instantly, with auto-sell protecting your position. No more tab-hopping between five different tools.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
         {/* TOKEN TEASER */}
         <section id="token" className="token-teaser">
           <div className="container">
@@ -1357,17 +1581,17 @@ export default function Landing() {
 
               <div className="teaser-benefits">
                 <div className="benefit-item">
-                  <div className="benefit-icon">💎</div>
+                  <div className="benefit-icon"><i className="fa-solid fa-gem"></i></div>
                   <div className="benefit-title">Premium Features</div>
                   <div className="benefit-desc">Advanced analytics, unlimited scans, priority support</div>
                 </div>
                 <div className="benefit-item">
-                  <div className="benefit-icon">💰</div>
+                  <div className="benefit-icon"><i className="fa-solid fa-coins"></i></div>
                   <div className="benefit-title">Revenue Share</div>
                   <div className="benefit-desc">Earn from platform trading fees as a holder</div>
                 </div>
                 <div className="benefit-item">
-                  <div className="benefit-icon">🗳️</div>
+                  <div className="benefit-icon"><i className="fa-solid fa-check-to-slot"></i></div>
                   <div className="benefit-title">Governance Rights</div>
                   <div className="benefit-desc">Vote on protocol upgrades and feature priorities</div>
                 </div>
