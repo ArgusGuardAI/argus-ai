@@ -634,6 +634,20 @@ export function useAutoTrade(
   }, []);
 
   /**
+   * Get wallet name
+   */
+  const getWalletName = useCallback((): string => {
+    return tradingWallet.getName();
+  }, []);
+
+  /**
+   * Set wallet name
+   */
+  const setWalletName = useCallback((name: string): void => {
+    tradingWallet.setName(name);
+  }, []);
+
+  /**
    * Withdraw to main wallet
    */
   const withdraw = useCallback(async (destinationAddress: string, amount?: number) => {
@@ -1265,6 +1279,8 @@ export function useAutoTrade(
     exportPrivateKey,
     withdraw,
     refreshBalance,
+    getWalletName,
+    setWalletName,
 
     // Trading actions
     handleApprovedToken,

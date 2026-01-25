@@ -24,6 +24,7 @@ import {
 import bs58 from 'bs58';
 
 const STORAGE_KEY = 'argus_trading_wallet';
+const STORAGE_KEY_NAME = 'argus_trading_wallet_name';
 const HELIUS_API_KEY = '54846763-d323-4cb5-8d67-23ed50c19d10';
 const RPC_URL = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
 
@@ -31,6 +32,7 @@ export interface TradingWalletState {
   publicKey: string;
   balance: number;
   isLoaded: boolean;
+  name: string;
 }
 
 /**
@@ -87,9 +89,10 @@ export class TradingWallet {
   /**
    * Generate a new trading wallet
    */
-  generate(): string {
+  generate(name?: string): string {
     this.keypair = Keypair.generate();
     this.save();
+    this.setName(name || 'Trading Wallet');
     console.log('[TradingWallet] Generated new wallet:', this.keypair.publicKey.toString());
     return this.keypair.publicKey.toString();
   }
@@ -97,11 +100,12 @@ export class TradingWallet {
   /**
    * Import wallet from private key (base58 encoded)
    */
-  import(privateKeyBase58: string): string {
+  import(privateKeyBase58: string, name?: string): string {
     try {
       const secretKey = bs58.decode(privateKeyBase58);
       this.keypair = Keypair.fromSecretKey(secretKey);
       this.save();
+      this.setName(name || 'Imported Wallet');
       console.log('[TradingWallet] Imported wallet:', this.keypair.publicKey.toString());
       return this.keypair.publicKey.toString();
     } catch (error) {
@@ -124,8 +128,24 @@ export class TradingWallet {
    */
   delete(): void {
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(STORAGE_KEY_NAME);
     this.keypair = null;
     console.log('[TradingWallet] Deleted');
+  }
+
+  /**
+   * Get wallet name
+   */
+  getName(): string {
+    return localStorage.getItem(STORAGE_KEY_NAME) || 'Trading Wallet';
+  }
+
+  /**
+   * Set wallet name
+   */
+  setName(name: string): void {
+    localStorage.setItem(STORAGE_KEY_NAME, name);
+    console.log('[TradingWallet] Name set to:', name);
   }
 
   /**

@@ -154,6 +154,9 @@ export default function App() {
   const [showImport, setShowImport] = useState(false);
   const [importKey, setImportKey] = useState('');
   const [withdrawAddr, setWithdrawAddr] = useState('');
+  const [walletName, setWalletName] = useState('Trading Wallet');
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editNameValue, setEditNameValue] = useState('');
 
   const log = useCallback((msg: string, type = 'info') => {
     setLogs(prev => [...prev.slice(-49), { time: new Date(), msg, type }]);
@@ -168,6 +171,13 @@ export default function App() {
       if (saved) setRecentSearches(JSON.parse(saved));
     } catch {}
   }, []);
+
+  // Load wallet name when wallet is loaded
+  useEffect(() => {
+    if (autoTrade.wallet.isLoaded) {
+      setWalletName(autoTrade.getWalletName());
+    }
+  }, [autoTrade.wallet.isLoaded, autoTrade.getWalletName]);
 
   // Save recent searches to localStorage
   const addRecentSearch = (address: string, symbol: string) => {
@@ -298,7 +308,7 @@ export default function App() {
                     className="flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30 transition-all"
                   >
                     <div className="text-right">
-                      <div className="text-[10px] text-emerald-200 font-mono">{autoTrade.wallet.address?.slice(0, 6)}...{autoTrade.wallet.address?.slice(-4)}</div>
+                      <div className="text-[10px] text-emerald-200 truncate max-w-[100px]">{walletName}</div>
                       <div className="text-sm font-bold">{autoTrade.wallet.balance.toFixed(3)} SOL</div>
                     </div>
                     <svg className="w-4 h-4 text-emerald-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -310,6 +320,66 @@ export default function App() {
                   {showWalletMenu && (
                     <div className="absolute right-0 mt-2 w-72 bg-zinc-900 rounded-xl shadow-2xl border border-zinc-700 overflow-hidden z-50">
                       <div className="p-4 bg-zinc-800 border-b border-zinc-700">
+                        {/* Wallet Name */}
+                        <div className="mb-3">
+                          <div className="text-xs text-zinc-500 mb-1">Wallet Name</div>
+                          {isEditingName ? (
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                value={editNameValue}
+                                onChange={e => setEditNameValue(e.target.value)}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') {
+                                    autoTrade.setWalletName(editNameValue);
+                                    setWalletName(editNameValue);
+                                    setIsEditingName(false);
+                                  } else if (e.key === 'Escape') {
+                                    setIsEditingName(false);
+                                  }
+                                }}
+                                className="flex-1 px-2 py-1 text-sm rounded border border-zinc-600 bg-zinc-700 text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                                autoFocus
+                              />
+                              <button
+                                onClick={() => {
+                                  autoTrade.setWalletName(editNameValue);
+                                  setWalletName(editNameValue);
+                                  setIsEditingName(false);
+                                }}
+                                className="p-1 text-emerald-500 hover:bg-zinc-700 rounded"
+                              >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                              </button>
+                              <button
+                                onClick={() => setIsEditingName(false)}
+                                className="p-1 text-zinc-500 hover:bg-zinc-700 rounded"
+                              >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium text-white flex-1">{walletName}</span>
+                              <button
+                                onClick={() => {
+                                  setEditNameValue(walletName);
+                                  setIsEditingName(true);
+                                }}
+                                className="p-1 text-zinc-500 hover:bg-zinc-700 rounded"
+                              >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                </svg>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                        {/* Wallet Address */}
                         <div className="text-xs text-zinc-500 mb-1">Wallet Address</div>
                         <div className="flex items-center gap-2">
                           <code className="text-xs text-zinc-300 flex-1 truncate">{autoTrade.wallet.address}</code>
