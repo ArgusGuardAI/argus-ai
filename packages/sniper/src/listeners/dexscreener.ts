@@ -109,7 +109,7 @@ export class DexScreenerListener extends EventEmitter {
       // Fetch token boosts (promoted/trending tokens)
       const boostsResponse = await fetch(`${DEXSCREENER_API}/token-boosts/top/v1`);
       if (boostsResponse.ok) {
-        const boosts = await boostsResponse.json();
+        const boosts = await boostsResponse.json() as any[];
         await this.processBoosts(boosts);
       }
 
@@ -117,7 +117,7 @@ export class DexScreenerListener extends EventEmitter {
       // Using search with high volume Solana tokens
       const searchResponse = await fetch(`${DEXSCREENER_API}/latest/dex/search?q=pump`);
       if (searchResponse.ok) {
-        const searchData = await searchResponse.json();
+        const searchData = await searchResponse.json() as any;
         if (searchData.pairs) {
           await this.processPairs(searchData.pairs);
         }
@@ -146,7 +146,7 @@ export class DexScreenerListener extends EventEmitter {
       try {
         const response = await fetch(`${DEXSCREENER_API}/latest/dex/tokens/${tokenAddress}`);
         if (response.ok) {
-          const data = await response.json();
+          const data = await response.json() as any;
           if (data.pairs && data.pairs.length > 0) {
             const pair = this.getBestPair(data.pairs);
             if (pair) {
@@ -229,7 +229,7 @@ export class DexScreenerListener extends EventEmitter {
       priceChange24h: pair.priceChange?.h24 || 0,
     };
 
-    console.log(`[DexScreener] ${source === 'boost' ? '🚀' : '📈'} Trending: ${token.symbol} ($${(token.initialMarketCap / 1000).toFixed(0)}K MC, ${token.buys1h} buys/1h)`);
+    console.log(`[DexScreener] ${source === 'boost' ? '🚀' : '📈'} Trending: ${token.symbol} ($${((token.initialMarketCap || 0) / 1000).toFixed(0)}K MC, ${token.buys1h} buys/1h)`);
     this.emit('newToken', token);
   }
 

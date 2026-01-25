@@ -9,7 +9,8 @@ import { cors } from 'hono/cors';
 import { serve } from '@hono/node-server';
 import { WebSocketServer, WebSocket } from 'ws';
 import { SniperEngine } from './engine/sniper';
-import type { SniperConfig } from './types';
+import { TokenAnalyzer } from './engine/analyzer';
+import type { SniperConfig, NewTokenEvent } from './types';
 
 const PORT = parseInt(process.env.PORT || '8788'); // Use 8788 to not conflict with workers on 8787
 const RPC_URL = process.env.HELIUS_RPC_URL || 'https://api.mainnet-beta.solana.com';
@@ -100,9 +101,293 @@ app.post('/api/sell/:tokenAddress', async (c) => {
   }
 });
 
-// Manual token analysis (calls ArgusGuard API directly)
-const ARGUSGUARD_API = process.env.ARGUSGUARD_API_URL || 'https://api.argusguard.io';
+// Manual token analysis using local TokenAnalyzer (uses Together AI)
+const localAnalyzer = new TokenAnalyzer({ minScore: 0 } as any);
 
+// ============================================
+// COMPREHENSIVE TOKEN ANALYSIS (NEW)
+// ============================================
+
+interface BundleInfo {
+  detected: boolean;
+  count: number;
+  totalPercent: number;
+  clusters: Array<{
+    id: number;
+    wallets: string[];
+    combinedPercent: number;
+  }>;
+}
+
+interface HolderInfo {
+  address: string;
+  percent: number;
+  isBundle: boolean;
+  bundleId?: number;
+}
+
+// Detect bundle wallets from holder data
+function detectBundles(holders: Array<{ address: string; pct: number }>): { bundles: BundleInfo; holdersWithBundles: HolderInfo[] } {
+  const threshold = 1; // 1% difference threshold
+  const minClusterSize = 3;
+
+  const holdersWithBundles: HolderInfo[] = holders.map(h => ({
+    address: h.address,
+    percent: h.pct,
+    isBundle: false,
+  }));
+
+  const clusters: Array<{ id: number; wallets: string[]; combinedPercent: number }> = [];
+  const assigned = new Set<number>();
+  let clusterId = 0;
+
+  // Find clusters of similar holdings
+  for (let i = 0; i < holders.length; i++) {
+    if (assigned.has(i)) continue;
+
+    const cluster: number[] = [i];
+    for (let j = i + 1; j < holders.length; j++) {
+      if (assigned.has(j)) continue;
+
+      // Check if holdings are within threshold
+      if (Math.abs(holders[i].pct - holders[j].pct) <= threshold) {
+        cluster.push(j);
+      }
+    }
+
+    // Only count as bundle if 3+ wallets have similar holdings
+    if (cluster.length >= minClusterSize) {
+      clusterId++;
+      let combinedPercent = 0;
+      const wallets: string[] = [];
+
+      for (const idx of cluster) {
+        assigned.add(idx);
+        holdersWithBundles[idx].isBundle = true;
+        holdersWithBundles[idx].bundleId = clusterId;
+        combinedPercent += holders[idx].pct;
+        wallets.push(holders[idx].address);
+      }
+
+      clusters.push({ id: clusterId, wallets, combinedPercent });
+    }
+  }
+
+  return {
+    bundles: {
+      detected: clusters.length > 0,
+      count: clusters.length,
+      totalPercent: clusters.reduce((sum, c) => sum + c.combinedPercent, 0),
+      clusters,
+    },
+    holdersWithBundles,
+  };
+}
+
+// Generate sparkline data from price changes
+function generateSparkline(
+  currentPrice: number,
+  change5m: number,
+  change1h: number,
+  change6h: number,
+  change24h: number
+): number[] {
+  if (!currentPrice || currentPrice === 0) return [];
+
+  // Calculate historical prices based on % changes
+  const price24hAgo = currentPrice / (1 + change24h / 100);
+  const price6hAgo = currentPrice / (1 + change6h / 100);
+  const price1hAgo = currentPrice / (1 + change1h / 100);
+  const price5mAgo = currentPrice / (1 + change5m / 100);
+
+  // Create 24 data points with some interpolation
+  const points: number[] = [];
+  const keyPoints = [
+    { time: 0, price: price24hAgo },
+    { time: 6, price: price6hAgo },
+    { time: 12, price: (price6hAgo + price1hAgo) / 2 }, // Interpolated
+    { time: 18, price: price1hAgo },
+    { time: 23, price: price5mAgo },
+    { time: 24, price: currentPrice },
+  ];
+
+  // Interpolate between key points with some noise for realism
+  for (let i = 0; i < 24; i++) {
+    const prevPoint = keyPoints.filter(p => p.time <= i).pop() || keyPoints[0];
+    const nextPoint = keyPoints.find(p => p.time > i) || keyPoints[keyPoints.length - 1];
+
+    const t = prevPoint.time === nextPoint.time ? 0 :
+      (i - prevPoint.time) / (nextPoint.time - prevPoint.time);
+
+    const basePrice = prevPoint.price + (nextPoint.price - prevPoint.price) * t;
+    // Add small random variation for natural look (±2%)
+    const noise = 1 + (Math.sin(i * 1.5) * 0.02);
+    points.push(basePrice * noise);
+  }
+
+  return points;
+}
+
+// Full comprehensive analysis endpoint for Token Research Tool
+app.post('/api/analyze-full', async (c) => {
+  try {
+    const { address } = await c.req.json<{ address: string }>();
+
+    if (!address) {
+      return c.json({ error: 'address required' }, 400);
+    }
+
+    console.log(`[API] Full analysis request for ${address}`);
+
+    // 1. Fetch DexScreener data
+    let dexData: any = null;
+    try {
+      const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${address}`);
+      if (dexRes.ok) {
+        const data = await dexRes.json() as any;
+        if (data.pairs && data.pairs.length > 0) {
+          // Get best pair by liquidity
+          dexData = data.pairs.reduce((best: any, p: any) => {
+            const liq = p.liquidity?.usd || 0;
+            const bestLiq = best?.liquidity?.usd || 0;
+            return liq > bestLiq ? p : best;
+          }, data.pairs[0]);
+        }
+      }
+    } catch (e) {
+      console.log('[API] DexScreener fetch failed');
+    }
+
+    // 2. Fetch RugCheck security data
+    let rugCheckData: any = null;
+    try {
+      const rugRes = await fetch(`https://api.rugcheck.xyz/v1/tokens/${address}/report`);
+      if (rugRes.ok) {
+        rugCheckData = await rugRes.json();
+      }
+    } catch (e) {
+      console.log('[API] RugCheck fetch failed');
+    }
+
+    // 3. Process holders and detect bundles
+    let holdersData: HolderInfo[] = [];
+    let bundleData: BundleInfo = { detected: false, count: 0, totalPercent: 0, clusters: [] };
+
+    if (rugCheckData?.topHolders) {
+      const holders = rugCheckData.topHolders.slice(0, 10).map((h: any) => ({
+        address: h.address || h.owner || 'unknown',
+        pct: h.pct || h.percentage || 0,
+      }));
+
+      const { bundles, holdersWithBundles } = detectBundles(holders);
+      bundleData = bundles;
+      holdersData = holdersWithBundles;
+    }
+
+    // 4. Run AI analysis
+    const tokenData: NewTokenEvent = {
+      address,
+      name: dexData?.baseToken?.name || rugCheckData?.tokenMeta?.name || 'Unknown',
+      symbol: dexData?.baseToken?.symbol || rugCheckData?.tokenMeta?.symbol || '???',
+      source: 'dexscreener-trending',
+      liquidityUsd: dexData?.liquidity?.usd || 0,
+      timestamp: Date.now(),
+      initialMarketCap: dexData?.marketCap || dexData?.fdv || 0,
+      priceUsd: parseFloat(dexData?.priceUsd || '0'),
+      volume24h: dexData?.volume?.h24 || 0,
+      volume1h: dexData?.volume?.h1 || 0,
+      buys1h: dexData?.txns?.h1?.buys || 0,
+      sells1h: dexData?.txns?.h1?.sells || 0,
+      priceChange1h: dexData?.priceChange?.h1 || 0,
+      priceChange24h: dexData?.priceChange?.h24 || 0,
+    };
+
+    let aiResult: any = null;
+    try {
+      const decision = await localAnalyzer.analyze(tokenData);
+      aiResult = {
+        signal: decision.riskScore >= 75 ? 'STRONG_BUY' :
+                decision.riskScore >= 60 ? 'BUY' :
+                decision.riskScore >= 45 ? 'WATCH' :
+                decision.riskScore >= 30 ? 'HOLD' : 'AVOID',
+        score: decision.riskScore,
+        verdict: decision.reason || decision.analysis?.summary || 'Analysis complete',
+      };
+    } catch (e) {
+      console.log('[API] AI analysis failed:', e);
+      aiResult = { signal: 'HOLD', score: 50, verdict: 'AI analysis unavailable' };
+    }
+
+    // 5. Build comprehensive response
+    const result = {
+      token: {
+        address,
+        name: tokenData.name,
+        symbol: tokenData.symbol,
+      },
+      security: {
+        mintAuthorityRevoked: rugCheckData?.risks?.find((r: any) => r.name === 'Mutable metadata')?.level !== 'danger',
+        freezeAuthorityRevoked: !rugCheckData?.risks?.find((r: any) => r.name === 'Freeze authority'),
+        lpLockedPercent: rugCheckData?.markets?.[0]?.lp?.lpLockedPct || 0,
+      },
+      market: {
+        price: parseFloat(dexData?.priceUsd || '0'),
+        marketCap: dexData?.marketCap || dexData?.fdv || 0,
+        liquidity: dexData?.liquidity?.usd || 0,
+        volume24h: dexData?.volume?.h24 || 0,
+        priceChange5m: dexData?.priceChange?.m5 || 0,
+        priceChange1h: dexData?.priceChange?.h1 || 0,
+        priceChange24h: dexData?.priceChange?.h24 || 0,
+        // Generate sparkline data points from price changes
+        sparkline: generateSparkline(
+          parseFloat(dexData?.priceUsd || '0'),
+          dexData?.priceChange?.m5 || 0,
+          dexData?.priceChange?.h1 || 0,
+          dexData?.priceChange?.h6 || 0,
+          dexData?.priceChange?.h24 || 0
+        ),
+      },
+      trading: {
+        buys5m: dexData?.txns?.m5?.buys || 0,
+        sells5m: dexData?.txns?.m5?.sells || 0,
+        buys1h: dexData?.txns?.h1?.buys || 0,
+        sells1h: dexData?.txns?.h1?.sells || 0,
+        buys24h: dexData?.txns?.h24?.buys || 0,
+        sells24h: dexData?.txns?.h24?.sells || 0,
+        buyRatio: dexData?.txns?.h1?.buys && dexData?.txns?.h1?.sells
+          ? (dexData.txns.h1.buys / (dexData.txns.h1.buys + dexData.txns.h1.sells))
+          : 0.5,
+      },
+      holders: {
+        total: rugCheckData?.totalHolders || holdersData.length,
+        top10: holdersData,
+        topHolderPercent: holdersData[0]?.percent || 0,
+        top5Percent: holdersData.slice(0, 5).reduce((sum, h) => sum + h.percent, 0),
+        top10Percent: holdersData.reduce((sum, h) => sum + h.percent, 0),
+      },
+      bundles: bundleData,
+      ai: aiResult,
+      links: {
+        website: dexData?.info?.websites?.[0]?.url,
+        twitter: dexData?.info?.socials?.find((s: any) => s.type === 'twitter')?.url,
+        telegram: dexData?.info?.socials?.find((s: any) => s.type === 'telegram')?.url,
+        dexscreener: `https://dexscreener.com/solana/${address}`,
+      },
+    };
+
+    console.log(`[API] Full analysis complete: ${result.token.symbol} - Score ${result.ai.score} (${result.ai.signal})`);
+    if (bundleData.detected) {
+      console.log(`[API] Bundle detected: ${bundleData.count} clusters, ${bundleData.totalPercent.toFixed(1)}% combined`);
+    }
+
+    return c.json(result);
+  } catch (error) {
+    console.error('[API] Full analysis error:', error);
+    return c.json({ error: String(error) }, 500);
+  }
+});
+
+// Legacy analyze endpoint (kept for backwards compatibility)
 app.post('/api/analyze', async (c) => {
   try {
     const { tokenAddress } = await c.req.json<{ tokenAddress: string }>();
@@ -113,20 +398,78 @@ app.post('/api/analyze', async (c) => {
 
     console.log(`[API] Manual analysis request for ${tokenAddress}`);
 
-    const response = await fetch(`${ARGUSGUARD_API}/analyze`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tokenAddress }),
-    });
-
-    if (!response.ok) {
-      return c.json({ error: 'Analysis failed' }, 500);
+    // Get token info from DexScreener first
+    let tokenData: NewTokenEvent | null = null;
+    try {
+      const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`);
+      if (dexRes.ok) {
+        const dexData = await dexRes.json() as { pairs?: any[] };
+        if (dexData.pairs && dexData.pairs.length > 0) {
+          const pair = dexData.pairs[0];
+          tokenData = {
+            address: tokenAddress,
+            name: pair.baseToken?.name || 'Unknown',
+            symbol: pair.baseToken?.symbol || '???',
+            source: 'dexscreener-trending',
+            liquidityUsd: pair.liquidity?.usd || 0,
+            timestamp: Date.now(),
+            initialMarketCap: pair.marketCap || pair.fdv || 0,
+            priceUsd: parseFloat(pair.priceUsd || '0'),
+            volume24h: pair.volume?.h24 || 0,
+            volume1h: pair.volume?.h1 || 0,
+            buys1h: pair.txns?.h1?.buys || 0,
+            sells1h: pair.txns?.h1?.sells || 0,
+            priceChange1h: pair.priceChange?.h1 || 0,
+            priceChange24h: pair.priceChange?.h24 || 0,
+          };
+        }
+      }
+    } catch (e) {
+      console.log('[API] Could not fetch DexScreener data, using minimal token data');
     }
 
-    const result = await response.json() as { riskScore: number; riskLevel: string };
-    console.log(`[API] Analysis complete: ${result.riskScore} (${result.riskLevel})`);
+    // If no DexScreener data, create minimal token event
+    if (!tokenData) {
+      tokenData = {
+        address: tokenAddress,
+        name: 'Unknown',
+        symbol: '???',
+        source: 'pumpfun',
+        liquidityUsd: 0,
+        timestamp: Date.now(),
+      };
+    }
 
-    return c.json(result);
+    // Run AI analysis
+    const decision = await localAnalyzer.analyze(tokenData);
+
+    console.log(`[API] Analysis complete: ${decision.riskScore} (${decision.shouldBuy ? 'SAFE' : 'RISKY'})`);
+
+    // Broadcast result to all clients
+    const wsMessage = {
+      type: 'ANALYSIS_RESULT',
+      data: {
+        token: tokenData,
+        shouldBuy: decision.shouldBuy,
+        reason: decision.reason,
+        riskScore: decision.riskScore,
+        analysis: decision.analysis,
+        stage: 'AI_ANALYSIS',
+      },
+    };
+    clients.forEach(client => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify(wsMessage));
+      }
+    });
+
+    return c.json({
+      riskScore: decision.riskScore,
+      riskLevel: decision.shouldBuy ? 'SAFE' : decision.riskScore < 70 ? 'SUSPICIOUS' : 'DANGEROUS',
+      reason: decision.reason,
+      flags: decision.analysis?.flags || [],
+      summary: decision.analysis?.summary || '',
+    });
   } catch (error) {
     console.error('[API] Analysis error:', error);
     return c.json({ error: String(error) }, 500);
@@ -217,7 +560,7 @@ app.get('/api/price/:tokenMint', async (c) => {
     });
 
     if (!response.ok) {
-      // Token might not be on Jupiter yet (still on bonding curve)
+      // Token might not be on Jupiter yet
       return c.json({ price: null, error: 'No route' }, 200);
     }
 
@@ -348,6 +691,30 @@ app.get('/api/autotrade', (c) => {
   return c.json({ autoTradeEnabled: sniper.isAutoTradeEnabled() });
 });
 
+// Force switch to public RPC (use when Helius quota is exceeded)
+app.post('/api/use-public-rpc', (c) => {
+  if (!sniper) {
+    return c.json({ error: 'Sniper not initialized' }, 400);
+  }
+  sniper.forcePublicRpc();
+  return c.json({
+    success: true,
+    message: 'Switched to public RPC',
+    status: sniper.isUsingPublicRpc(),
+  });
+});
+
+// Get RPC status
+app.get('/api/rpc-status', (c) => {
+  if (!sniper) {
+    return c.json({ error: 'Sniper not initialized' }, 400);
+  }
+  return c.json({
+    usingPublicRpc: sniper.isUsingPublicRpc(),
+    listeners: sniper.getListenerStatus(),
+  });
+});
+
 function handleClientMessage(msg: any, _ws: WebSocket) {
   switch (msg.type) {
     case 'START':
@@ -381,6 +748,14 @@ function handleClientMessage(msg: any, _ws: WebSocket) {
       if (sniper) {
         sniper.setAutoTrade(msg.enabled);
         broadcast({ type: 'AUTO_TRADE_STATUS', data: { enabled: sniper.isAutoTradeEnabled() } });
+      }
+      break;
+
+    case 'USE_PUBLIC_RPC':
+      if (sniper) {
+        console.log('[WS] Switching to public RPC (Helius quota exceeded)');
+        sniper.forcePublicRpc();
+        broadcast({ type: 'RPC_STATUS', data: sniper.isUsingPublicRpc() });
       }
       break;
 
@@ -476,3 +851,20 @@ wss.on('connection', (ws) => {
 });
 
 console.log('[WS] WebSocket server attached');
+
+// Auto-start the scanner in watch-only mode
+// Uses default minScore from SniperEngine (60 = BUY threshold)
+// Frontend can override via UPDATE_CONFIG message
+setTimeout(() => {
+  if (!sniper) {
+    console.log('[Auto-Start] Initializing scanner...');
+    sniper = new SniperEngine(RPC_URL, {
+      // minScore comes from SniperEngine default (60)
+      walletPrivateKey: 'watch-only',
+      manualModeOnly: false,
+    });
+    sniper.on('message', (m) => broadcast(m));
+    sniper.start();
+    console.log('[Auto-Start] Scanner running in WATCH-ONLY mode');
+  }
+}, 1000);

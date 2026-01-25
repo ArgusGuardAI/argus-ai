@@ -8,11 +8,15 @@
 
 import { Connection } from '@solana/web3.js';
 import { EventEmitter } from 'events';
-import { PumpFunListener } from '../listeners/pump-fun';
 import { DexScreenerListener } from '../listeners/dexscreener';
+import { RaydiumListener } from '../listeners/raydium';
+import { MeteoraListener } from '../listeners/meteora';
+import { PumpfunListener } from '../listeners/pumpfun';
+import { GeckoTerminalListener } from '../listeners/geckoterminal';
 import { TokenAnalyzer } from './analyzer';
 import { TradeExecutor } from '../trading/executor';
 import { PreFilter, PreFilterConfig, DEFAULT_PRE_FILTER_CONFIG } from './pre-filter';
+import { LaunchFilter, LaunchFilterConfig, DEFAULT_LAUNCH_FILTER_CONFIG } from './launch-filter';
 import type {
   SniperConfig,
   SniperState,
@@ -22,6 +26,7 @@ import type {
   Position,
   WSMessage,
 } from '../types';
+import { heliusBudget } from '../utils/helius-budget';
 
 const DEFAULT_CONFIG: SniperConfig = {
   walletPrivateKey: '',
@@ -29,9 +34,8 @@ const DEFAULT_CONFIG: SniperConfig = {
   maxSlippageBps: 1500, // 15%
   priorityFeeLamports: 100000, // 0.0001 SOL
   useJito: false,
-  maxRiskScore: 75,
+  minScore: 60,  // Only trade if score >= 60 (BUY or STRONG_BUY)
   minLiquidityUsd: 1000,
-  allowPumpFun: true,
   allowRaydium: true,
   blacklistCreators: [],
   takeProfitPercent: 100, // 2x
@@ -40,29 +44,31 @@ const DEFAULT_CONFIG: SniperConfig = {
   manualModeOnly: false, // Auto-scan mode enabled by default now with pre-filters
 };
 
-// AI API for full analysis
-const SENTINEL_API = process.env.SENTINEL_API_URL || 'http://localhost:8787';
-
 export class SniperEngine extends EventEmitter {
   private config: SniperConfig;
   private connection: Connection;
-  private pumpFunListener: PumpFunListener;
   private dexScreenerListener: DexScreenerListener;
+  private raydiumListener: RaydiumListener | null = null;
+  private meteoraListener: MeteoraListener | null = null;
+  private geckoTerminalListener: GeckoTerminalListener | null = null;
+  private pumpfunListener: PumpfunListener | null = null;
   private analyzer: TokenAnalyzer;
   private preFilter: PreFilter;
+  private launchFilter: LaunchFilter;
   private executor: TradeExecutor | null = null;
   private state: SniperState;
   private preFilterConfig: PreFilterConfig;
   private autoTradeEnabled: boolean = true;
+  private heliusApiKey: string;
 
-  // Re-check queue for tokens that failed AGE filter
+  // Re-check queue for tokens that failed initial checks
   private pendingTokens: Map<string, NewTokenEvent> = new Map();
   private recheckInterval: NodeJS.Timeout | null = null;
 
   // Track AI-rejected tokens - NEVER re-check these
   private aiRejectedTokens: Set<string> = new Set();
 
-  // Track processed tokens to avoid duplicates across sources
+  // Track processed tokens to avoid duplicates
   private processedTokens: Set<string> = new Set();
 
   constructor(rpcUrl: string, config: Partial<SniperConfig> = {}, preFilterConfig: Partial<PreFilterConfig> = {}) {
@@ -71,10 +77,13 @@ export class SniperEngine extends EventEmitter {
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.preFilterConfig = { ...DEFAULT_PRE_FILTER_CONFIG, ...preFilterConfig };
     this.connection = new Connection(rpcUrl, 'confirmed');
-    this.pumpFunListener = new PumpFunListener();
     this.dexScreenerListener = new DexScreenerListener();
     this.analyzer = new TokenAnalyzer(this.config);
     this.preFilter = new PreFilter(this.preFilterConfig);
+    this.launchFilter = new LaunchFilter();
+
+    // Get Helius API key for Raydium listener
+    this.heliusApiKey = process.env.HELIUS_API_KEY || '';
 
     this.state = {
       status: 'stopped',
@@ -84,10 +93,6 @@ export class SniperEngine extends EventEmitter {
       tokensSkipped: 0,
       totalPnlSol: 0,
     };
-
-    // Set up event handlers for pump.fun
-    this.pumpFunListener.on('newToken', (token) => this.handleNewToken(token));
-    this.pumpFunListener.on('error', (err) => this.emit('error', err));
 
     // Set up event handlers for DexScreener trending
     this.dexScreenerListener.on('newToken', (token) => this.handleTrendingToken(token));
@@ -113,14 +118,71 @@ export class SniperEngine extends EventEmitter {
       console.log('[Sniper] Watch-only mode - no trades will be executed');
     }
 
+    // Check if we should use public RPC (env var or no Helius key)
+    const usePublicRpc = process.env.USE_PUBLIC_RPC === 'true' || process.env.USE_PUBLIC_RPC === '1';
+
     // Only start token discovery if NOT in manual mode
     if (!this.config.manualModeOnly) {
-      this.pumpFunListener.start();
-      console.log('[Sniper] Pump.fun token discovery started');
+      // Start real-time listeners (works with or without Helius)
+      // Raydium AMM listener
+      this.raydiumListener = new RaydiumListener(this.heliusApiKey);
+      this.raydiumListener.on('newToken', (token) => this.handleNewPoolToken(token));
+      this.raydiumListener.on('error', (err) => this.emit('error', err));
 
-      // Also start DexScreener trending scanner (polls every 60s)
+      // Force public RPC if env var is set or no Helius key
+      if (usePublicRpc || !this.heliusApiKey) {
+        this.raydiumListener.forcePublicRpc();
+        console.log('[Sniper] ⚡ Raydium listener starting (PUBLIC RPC)');
+      } else {
+        console.log('[Sniper] ⚡ Raydium listener starting (Helius)');
+      }
+      await this.raydiumListener.start();
+
+      // Meteora DLMM listener
+      this.meteoraListener = new MeteoraListener(this.heliusApiKey);
+      this.meteoraListener.on('newToken', (token) => this.handleNewPoolToken(token));
+      this.meteoraListener.on('error', (err) => this.emit('error', err));
+
+      // Force public RPC if env var is set or no Helius key
+      if (usePublicRpc || !this.heliusApiKey) {
+        this.meteoraListener.forcePublicRpc();
+        console.log('[Sniper] ⚡ Meteora listener starting (PUBLIC RPC)');
+      } else {
+        console.log('[Sniper] ⚡ Meteora listener starting (Helius)');
+      }
+      await this.meteoraListener.start();
+
+      if (!this.heliusApiKey) {
+        console.log('[Sniper] ⚠️ No HELIUS_API_KEY - Using public RPC (slower, rate limited)');
+      } else if (usePublicRpc) {
+        console.log('[Sniper] ⚠️ USE_PUBLIC_RPC=true - Using public RPC (Helius quota preserved)');
+      }
+
+      // Pump.fun bonding curve listener (no API key needed)
+      // Can be disabled with DISABLE_PUMPFUN=true to focus on DEX only
+      const disablePumpfun = process.env.DISABLE_PUMPFUN === 'true' || process.env.DISABLE_PUMPFUN === '1';
+      if (!disablePumpfun) {
+        this.pumpfunListener = new PumpfunListener();
+        this.pumpfunListener.on('newToken', (token) => this.handleBondingCurveToken(token));
+        this.pumpfunListener.on('error', (err) => this.emit('error', err));
+        await this.pumpfunListener.start();
+        console.log('[Sniper] ⚡ Pump.fun bonding curve listener started');
+      } else {
+        console.log('[Sniper] ⏭️ Pump.fun disabled (DISABLE_PUMPFUN=true) - DEX only mode');
+      }
+
+      // Also start DexScreener trending scanner as backup (polls every 60s)
       this.dexScreenerListener.start(60000);
-      console.log('[Sniper] DexScreener trending scanner started');
+      console.log('[Sniper] DexScreener trending scanner started (backup)');
+
+      // Start GeckoTerminal listener as FREE alternative for new pools
+      // This is more reliable than public RPC for getting new pool data
+      const geckoInterval = usePublicRpc ? 20000 : 30000; // Poll faster when not using Helius
+      this.geckoTerminalListener = new GeckoTerminalListener(geckoInterval);
+      this.geckoTerminalListener.on('newToken', (token) => this.handleNewPoolToken(token));
+      this.geckoTerminalListener.on('error', (err) => this.emit('error', err));
+      await this.geckoTerminalListener.start();
+      console.log(`[Sniper] 🦎 GeckoTerminal listener started (polls every ${geckoInterval / 1000}s)`);
     } else {
       console.log('[Sniper] Manual mode - token discovery disabled');
     }
@@ -132,14 +194,59 @@ export class SniperEngine extends EventEmitter {
     this.recheckInterval = setInterval(() => this.recheckPendingTokens(), 30000);
     console.log('[Sniper] Re-check queue started (30s interval)');
 
+    // Log Helius budget status on startup and periodically
+    if (this.heliusApiKey && !usePublicRpc) {
+      console.log('[Sniper] Helius API budget tracking enabled');
+      heliusBudget.logStatus();
+
+      // Log budget status every 10 minutes
+      setInterval(() => {
+        heliusBudget.logStatus();
+      }, 10 * 60 * 1000);
+
+      // Listen for budget events
+      heliusBudget.on('dailyBudgetExceeded', () => {
+        console.log('[Sniper] ⚠️ HELIUS DAILY BUDGET EXCEEDED - Switching to free APIs');
+        this.raydiumListener?.forcePublicRpc();
+        this.meteoraListener?.forcePublicRpc();
+      });
+
+      heliusBudget.on('budgetWarning', (percent: number) => {
+        console.log(`[Sniper] ⚠️ HELIUS BUDGET WARNING: ${(percent * 100).toFixed(0)}% used`);
+      });
+    }
+
     this.emitStatusUpdate();
     console.log('[Sniper] Running! Waiting for new tokens...');
   }
 
   stop() {
     console.log('[Sniper] Stopping...');
-    this.pumpFunListener.stop();
     this.dexScreenerListener.stop();
+
+    // Stop Raydium listener
+    if (this.raydiumListener) {
+      this.raydiumListener.stop();
+      this.raydiumListener = null;
+    }
+
+    // Stop Meteora listener
+    if (this.meteoraListener) {
+      this.meteoraListener.stop();
+      this.meteoraListener = null;
+    }
+
+    // Stop GeckoTerminal listener
+    if (this.geckoTerminalListener) {
+      this.geckoTerminalListener.stop();
+      this.geckoTerminalListener = null;
+    }
+
+    // Stop Pump.fun listener
+    if (this.pumpfunListener) {
+      this.pumpfunListener.stop();
+      this.pumpfunListener = null;
+    }
 
     // Stop re-check queue
     if (this.recheckInterval) {
@@ -165,6 +272,66 @@ export class SniperEngine extends EventEmitter {
       this.state.status = 'running';
       this.emitStatusUpdate();
     }
+  }
+
+  /**
+   * Handle brand new tokens from Raydium/Meteora pool creation
+   * These are caught at launch - highest opportunity but need careful filtering
+   */
+  private async handleNewPoolToken(token: NewTokenEvent) {
+    // Avoid duplicates across sources
+    if (this.processedTokens.has(token.address)) {
+      return;
+    }
+    this.processedTokens.add(token.address);
+
+    // Skip if already rejected by AI
+    if (this.aiRejectedTokens.has(token.address)) {
+      return;
+    }
+
+    // Skip if paused
+    if (this.state.status !== 'running') {
+      return;
+    }
+
+    this.state.tokensScanned++;
+    console.log(`\n[Sniper] ═══ NEW POOL: ${token.symbol} (${token.source}) ═══`);
+    console.log(`[Sniper]    Address: ${token.address}`);
+    console.log(`[Sniper]    Creator: ${token.creator || 'unknown'}`);
+    console.log(`[Sniper]    Liquidity: $${token.liquidityUsd.toFixed(0)}`);
+
+    // ========================================
+    // LAUNCH FILTER (spam, liquidity, creator)
+    // Run BEFORE emitting to UI - don't show garbage tokens
+    // ========================================
+    const filterResult = await this.launchFilter.filter(token);
+
+    if (!filterResult.passed) {
+      console.log(`[Sniper] ❌ LAUNCH FILTER: ${filterResult.reason}`);
+      this.state.tokensSkipped++;
+      // Don't emit to UI - filtered tokens don't show at all
+      return;
+    }
+
+    // Only emit tokens that PASS the launch filter
+    this.emit('message', {
+      type: 'NEW_TOKEN',
+      data: token,
+    } as WSMessage);
+
+    // Update token with accurate USD liquidity (using real SOL price)
+    token.liquidityUsd = filterResult.adjustedLiquidityUsd;
+
+    // Log any warning flags
+    if (filterResult.flags.length > 0) {
+      console.log(`[Sniper] ⚠️ Warning flags: ${filterResult.flags.join(', ')}`);
+    }
+
+    console.log(`[Sniper] ✓ Launch filter passed - sending to AI analysis`);
+
+    // Send to AI for risk analysis
+    await this.analyzeAndTrade(token);
   }
 
   /**
@@ -203,26 +370,28 @@ export class SniperEngine extends EventEmitter {
     const buys = token.buys1h || 0;
     const sells = token.sells1h || 0;
 
-    // Basic sanity checks
-    if (mc < 5000 || mc > 500000) {
+    // Basic sanity checks - wider range to show more tokens
+    // Rejected tokens only log to console (not sent to dashboard)
+    if (mc < 3000 || mc > 5000000) {
       console.log(`[Sniper] ❌ MC out of range: $${mc.toFixed(0)}`);
       return;
     }
 
-    if (buys < 10) {
+    // Lower threshold - any activity is interesting
+    if (buys < 3) {
       console.log(`[Sniper] ❌ Not enough buys: ${buys}`);
       return;
     }
 
-    // Check sell pressure
-    if (sells > buys * 1.5) {
+    // Check sell pressure - be more lenient
+    if (sells > buys * 3) {
       console.log(`[Sniper] ❌ Sell pressure: ${sells} sells vs ${buys} buys`);
       return;
     }
 
-    // Check price trend
+    // Check price trend - allow more decline before rejecting
     const priceChange = token.priceChange1h || 0;
-    if (priceChange < -20) {
+    if (priceChange < -60) {
       console.log(`[Sniper] ❌ Dumping: ${priceChange.toFixed(1)}% in 1h`);
       return;
     }
@@ -233,82 +402,167 @@ export class SniperEngine extends EventEmitter {
     await this.analyzeAndTrade(token);
   }
 
-  private async handleNewToken(token: NewTokenEvent) {
-    // Emit new token event for UI
-    this.emit('message', {
-      type: 'NEW_TOKEN',
-      data: token,
-    } as WSMessage);
+  /**
+   * Handle bonding curve tokens from Pump.fun
+   * These are brand new tokens still on the bonding curve (pre-graduation)
+   * We apply FREE heuristic scoring and emit to UI - no auto-trading
+   */
+  private async handleBondingCurveToken(token: NewTokenEvent) {
+    // Avoid duplicates across sources
+    if (this.processedTokens.has(token.address)) {
+      return;
+    }
+    this.processedTokens.add(token.address);
 
     // Skip if paused
     if (this.state.status !== 'running') {
       return;
     }
 
-    // Skip auto-analysis in manual mode
-    if (this.config.manualModeOnly) {
-      return;
-    }
-
-    // Skip tokens that were already rejected by AI - no second chances
-    if (this.aiRejectedTokens.has(token.address)) {
-      return;
+    // FILTER: Skip BC tokens with no traction (< 1 SOL in bonding curve)
+    const bondingProgress = token.metadata?.bondingProgress || 0;
+    if (bondingProgress < 1) {
+      return; // Silent skip - too much spam to log
     }
 
     this.state.tokensScanned++;
 
-    // ============================================
-    // STAGE 1: PRE-FILTER (FREE - no AI cost)
-    // ============================================
-    console.log(`\n[Sniper] ═══ Processing ${token.symbol} (${token.address.slice(0, 8)}...) ═══`);
+    // Apply FREE heuristic scoring for bonding curve tokens
+    const heuristicScore = this.calculateBondingCurveScore(token);
 
-    const preFilterResult = await this.preFilter.filter(token.address, token);
+    console.log(`\n[Sniper] ═══ BONDING CURVE: ${token.symbol} ═══`);
+    console.log(`[Sniper]    Address: ${token.address}`);
+    console.log(`[Sniper]    Creator: ${token.creator || 'unknown'}`);
+    console.log(`[Sniper]    Bonding: ${token.metadata?.bondingProgress?.toFixed(2) || 0} SOL`);
+    console.log(`[Sniper]    Dev Buy: ${token.metadata?.devBuy || 0} SOL`);
+    console.log(`[Sniper]    FREE Score: ${heuristicScore.score} (${heuristicScore.flags.join(', ') || 'clean'})`);
 
-    if (!preFilterResult.passed) {
-      console.log(`[Sniper] ❌ PRE-FILTER REJECT [${preFilterResult.stage}]: ${preFilterResult.reason}`);
+    // Emit for UI with FREE score
+    this.emit('message', {
+      type: 'NEW_TOKEN',
+      data: token,
+    } as WSMessage);
 
-      // If rejected for AGE or MARKET CAP, add to re-check queue (might pass later)
-      const requeueableStages = ['AGE', 'BONDING_CURVE', 'MARKET_CAP'];
-      if (requeueableStages.includes(preFilterResult.stage) && !this.pendingTokens.has(token.address)) {
-        this.pendingTokens.set(token.address, token);
-        console.log(`[Sniper] 📋 Added ${token.symbol} to re-check queue [${preFilterResult.stage}] (${this.pendingTokens.size} pending)`);
-
-        // Emit pending status for UI
-        this.emit('message', {
-          type: 'ANALYSIS_RESULT',
-          data: {
-            token,
-            shouldBuy: false,
-            reason: `Pre-filter: ${preFilterResult.reason} (queued for re-check)`,
-            riskScore: 100,
-            stage: preFilterResult.stage,
-            pending: true,
-          },
-        } as WSMessage);
-        return;
-      }
-
-      this.state.tokensSkipped++;
-      this.emitStatusUpdate();
-
-      // Emit rejection for UI
-      this.emit('message', {
-        type: 'ANALYSIS_RESULT',
-        data: {
-          token,
-          shouldBuy: false,
-          reason: `Pre-filter: ${preFilterResult.reason}`,
-          riskScore: 100,
-          stage: preFilterResult.stage,
+    // Emit analysis result with FREE heuristic score
+    // BONDING CURVE TOKENS: NEVER auto-trade, display only!
+    // Too risky - dev can dump at any time
+    this.emit('message', {
+      type: 'ANALYSIS_RESULT',
+      data: {
+        token,
+        shouldBuy: false, // NEVER auto-trade bonding curve tokens
+        reason: `[BC] ${heuristicScore.summary}`,
+        riskScore: heuristicScore.score, // RISK score: higher = more risky
+        analysis: {
+          flags: heuristicScore.flags,
+          summary: `BONDING CURVE - ${heuristicScore.summary}`,
         },
-      } as WSMessage);
-      return;
+        stage: 'BONDING_CURVE',
+      },
+    } as WSMessage);
+
+    this.emitStatusUpdate();
+  }
+
+  /**
+   * Calculate FREE heuristic score for bonding curve tokens
+   * RISK score: 0-100 where HIGHER = MORE RISKY = DON'T BUY
+   * This is intentionally different from the main heuristic scorer
+   */
+  private calculateBondingCurveScore(token: NewTokenEvent): {
+    score: number;
+    flags: string[];
+    summary: string;
+  } {
+    let riskScore = 50; // Start neutral
+    const flags: string[] = [];
+
+    // ========================================
+    // DEV BUY CHECK (CRITICAL!)
+    // High dev buy = they can dump on you
+    // ========================================
+    const devBuy = token.metadata?.devBuy || 0;
+    if (devBuy > 5) {
+      riskScore += 40; // EXTREME RISK - dev owns massive bag
+      flags.push('EXTREME_DEV_BAG');
+    } else if (devBuy > 2) {
+      riskScore += 30; // HIGH RISK
+      flags.push('HIGH_DEV_BUY');
+    } else if (devBuy > 0.5) {
+      riskScore += 15;
+      flags.push('MEDIUM_DEV_BUY');
+    } else if (devBuy > 0) {
+      riskScore += 5;
+      flags.push('SMALL_DEV_BUY');
+    }
+    // No dev buy = good, no penalty
+
+    // ========================================
+    // BONDING CURVE PROGRESS
+    // Very low = no interest = risky
+    // ========================================
+    const bondingProgress = token.metadata?.bondingProgress || 0;
+    if (bondingProgress < 1) {
+      riskScore += 20; // No traction = likely dead
+      flags.push('NO_TRACTION');
+    } else if (bondingProgress < 5) {
+      riskScore += 10; // Low interest
+      flags.push('LOW_TRACTION');
+    } else if (bondingProgress > 20) {
+      riskScore -= 10; // Good traction reduces risk
+      flags.push('GOOD_TRACTION');
     }
 
-    console.log(`[Sniper] ✅ PRE-FILTER PASSED - sending to AI analysis`);
+    // ========================================
+    // NAME/SYMBOL SPAM PATTERNS
+    // ========================================
+    const name = (token.name || '').toLowerCase();
+    const symbol = (token.symbol || '').toLowerCase();
 
-    // Send to AI for risk analysis
-    await this.analyzeAndTrade(token);
+    if (/^[a-z]{1,2}$/.test(symbol)) {
+      riskScore += 20;
+      flags.push('TINY_SYMBOL');
+    }
+    if (/test|airdrop|presale|launch|moon|100x|1000x|free|giveaway/i.test(name)) {
+      riskScore += 25;
+      flags.push('SPAM_NAME');
+    }
+    if (/[0-9]{5,}/.test(name) || /[0-9]{5,}/.test(symbol)) {
+      riskScore += 30;
+      flags.push('RANDOM_NUMBERS');
+    }
+
+    // Copycat names (slightly risky but not fatal)
+    if (/trump|musk|elon|doge|shib|pepe|wojak|inu/i.test(name)) {
+      riskScore += 10;
+      flags.push('COPYCAT');
+    }
+
+    // ========================================
+    // BLACKLIST CHECK
+    // ========================================
+    const creator = token.creator || '';
+    if (creator && this.config.blacklistCreators?.includes(creator)) {
+      riskScore = 100;
+      flags.push('BLACKLISTED');
+    }
+
+    // Clamp score 0-100
+    riskScore = Math.max(0, Math.min(100, riskScore));
+
+    // Generate summary based on RISK level
+    let summary = '';
+    if (riskScore >= 80) {
+      summary = 'EXTREMELY RISKY - multiple red flags';
+    } else if (riskScore >= 60) {
+      summary = 'HIGH RISK - avoid or wait';
+    } else if (riskScore >= 40) {
+      summary = 'MODERATE RISK - proceed with caution';
+    } else {
+      summary = 'Lower risk - still bonding curve, be careful';
+    }
+
+    return { score: riskScore, flags, summary };
   }
 
   /**
@@ -318,7 +572,7 @@ export class SniperEngine extends EventEmitter {
     // ============================================
     // AI ANALYSIS
     // ============================================
-    const aiResult = await this.runAIAnalysis(token.address);
+    const aiResult = await this.runAIAnalysis(token);
 
     this.preFilter.recordAIResult(aiResult.approved);
 
@@ -331,17 +585,7 @@ export class SniperEngine extends EventEmitter {
       this.aiRejectedTokens.add(token.address);
       // Also remove from pending queue if it was there
       this.pendingTokens.delete(token.address);
-
-      this.emit('message', {
-        type: 'ANALYSIS_RESULT',
-        data: {
-          token,
-          shouldBuy: false,
-          reason: `AI: ${aiResult.reason}`,
-          riskScore: aiResult.riskScore,
-          analysis: aiResult.analysis,
-        },
-      } as WSMessage);
+      // Rejected tokens not sent to dashboard (only logs to console)
       return;
     }
 
@@ -356,11 +600,12 @@ export class SniperEngine extends EventEmitter {
       reason: `AI approved (score: ${aiResult.riskScore})`,
       riskScore: aiResult.riskScore,
       analysis: aiResult.analysis,
+      stage: 'AI_ANALYSIS',
     };
 
     this.emit('message', {
       type: 'ANALYSIS_RESULT',
-      data: decision,
+      data: { ...decision, ai: aiResult.ai },
     } as WSMessage);
 
     if (this.autoTradeEnabled) {
@@ -391,35 +636,6 @@ export class SniperEngine extends EventEmitter {
         }
       }
 
-      // For bonding curve tokens, estimate from token supply sold
-      // Pump.fun bonding curve: starts at ~$4K, graduates at ~$69K (85 SOL @ ~$200)
-      // Each 1% of curve = ~$650 added to market cap
-      const heliusKey = process.env.HELIUS_API_KEY;
-      if (heliusKey) {
-        const rpcResponse = await fetch(`https://mainnet.helius-rpc.com/?api-key=${heliusKey}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            jsonrpc: '2.0',
-            id: 1,
-            method: 'getTokenSupply',
-            params: [token.address],
-          }),
-        });
-        if (rpcResponse.ok) {
-          const rpcData = await rpcResponse.json() as { result?: { value?: { uiAmount?: number } } };
-          const circulatingSupply = rpcData.result?.value?.uiAmount || 0;
-          // Total supply is 1 billion, bonding curve holds ~800M initially
-          // As tokens are bought, circulating supply increases
-          // Circulating of 200M = 20% through curve = ~$17K MC
-          const percentSold = Math.min(100, (circulatingSupply / 1_000_000_000) * 100);
-          const estimatedMC = 4000 + (percentSold * 650); // Rough estimate
-          if (estimatedMC > token.liquidityUsd) {
-            console.log(`[Sniper] 📈 Estimated MC for ${token.symbol}: $${estimatedMC.toFixed(0)} (${percentSold.toFixed(1)}% sold, was $${token.liquidityUsd.toFixed(0)})`);
-            return { ...token, liquidityUsd: estimatedMC };
-          }
-        }
-      }
     } catch (error) {
       console.log(`[Sniper] ⚠ Could not refresh data for ${token.symbol}, using cached`);
     }
@@ -427,50 +643,34 @@ export class SniperEngine extends EventEmitter {
   }
 
   /**
-   * Run AI analysis via Sentinel API
+   * Run AI analysis using TokenAnalyzer (calls Together AI directly)
+   * Now returns tiered AI analysis data for the frontend
    */
-  private async runAIAnalysis(tokenAddress: string): Promise<{
+  private async runAIAnalysis(token: NewTokenEvent): Promise<{
     approved: boolean;
     riskScore: number;
     reason: string;
     analysis?: { flags: string[]; summary: string };
+    ai?: {
+      tier: 'full' | 'quick' | 'skip';
+      signal?: string;
+      risk?: number;
+      confidence?: number;
+      verdict?: string;
+      watch?: boolean;
+    };
   }> {
     try {
-      const response = await fetch(`${SENTINEL_API}/sentinel/analyze`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tokenAddress }),
-      });
-
-      if (!response.ok) {
-        return { approved: false, riskScore: 100, reason: 'AI API error' };
-      }
-
-      const data = await response.json() as {
-        analysis?: {
-          riskScore?: number;
-          riskLevel?: string;
-          summary?: string;
-          flags?: Array<{ message: string }>;
-        };
-      };
-
-      const riskScore = data.analysis?.riskScore || 100;
-      const riskLevel = data.analysis?.riskLevel || 'UNKNOWN';
-
-      // Approve if score is below threshold
-      const approved = riskScore <= this.config.maxRiskScore;
+      // Use the TokenAnalyzer which calls Together AI directly
+      // Now includes tiered AI analysis (full/quick/skip)
+      const decision = await this.analyzer.analyze(token);
 
       return {
-        approved,
-        riskScore,
-        reason: approved
-          ? `Risk level ${riskLevel} is acceptable`
-          : `Risk score ${riskScore} exceeds max ${this.config.maxRiskScore}`,
-        analysis: {
-          flags: data.analysis?.flags?.map(f => f.message) || [],
-          summary: data.analysis?.summary || '',
-        },
+        approved: decision.shouldBuy,
+        riskScore: decision.riskScore,
+        reason: decision.reason,
+        analysis: decision.analysis,
+        ai: (decision as any).ai, // Pass AI tier data to frontend
       };
     } catch (error) {
       console.error('[Sniper] AI analysis error:', error);
@@ -624,24 +824,14 @@ export class SniperEngine extends EventEmitter {
       console.log(`[Sniper] ❌ PRE-FILTER REJECT [${preFilterResult.stage}]: ${preFilterResult.reason}`);
       this.state.tokensSkipped++;
       this.emitStatusUpdate();
-
-      this.emit('message', {
-        type: 'ANALYSIS_RESULT',
-        data: {
-          token,
-          shouldBuy: false,
-          reason: `Pre-filter (recheck): ${preFilterResult.reason}`,
-          riskScore: 100,
-          stage: preFilterResult.stage,
-        },
-      } as WSMessage);
+      // Rejected tokens not sent to dashboard (only logs to console)
       return;
     }
 
     console.log(`[Sniper] ✅ PRE-FILTER PASSED - sending to AI analysis`);
 
-    // Run AI analysis
-    const aiResult = await this.runAIAnalysis(token.address);
+    // Run AI analysis with full token data
+    const aiResult = await this.runAIAnalysis(token);
 
     this.preFilter.recordAIResult(aiResult.approved);
 
@@ -652,17 +842,7 @@ export class SniperEngine extends EventEmitter {
 
       // Add to rejected set - NEVER re-check this token again
       this.aiRejectedTokens.add(token.address);
-
-      this.emit('message', {
-        type: 'ANALYSIS_RESULT',
-        data: {
-          token,
-          shouldBuy: false,
-          reason: `AI: ${aiResult.reason}`,
-          riskScore: aiResult.riskScore,
-          analysis: aiResult.analysis,
-        },
-      } as WSMessage);
+      // Rejected tokens not sent to dashboard (only logs to console)
       return;
     }
 
@@ -868,5 +1048,91 @@ export class SniperEngine extends EventEmitter {
    */
   getPendingTokens(): NewTokenEvent[] {
     return Array.from(this.pendingTokens.values());
+  }
+
+  // ============================================
+  // LAUNCH FILTER CONTROLS (for new pools)
+  // ============================================
+
+  /**
+   * Get launch filter statistics
+   */
+  getLaunchFilterStats() {
+    return this.launchFilter.getStats();
+  }
+
+  /**
+   * Report a rug - auto-blacklists the creator
+   */
+  reportRug(creatorAddress: string, tokenAddress: string) {
+    this.launchFilter.reportRug(creatorAddress, tokenAddress);
+    // Also add to pre-filter blacklist
+    this.preFilter.flagCreator(creatorAddress);
+  }
+
+  /**
+   * Blacklist a creator manually
+   */
+  blacklistCreator(creatorAddress: string) {
+    this.launchFilter.blacklistCreator(creatorAddress);
+    this.preFilter.flagCreator(creatorAddress);
+  }
+
+  /**
+   * Get current SOL price
+   */
+  getSolPrice(): number {
+    return this.launchFilter.getSolPrice();
+  }
+
+  /**
+   * Get all blacklisted creators
+   */
+  getBlacklistedCreators(): string[] {
+    return this.launchFilter.getBlacklistedCreators();
+  }
+
+  // ============================================
+  // RPC FALLBACK CONTROLS
+  // ============================================
+
+  /**
+   * Force switch to public RPC for Raydium and Meteora listeners
+   * Use this when Helius quota is exceeded
+   */
+  forcePublicRpc() {
+    console.log('[Sniper] Forcing all listeners to use public RPC...');
+
+    if (this.raydiumListener) {
+      this.raydiumListener.forcePublicRpc();
+    }
+    if (this.meteoraListener) {
+      this.meteoraListener.forcePublicRpc();
+    }
+
+    // Emit status update - will be broadcast to connected clients
+    this.emitStatusUpdate();
+  }
+
+  /**
+   * Check if listeners are using public RPC
+   */
+  isUsingPublicRpc(): { raydium: boolean; meteora: boolean } {
+    return {
+      raydium: this.raydiumListener?.isUsingPublicRpc() || false,
+      meteora: this.meteoraListener?.isUsingPublicRpc() || false,
+    };
+  }
+
+  /**
+   * Get listener connection status
+   */
+  getListenerStatus() {
+    return {
+      raydium: this.raydiumListener?.getStats() || { isRunning: false, connected: false, usingPublicRpc: false },
+      meteora: this.meteoraListener?.getStats() || { isRunning: false, connected: false, usingPublicRpc: false },
+      pumpfun: this.pumpfunListener?.getStats() || { isRunning: false, connected: false },
+      geckoTerminal: this.geckoTerminalListener?.getStats() || { isRunning: false, poolsSeen: 0 },
+    };
   }
 }

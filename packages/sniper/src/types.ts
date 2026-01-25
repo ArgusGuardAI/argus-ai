@@ -13,11 +13,10 @@ export interface SniperConfig {
   useJito: boolean;
 
   // Safety filters (ArgusGuard)
-  maxRiskScore: number;
+  minScore: number;  // Only trade if score >= this (higher = better, 60+ = BUY)
   minLiquidityUsd: number;
 
   // Token filters
-  allowPumpFun: boolean;
   allowRaydium: boolean;
   blacklistCreators: string[];
 
@@ -34,7 +33,7 @@ export interface NewTokenEvent {
   address: string;
   name: string;
   symbol: string;
-  source: 'pump.fun' | 'raydium' | 'dexscreener-boost' | 'dexscreener-trending';
+  source: 'pumpfun' | 'raydium' | 'meteora' | 'orca' | 'dexscreener-boost' | 'dexscreener-trending';
   creator?: string;
   liquidityUsd: number;
   timestamp: number;
@@ -49,6 +48,13 @@ export interface NewTokenEvent {
   sells1h?: number;
   priceChange1h?: number;
   priceChange24h?: number;
+  // Pump.fun specific metadata
+  metadata?: {
+    stage: 'bonding_curve' | 'graduated';
+    bondingProgress?: number; // SOL in bonding curve
+    devBuy?: number; // Dev's initial buy amount
+    uri?: string; // Token metadata URI
+  };
 }
 
 export interface SnipeDecision {
@@ -60,6 +66,9 @@ export interface SnipeDecision {
     flags: string[];
     summary: string;
   };
+  // Stage indicator for UI
+  stage?: 'BONDING_CURVE' | 'GRADUATED' | 'LAUNCH_FILTER' | 'PRE_FILTER' | 'AI_ANALYSIS' |
+          'LIQUIDITY' | 'HOLDERS' | 'AGE' | 'ACTIVITY' | 'BUNDLE' | 'CREATOR' | 'MARKET_CAP' | 'PRICE_DIP' | 'PASSED';
 }
 
 export interface Position {

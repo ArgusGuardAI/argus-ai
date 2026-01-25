@@ -1,5 +1,3 @@
-import { Link } from 'react-router-dom';
-
 const styles = `
   /* --- DESIGN TOKENS (LIGHT THEME) --- */
   .landing-page {
@@ -414,7 +412,7 @@ export default function Landing() {
             <h1>Automated Trading.<br/>Zero Interference.</h1>
             <p>
               Argus is a sophisticated AI sniper for Solana tokens.
-              Real-time Pump.fun scanning, AI risk scoring, and dedicated wallet automation in a lightweight dashboard.
+              Real-time token scanning, AI risk scoring, and dedicated wallet automation in a lightweight dashboard.
             </p>
 
             <div className="hero-actions">
@@ -541,8 +539,8 @@ export default function Landing() {
                 <div className="icon-bg">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
                 </div>
-                <div className="card-title">Pump.fun Scanner</div>
-                <div className="card-desc">Real-time token feed directly from the source. Never miss a launch with millisecond latency monitoring.</div>
+                <div className="card-title">DexScreener Scanner</div>
+                <div className="card-desc">Real-time token feed from DexScreener. Tracks trending and boosted tokens with fast latency monitoring.</div>
               </div>
 
               {/* Feature 2 */}
