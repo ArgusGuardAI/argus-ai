@@ -1,56 +1,36 @@
-# ArgusGuard
+# Argus AI
 
-**AI-Powered Automated Trading System for Solana Tokens**
+**AI-Powered Token Research Tool for Solana**
 
-ArgusGuard is an automated trading system that scans new tokens on Raydium, Meteora, and DexScreener, analyzes them for risk using AI, and automatically executes trades on approved tokens.
+Argus AI is a comprehensive token research tool that provides instant AI analysis, security checks, bundle detection, and one-click trading for Solana tokens.
 
 ---
 
 ## Features
 
-### AI Trading Dashboard (Argus)
-- **Real-time Token Feed:** Live stream of new tokens with AI risk scores
-- **Automated Trading:** Buy/sell based on configurable risk thresholds
-- **Position Tracking:** Real-time P&L with take profit, stop loss, and trailing stop
-- **Dedicated Trading Wallet:** Instant execution without popup confirmations
-- **3-Column Layout:** Dashboard, positions, settings with activity log
+### Token Research Tool
+- **Manual Analysis**: Paste any token address for comprehensive research
+- **AI Risk Scoring**: 0-100 score with STRONG_BUY, BUY, WATCH, HOLD, AVOID signals
+- **Bundle Detection**: Identifies coordinated wallet clusters holding tokens
+- **24h Sparkline**: Visual price chart in the Market card
+- **One-Click Trading**: Buy tokens directly with configurable amounts
 
-### Risk Analysis Engine
-- **8 Risk Categories:** Liquidity, Ownership, Contract, Social, Deployer, Bundle, Holders, Trading
-- **4 Severity Levels:** Low, Medium, High, Critical
-- **Score Range:** 0-100 (higher = more risk)
-- **Risk Levels:** SAFE (0-49), SUSPICIOUS (50-69), DANGEROUS (70-89), SCAM (90-100)
+### Analysis Dashboard
+- **Security Panel**: Mint/Freeze authority status, LP lock percentage
+- **Market Data**: Price, market cap, liquidity, 24h volume, price changes
+- **Trading Activity**: Buy/sell counts, buy ratio, transaction volume
+- **Top Holders**: Visual bar chart with bundle highlighting (red)
+- **AI Verdict**: Written analysis with bundle warnings
 
-### Token Discovery Sources
-- **Raydium:** Real-time pool creation listener via Helius WebSocket
-- **Meteora:** DLMM and AMM pool creation detection
-- **DexScreener:** Trending tokens and boosted tokens scanner
+### Auto-Sell System
+- **Take Profit**: Automatically sell when position reaches target gain
+- **Stop Loss**: Exit position when loss threshold is hit
+- **Trailing Stop**: Lock in profits by selling when price drops from peak
 
-### Launch Filter (New Pool Protection)
-- **Spam Detection:** Filters spam names (test, aaa, scam patterns)
-- **Liquidity Bounds:** $400 - $100K for new pools
-- **Creator Tracking:** Rejects serial launchers (>3 tokens in 24h)
-- **Auto-Blacklist:** Blacklists creators when tokens rug
-
----
-
-## Project Structure
-
-```
-packages/
-├── argus/           # AI Trading Dashboard (React + Vite)
-│   ├── src/App.tsx      # Main dashboard UI
-│   ├── src/hooks/       # useAutoTrade hook
-│   └── src/lib/         # Jupiter swap, trading wallet
-├── sniper/          # Token Scanner Backend
-│   ├── src/engine/      # Scanner, analyzer, launch-filter
-│   ├── src/listeners/   # Raydium, Meteora, DexScreener
-│   ├── src/trading/     # Trade executor
-│   └── src/server.ts    # WebSocket server
-└── workers/         # Cloudflare Workers API
-    ├── src/routes/      # API endpoints
-    └── src/services/    # Helius, DexScreener, Together AI
-```
+### Trading Wallet
+- **Dedicated Wallet**: Separate from your main wallet for safety
+- **Instant Execution**: No popup confirmations needed
+- **Full Control**: Create, import, export, withdraw, delete
 
 ---
 
@@ -59,16 +39,13 @@ packages/
 ### Prerequisites
 - Node.js 18+
 - pnpm 8+
-- API Keys: Together AI, Helius
+- API Keys: Helius (optional), Together AI or Groq
 
 ### Installation
 
 ```bash
-# Clone the repository
-git clone https://github.com/your-org/argusguard.git
-cd argusguard
-
-# Install dependencies
+git clone https://github.com/your-org/argus-ai.git
+cd argus-ai
 pnpm install
 ```
 
@@ -77,19 +54,20 @@ pnpm install
 Create `packages/sniper/.env`:
 
 ```env
-HELIUS_API_KEY=your-helius-api-key
-TOGETHER_AI_API_KEY=your-together-ai-key
+HELIUS_API_KEY=your-helius-key      # Optional - for real-time pool detection
+TOGETHER_AI_API_KEY=your-key        # For AI analysis
+GROQ_API_KEY=your-groq-key          # Alternative FREE AI (recommended)
 ```
 
 ### Development
 
 ```bash
-# Start the Scanner Backend (Terminal 1)
+# Terminal 1: Start Backend
 cd packages/sniper
 pnpm dev
 # Runs at http://localhost:8788
 
-# Start the Trading Dashboard (Terminal 2)
+# Terminal 2: Start Dashboard
 cd packages/argus
 pnpm dev
 # Runs at http://localhost:3000
@@ -97,138 +75,176 @@ pnpm dev
 
 ---
 
-## Data Flow
+## How It Works
 
 ```
-Raydium WebSocket ──┐
-                    │
-Meteora WebSocket ──┼──▶ Launch Filter ──▶ AI Analysis ──▶ Dashboard
-                    │
-DexScreener API ────┘
-        │
-        ▼
-┌───────────────┐
-│   Sniper      │ ──▶ Pre-filter (fast checks)
-│   Backend     │ ──▶ Launch filter (new pools)
-└───────┬───────┘ ──▶ AI Analysis (risk score)
-        │ WebSocket
-        ▼
-┌───────────────┐
-│   Argus       │ ──▶ Display in Live Feed
-│  Dashboard    │ ──▶ Auto-trade if approved
-└───────┬───────┘
-        │
-        ▼
-┌───────────────┐
-│   Jupiter     │ ──▶ Execute swap
-│     API       │ ──▶ Return signature
-└───────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│  ARGUS AI                                    [Wallet: 2.5 SOL]  │
+├─────────────────────────────────────────────────────────────────┤
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │  Enter token address...                       [Analyze]  │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│  Recent: BONK, WIF, POPCAT                                      │
+├─────────────────────────────────────────────────────────────────┤
+│  TOKEN: $EXAMPLE                              Score: 72 [BUY]   │
+│                                                                 │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
+│  │  SECURITY    │  │   MARKET     │  │   ACTIVITY   │          │
+│  │ ✓ Mint Rev   │  │ $45.2M MC    │  │ 1,234 buys   │          │
+│  │ ✓ Freeze Rev │  │ $824K Liq    │  │   456 sells  │          │
+│  │ ⚠ LP: 0%     │  │ [sparkline]  │  │ 2.7:1 ratio  │          │
+│  └──────────────┘  └──────────────┘  └──────────────┘          │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │  TOP HOLDERS                              [2 BUNDLES]    │   │
+│  │  ████████████████████ 45.2%  - Holder                   │   │
+│  │  ██████ 12.1%  - Whale                                   │   │
+│  │  ████ 8.3%  - [Bundle #1]                               │   │
+│  │  ████ 8.2%  - [Bundle #1]                               │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  [ 0.05 SOL ] [ 0.1 SOL ] [ 0.25 SOL ]    [BUY $EXAMPLE]       │
+└─────────────────────────────────────────────────────────────────┘
 ```
+
+### Analysis Flow
+
+1. **Paste Token Address** → Enter any Solana token mint
+2. **Fetch Data** → DexScreener (market) + RugCheck (security)
+3. **Detect Bundles** → Algorithm finds coordinated wallets
+4. **AI Analysis** → Groq/Together generates verdict
+5. **Display Results** → All panels update with comprehensive data
+6. **Trade** → One-click buy with Jupiter aggregator
 
 ---
 
-## Trading System
+## Bundle Detection
 
-### Auto-Trade Flow
-```
-1. Listener detects new pool (Raydium/Meteora) or trending token (DexScreener)
-2. Launch filter checks (spam, liquidity, creator reputation)
-3. AI analyzes for risk score (0-100)
-4. If score <= maxRiskScore AND auto-trade enabled:
-   - Execute buy via Jupiter
-   - Create position for tracking
-5. Price monitoring loop (every 10s):
-   - Check take profit condition
-   - Check stop loss condition
-   - Check trailing stop condition
-6. Execute sell when condition met
-```
+Argus detects coordinated wallet clusters that may indicate:
+- Insider accumulation
+- Coordinated pump groups
+- Potential dump risk
 
-### Safety Limits
-- `maxRiskScore` - Only trade low-risk tokens (default: 40)
-- `reserveBalanceSol` - Always keep minimum SOL
-- `maxTradesPerSession` - Limit trades (0 = unlimited)
-
-### Auto-Sell Settings
-- **Take Profit**: Sell when position up X%
-- **Stop Loss**: Sell when position down X%
-- **Trailing Stop**: Sell when drops X% from peak
+**How it works:**
+- Analyzes top 10 holders
+- Groups wallets with similar holdings (within 1% difference)
+- Flags clusters of 3+ wallets as "bundles"
+- Displays total bundle percentage and wallet count
 
 ---
 
-## Risk Scoring
+## Project Structure
 
-### Base Score Factors
-| Factor | Score Impact |
-|--------|--------------|
-| Token age <1 day | +20 |
-| Unknown deployer | +15 |
-| Missing socials | +10 |
-| Single wallet >50% | +25 |
-| Bundle detected | +10-20 |
-
-### Score Caps (Established Tokens)
-| Market Cap | Age | Max Score |
-|------------|-----|-----------|
-| $100M+ | 30+ days | 35 |
-| $50M+ | 14+ days | 45 |
-| $10M+ | 7+ days | 55 |
+```
+packages/
+├── argus/              # Token Research Dashboard (React + Vite)
+│   ├── src/App.tsx         # Main single-page application
+│   ├── src/hooks/          # useAutoTrade hook (trading, positions)
+│   └── src/lib/            # Jupiter swap, trading wallet
+├── sniper/             # Analysis Backend
+│   ├── src/server.ts       # REST API + WebSocket server
+│   ├── src/engine/         # Analyzer, launch-filter, sniper
+│   └── src/listeners/      # Raydium, Meteora, DexScreener, Pumpfun
+└── workers/            # Cloudflare Workers (optional)
+```
 
 ---
 
 ## API Reference
 
-### WebSocket Events (ws://localhost:8788/ws)
+### POST /api/analyze-full
 
-```typescript
-// Server → Client
-{ type: 'NEW_TOKEN', data: { address, name, analysis } }
-{ type: 'ANALYSIS_RESULT', data: { tokenAddress, riskScore, riskLevel } }
-{ type: 'STATS_UPDATE', data: { tokensAnalyzed, approved, rejected } }
+Comprehensive token analysis endpoint.
 
-// Client → Server
-{ type: 'SUBSCRIBE', channels: ['tokens', 'analysis'] }
+**Request:**
+```json
+{ "address": "TokenMintAddress123..." }
 ```
 
-### REST API
-
-```
-GET    /api/status              # Scanner status
-GET    /api/stats               # Analysis statistics
-POST   /api/analyze             # Manual token analysis
-GET    /api/launch-filter/stats # Launch filter statistics
+**Response:**
+```json
+{
+  "token": { "address": "...", "name": "Example", "symbol": "EX" },
+  "security": {
+    "mintAuthorityRevoked": true,
+    "freezeAuthorityRevoked": true,
+    "lpLockedPercent": 100
+  },
+  "market": {
+    "price": 0.00123,
+    "marketCap": 45200000,
+    "liquidity": 824000,
+    "volume24h": 1200000,
+    "priceChange24h": 12.5,
+    "sparkline": [0.001, 0.0011, ...]
+  },
+  "trading": {
+    "buys1h": 1234,
+    "sells1h": 456,
+    "buyRatio": 2.7
+  },
+  "holders": {
+    "total": 5420,
+    "top10": [
+      { "address": "...", "percent": 45.2, "isBundle": false },
+      { "address": "...", "percent": 8.3, "isBundle": true, "bundleId": 1 }
+    ]
+  },
+  "bundles": {
+    "detected": true,
+    "count": 2,
+    "totalPercent": 16.5,
+    "wallets": ["addr1", "addr2", ...]
+  },
+  "ai": {
+    "signal": "BUY",
+    "score": 72,
+    "verdict": "Strong security with revoked authorities..."
+  },
+  "links": {
+    "dexscreener": "https://dexscreener.com/solana/..."
+  }
+}
 ```
 
 ---
 
 ## Configuration
 
-### Sniper Environment Variables
+### Settings Panel (UI)
 
-```env
-HELIUS_API_KEY=          # Required for RPC and WebSocket
-TOGETHER_AI_API_KEY=     # Required for AI analysis
-```
-
-### Dashboard Settings (via UI)
-
-| Setting | Default | Description |
+| Setting | Options | Description |
 |---------|---------|-------------|
-| Buy Amount | 0.01 SOL | Amount per trade |
-| Slippage | 15% | Max slippage tolerance |
-| Max Risk Score | 40 | Only buy if score <= this |
-| Take Profit | 50% | Sell when up this % |
-| Stop Loss | 20% | Sell when down this % |
-| Trailing Stop | 15% | Sell when drops from peak |
+| **Auto-Sell** | On/Off | Enable automatic selling |
+| Take Profit | 50%, 100%, 200%, 500% | Sell when up this % |
+| Stop Loss | 20%, 30%, 50%, 70% | Sell when down this % |
+| Trailing Stop | Off, 10%, 20%, 30% | Sell when drops from peak |
+| **Buy Settings** | | |
+| Default Amount | 0.01-0.25 SOL | Amount per trade |
+| Max Slippage | 1%, 3%, 5%, 10% | Slippage tolerance |
+| Reserve Balance | 0.05-0.5 SOL | Keep minimum SOL |
+
+---
+
+## Data Sources (All FREE)
+
+| Data | Source | Cost |
+|------|--------|------|
+| Price, Volume, Liquidity | DexScreener | FREE |
+| Buy/Sell Counts | DexScreener | FREE |
+| Mint/Freeze Authority | RugCheck | FREE |
+| Top 10 Holders | RugCheck | FREE |
+| AI Analysis | Groq | FREE |
+| AI Analysis (fallback) | Together AI | Paid |
 
 ---
 
 ## Security
 
-- Dedicated trading wallet (separate from main wallet)
-- Private key encrypted in localStorage
-- Never commit API keys or secrets
-- Use `.env` for local development (gitignored)
+- **Dedicated Trading Wallet**: Separate from main wallet
+- **Encrypted Storage**: Private key encrypted in localStorage
+- **0.5% Fee**: Small fee on trades supports development
+- **No Backend Secrets**: All keys stay client-side
 
 ---
 
@@ -243,4 +259,4 @@ MIT License - see [LICENSE](./LICENSE) for details.
 - [Whitepaper](./WHITEPAPER.md)
 - [Development Guide](./CLAUDE.md)
 
-**Built by ArgusGuard**
+**Built with Argus AI**
