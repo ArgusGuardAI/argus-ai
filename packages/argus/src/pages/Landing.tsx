@@ -537,6 +537,107 @@ const styles = `
     font-weight: 500;
   }
 
+  /* --- TOKEN TEASER --- */
+  .landing-page .token-teaser {
+    padding: 80px 0;
+    background: linear-gradient(135deg, #09090B 0%, #18181B 100%);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .landing-page .teaser-content {
+    max-width: 800px;
+    margin: 0 auto;
+    text-align: center;
+  }
+
+  .landing-page .teaser-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);
+    color: white;
+    border-radius: 99px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    margin-bottom: 24px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  .landing-page .teaser-content h2 {
+    font-size: 2.5rem;
+    font-weight: 800;
+    margin-bottom: 16px;
+    letter-spacing: -0.03em;
+    color: var(--accent);
+  }
+
+  .landing-page .teaser-content p {
+    font-size: 1.1rem;
+    color: var(--text-muted);
+    margin-bottom: 32px;
+    line-height: 1.7;
+  }
+
+  .landing-page .ca-box {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 24px;
+    margin-bottom: 32px;
+  }
+
+  .landing-page .ca-label {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .landing-page .ca-address {
+    font-family: 'Courier New', monospace;
+    font-size: 1.1rem;
+    color: var(--accent);
+    font-weight: 700;
+    word-break: break-all;
+  }
+
+  .landing-page .teaser-benefits {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+    margin-bottom: 32px;
+  }
+
+  .landing-page .benefit-item {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 20px;
+  }
+
+  .landing-page .benefit-icon {
+    font-size: 1.5rem;
+    margin-bottom: 12px;
+  }
+
+  .landing-page .benefit-title {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--accent);
+    margin-bottom: 6px;
+  }
+
+  .landing-page .benefit-desc {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+
   /* --- FOOTER --- */
   .landing-page footer {
     padding: 60px 0 40px;
@@ -938,6 +1039,7 @@ const styles = `
     .landing-page .token-grid { grid-template-columns: 1fr; }
     .landing-page .roadmap-grid { grid-template-columns: 1fr; }
     .landing-page .team-grid { grid-template-columns: repeat(2, 1fr); }
+    .landing-page .teaser-benefits { grid-template-columns: 1fr; }
   }
 `;
 
@@ -967,7 +1069,7 @@ export default function Landing() {
               <div className="nav-links">
                 <a href="#features">Features</a>
                 <a href="#how-it-works">How It Works</a>
-                <a href="#tokenomics">Token</a>
+                <a href="#token">Token</a>
                 <a href="#roadmap">Roadmap</a>
               </div>
               <a href="https://app.argusguard.io" className="btn btn-primary">Launch App</a>
@@ -980,17 +1082,17 @@ export default function Landing() {
           <div className="container">
             <div className="badge">
               <span className="badge-dot"></span>
-              Token Research Tool
+              Detect Insider Trading
             </div>
-            <h1>Research Tokens.<br/><span>Trade Smarter.</span></h1>
+            <h1>Detect Coordinated Wallets<br/><span>Before They Dump</span></h1>
             <p>
-              Comprehensive AI analysis for Solana tokens. Security checks, bundle detection,
-              holder distribution, and one-click trading in a single dashboard.
+              Expose insider clusters and pump groups on Solana with bundle detection.
+              See what coordinated wallets are hiding before you invest.
             </p>
 
             <div className="hero-actions">
-              <a href="https://app.argusguard.io" className="btn btn-primary">Start Researching</a>
-              <a href="https://github.com" target="_blank" rel="noopener noreferrer" className="btn btn-outline">
+              <a href="https://app.argusguard.io" className="btn btn-primary">Start Detecting Bundles</a>
+              <a href="https://github.com/ArgusGuardAI/argus-ai" target="_blank" rel="noopener noreferrer" className="btn btn-outline">
                 <svg style={{ marginRight: 8 }} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg>
                 View Source
               </a>
@@ -1118,37 +1220,61 @@ export default function Landing() {
           </div>
         </section>
 
+        {/* STATS */}
+        <section className="stats">
+          <div className="container">
+            <div className="stats-grid">
+              <div>
+                <div className="stat-value">10,000+</div>
+                <div className="stat-label">Tokens Analyzed</div>
+              </div>
+              <div>
+                <div className="stat-value">500+</div>
+                <div className="stat-label">Bundles Detected</div>
+              </div>
+              <div>
+                <div className="stat-value">&lt;3s</div>
+                <div className="stat-label">Analysis Time</div>
+              </div>
+              <div>
+                <div className="stat-value">100%</div>
+                <div className="stat-label">Free Data</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
         {/* FEATURES */}
         <section id="features" className="features">
           <div className="container">
             <div className="section-header">
-              <h2>Everything you need to research tokens</h2>
-              <p>Comprehensive analysis tools to make informed trading decisions</p>
+              <h2>Stop Getting Rugged</h2>
+              <p>Comprehensive analysis tools to detect manipulation before you invest</p>
             </div>
 
             <div className="feature-grid">
               <div className="feature-card">
                 <div className="icon-bg">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                </div>
-                <div className="card-title">Security Analysis</div>
-                <div className="card-desc">Check mint/freeze authority status, LP lock percentage, and contract risks instantly.</div>
-              </div>
-
-              <div className="feature-card">
-                <div className="icon-bg">
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                 </div>
                 <div className="card-title">Bundle Detection</div>
-                <div className="card-desc">Identify coordinated wallet clusters that may indicate insider trading or pump groups.</div>
+                <div className="card-desc">Expose coordinated wallet clusters that indicate insider trading, pump groups, or coordinated dumps. See the manipulation others miss.</div>
               </div>
 
               <div className="feature-card">
                 <div className="icon-bg">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
                 </div>
-                <div className="card-title">AI Verdict</div>
-                <div className="card-desc">Get instant AI-powered analysis with risk scores and trading signals.</div>
+                <div className="card-title">Auto-Sell Protection</div>
+                <div className="card-desc">Set take profit, stop loss, and trailing stops to automatically exit positions. Lock in gains and limit losses while you sleep.</div>
+              </div>
+
+              <div className="feature-card">
+                <div className="icon-bg">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                </div>
+                <div className="card-title">Security Analysis</div>
+                <div className="card-desc">Instant checks on mint/freeze authority, LP lock percentage, and contract risks. Know if the token can be rugpulled.</div>
               </div>
 
               <div className="feature-card">
@@ -1156,15 +1282,15 @@ export default function Landing() {
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
                 </div>
                 <div className="card-title">One-Click Trading</div>
-                <div className="card-desc">Buy tokens directly from the dashboard with your dedicated trading wallet.</div>
+                <div className="card-desc">Buy tokens directly from the dashboard with your dedicated trading wallet. No popup confirmations, just instant execution.</div>
               </div>
 
               <div className="feature-card">
                 <div className="icon-bg">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
                 </div>
-                <div className="card-title">Auto-Sell</div>
-                <div className="card-desc">Set take profit, stop loss, and trailing stop to automate your exits.</div>
+                <div className="card-title">Risk Scoring</div>
+                <div className="card-desc">Get instant risk scores and trading signals with written analysis explaining the verdict. Make informed decisions fast.</div>
               </div>
 
               <div className="feature-card">
@@ -1172,7 +1298,7 @@ export default function Landing() {
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
                 </div>
                 <div className="card-title">Position Tracking</div>
-                <div className="card-desc">Monitor all your positions with real-time P&L and easy sell controls.</div>
+                <div className="card-desc">Monitor all your positions with real-time P&L, entry/exit prices, and easy sell controls. Everything in one dashboard.</div>
               </div>
             </div>
           </div>
@@ -1183,7 +1309,7 @@ export default function Landing() {
           <div className="container">
             <div className="section-header">
               <h2>How It Works</h2>
-              <p>Research any Solana token in four simple steps</p>
+              <p>Expose insider trading in four simple steps</p>
             </div>
 
             <div className="steps-grid">
@@ -1194,19 +1320,62 @@ export default function Landing() {
               </div>
               <div className="step">
                 <div className="step-number">2</div>
-                <div className="step-title">AI Analysis</div>
-                <div className="step-desc">Proprietary AI performs deep analysis using trade-secret algorithms</div>
+                <div className="step-title">Detect Bundles</div>
+                <div className="step-desc">Algorithm analyzes holder patterns to find coordinated wallet clusters</div>
               </div>
               <div className="step">
                 <div className="step-number">3</div>
-                <div className="step-title">Review Results</div>
-                <div className="step-desc">See security status, holder distribution, and risk score</div>
+                <div className="step-title">Review Analysis</div>
+                <div className="step-desc">See security status, bundle warnings, and risk assessment</div>
               </div>
               <div className="step">
                 <div className="step-number">4</div>
-                <div className="step-title">Trade</div>
-                <div className="step-desc">Buy with one click using your dedicated trading wallet</div>
+                <div className="step-title">Trade Smart</div>
+                <div className="step-desc">Buy with confidence or avoid the rug—your choice</div>
               </div>
+            </div>
+          </div>
+        </section>
+
+        {/* TOKEN TEASER */}
+        <section id="token" className="token-teaser">
+          <div className="container">
+            <div className="teaser-content">
+              <div className="teaser-badge">
+                🔥 COMING SOON
+              </div>
+              <h2>$ARGUS Token Launch</h2>
+              <p>
+                Early holders gain access to premium features, reduced trading fees, and governance rights.
+                Position yourself before the public launch for maximum upside.
+              </p>
+
+              <div className="ca-box">
+                <div className="ca-label">Contract Address</div>
+                <div className="ca-address">TBA - Launching Soon</div>
+              </div>
+
+              <div className="teaser-benefits">
+                <div className="benefit-item">
+                  <div className="benefit-icon">💎</div>
+                  <div className="benefit-title">Premium Features</div>
+                  <div className="benefit-desc">Advanced analytics, unlimited scans, priority support</div>
+                </div>
+                <div className="benefit-item">
+                  <div className="benefit-icon">💰</div>
+                  <div className="benefit-title">Revenue Share</div>
+                  <div className="benefit-desc">Earn from platform trading fees as a holder</div>
+                </div>
+                <div className="benefit-item">
+                  <div className="benefit-icon">🗳️</div>
+                  <div className="benefit-title">Governance Rights</div>
+                  <div className="benefit-desc">Vote on protocol upgrades and feature priorities</div>
+                </div>
+              </div>
+
+              <p style={{ fontSize: '0.95rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                Regulation tokenomics incoming. Early investors could see significant upside as platform adoption grows.
+              </p>
             </div>
           </div>
         </section>
@@ -1294,15 +1463,15 @@ export default function Landing() {
                 <div className="roadmap-list">
                   <div className="roadmap-item">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>
-                    <span>Token research dashboard</span>
+                    <span>Bundle detection system</span>
                   </div>
                   <div className="roadmap-item">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>
-                    <span>AI-powered analysis</span>
+                    <span>Security analysis</span>
                   </div>
                   <div className="roadmap-item">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>
-                    <span>Bundle detection</span>
+                    <span>Auto-sell protection</span>
                   </div>
                   <div className="roadmap-item">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>
@@ -1317,7 +1486,7 @@ export default function Landing() {
                 <div className="roadmap-list">
                   <div className="roadmap-item">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/></svg>
-                    <span>Portfolio analytics</span>
+                    <span>$ARGUS token launch</span>
                   </div>
                   <div className="roadmap-item">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/></svg>
@@ -1344,7 +1513,7 @@ export default function Landing() {
                   </div>
                   <div className="roadmap-item">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/></svg>
-                    <span>Advanced AI models</span>
+                    <span>Advanced detection models</span>
                   </div>
                   <div className="roadmap-item">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/></svg>
@@ -1352,7 +1521,7 @@ export default function Landing() {
                   </div>
                   <div className="roadmap-item">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/></svg>
-                    <span>Premium features</span>
+                    <span>Enterprise features</span>
                   </div>
                 </div>
               </div>
@@ -1402,7 +1571,7 @@ export default function Landing() {
                 <div className="team-role">Community</div>
                 <div className="team-bio">Built with love by the open source community.</div>
                 <div className="team-social">
-                  <a href="https://github.com" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
+                  <a href="https://github.com/ArgusGuardAI/argus-ai" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
                   </a>
                 </div>
@@ -1414,7 +1583,7 @@ export default function Landing() {
                 <div className="team-role">Contributor</div>
                 <div className="team-bio">Join us! We're always looking for contributors.</div>
                 <div className="team-social">
-                  <a href="https://github.com" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
+                  <a href="https://github.com/ArgusGuardAI/argus-ai" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
                   </a>
                 </div>
@@ -1426,33 +1595,9 @@ export default function Landing() {
         {/* CTA */}
         <section className="cta">
           <div className="container">
-            <h2>Ready to Research Smarter?</h2>
-            <p>Start analyzing tokens with AI-powered insights today.</p>
+            <h2>Ready to Stop Getting Rugged?</h2>
+            <p>Start detecting coordinated dumps before they happen.</p>
             <a href="https://app.argusguard.io" className="btn btn-accent">Launch App</a>
-          </div>
-        </section>
-
-        {/* STATS */}
-        <section className="stats">
-          <div className="container">
-            <div className="stats-grid">
-              <div>
-                <div className="stat-value">FREE</div>
-                <div className="stat-label">Data Sources</div>
-              </div>
-              <div>
-                <div className="stat-value">&lt;3s</div>
-                <div className="stat-label">Analysis Time</div>
-              </div>
-              <div>
-                <div className="stat-value">100%</div>
-                <div className="stat-label">Open Source</div>
-              </div>
-              <div>
-                <div className="stat-value">0.5%</div>
-                <div className="stat-label">Trading Fee</div>
-              </div>
-            </div>
           </div>
         </section>
 
@@ -1467,9 +1612,9 @@ export default function Landing() {
             </div>
             <div className="footer-links">
               <a href="#features">Features</a>
-              <a href="#tokenomics">Token</a>
+              <a href="#token">Token</a>
               <a href="#roadmap">Roadmap</a>
-              <a href="https://github.com" target="_blank" rel="noopener noreferrer">GitHub</a>
+              <a href="https://github.com/ArgusGuardAI/argus-ai" target="_blank" rel="noopener noreferrer">GitHub</a>
             </div>
             <div className="copyright">
               2026 Argus AI. Open Source under MIT License.
