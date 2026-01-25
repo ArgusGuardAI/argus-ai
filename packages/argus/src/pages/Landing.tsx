@@ -1,14 +1,16 @@
 const styles = `
-  /* --- DESIGN TOKENS (LIGHT THEME) --- */
+  /* --- DESIGN TOKENS (DARK THEME) --- */
   .landing-page {
-    --bg-body: #FAFAFA;
-    --bg-card: #FFFFFF;
-    --text-main: #09090B;
-    --text-muted: #71717A;
-    --primary: #000000;
+    --bg-body: #09090B;
+    --bg-card: #111113;
+    --bg-elevated: #18181B;
+    --text-main: #FAFAFA;
+    --text-muted: #A1A1AA;
+    --primary: #FFFFFF;
     --accent: #10B981;
-    --border: #E4E4E7;
-    --border-light: #F4F4F5;
+    --accent-glow: rgba(16, 185, 129, 0.15);
+    --border: #27272A;
+    --border-light: #1F1F23;
     --radius-sm: 8px;
     --radius-md: 12px;
     --radius-lg: 16px;
@@ -46,27 +48,27 @@ const styles = `
     letter-spacing: -0.01em;
   }
 
-  .landing-page .btn-black {
-    background: linear-gradient(135deg, #09090B 0%, #27272A 100%);
+  .landing-page .btn-primary {
+    background: linear-gradient(135deg, #10B981 0%, #059669 100%);
     color: white;
     border: none;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    box-shadow: 0 4px 20px rgba(16, 185, 129, 0.3);
   }
 
-  .landing-page .btn-black:hover {
+  .landing-page .btn-primary:hover {
     transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(0,0,0,0.2);
+    box-shadow: 0 8px 30px rgba(16, 185, 129, 0.4);
   }
 
   .landing-page .btn-outline {
-    background-color: white;
+    background-color: transparent;
     color: var(--text-main);
     border: 1px solid var(--border);
   }
 
   .landing-page .btn-outline:hover {
-    border-color: var(--text-main);
-    background: var(--border-light);
+    border-color: var(--accent);
+    background: var(--accent-glow);
   }
 
   .landing-page .badge {
@@ -102,7 +104,7 @@ const styles = `
     top: 0;
     width: 100%;
     z-index: 100;
-    background: rgba(250, 250, 250, 0.85);
+    background: rgba(9, 9, 11, 0.85);
     backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--border);
   }
@@ -124,13 +126,14 @@ const styles = `
   }
 
   .landing-page .logo-icon {
-    width: 36px;
-    height: 36px;
-    background: linear-gradient(135deg, #09090B 0%, #27272A 100%);
-    border-radius: 10px;
+    width: 44px;
+    height: 44px;
+    background: linear-gradient(135deg, #18181B 0%, #09090B 100%);
+    border-radius: 12px;
     display: flex;
     align-items: center;
     justify-content: center;
+    border: 1px solid #27272A;
   }
 
   .landing-page .nav-links {
@@ -202,7 +205,7 @@ const styles = `
     align-items: center;
     padding: 0 16px;
     justify-content: space-between;
-    background: var(--border-light);
+    background: var(--bg-elevated);
   }
 
   .landing-page .ui-dots { display: flex; gap: 6px; }
@@ -213,7 +216,7 @@ const styles = `
 
   .landing-page .ui-body {
     padding: 24px;
-    background: white;
+    background: var(--bg-card);
   }
 
   /* Search Bar */
@@ -230,12 +233,12 @@ const styles = `
     border-radius: var(--radius-sm);
     font-size: 0.9rem;
     color: var(--text-muted);
-    background: var(--border-light);
+    background: var(--bg-elevated);
   }
 
   .landing-page .ui-search-btn {
     padding: 14px 24px;
-    background: var(--primary);
+    background: linear-gradient(135deg, #10B981 0%, #059669 100%);
     color: white;
     border-radius: var(--radius-sm);
     font-weight: 600;
@@ -312,7 +315,7 @@ const styles = `
   }
 
   .landing-page .ui-card {
-    background: var(--border-light);
+    background: var(--bg-elevated);
     border-radius: var(--radius-sm);
     padding: 16px;
   }
@@ -342,7 +345,7 @@ const styles = `
 
   /* Holders Section */
   .landing-page .ui-holders {
-    background: var(--border-light);
+    background: var(--bg-elevated);
     border-radius: var(--radius-sm);
     padding: 16px;
     margin-bottom: 20px;
@@ -374,7 +377,7 @@ const styles = `
   .landing-page .ui-holder-bar {
     flex: 1;
     height: 8px;
-    background: #E4E4E7;
+    background: var(--border);
     border-radius: 4px;
     overflow: hidden;
   }
@@ -384,7 +387,7 @@ const styles = `
     border-radius: 4px;
   }
 
-  .landing-page .ui-holder-fill.normal { background: #09090B; }
+  .landing-page .ui-holder-fill.normal { background: var(--accent); }
   .landing-page .ui-holder-fill.bundle { background: #EF4444; }
 
   .landing-page .ui-holder-pct {
@@ -410,17 +413,18 @@ const styles = `
 
   .landing-page .ui-amount {
     padding: 10px 16px;
-    background: white;
+    background: var(--bg-elevated);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     font-size: 0.85rem;
     font-weight: 500;
+    color: var(--text-muted);
   }
 
   .landing-page .ui-amount.active {
-    background: var(--primary);
+    background: var(--accent);
     color: white;
-    border-color: var(--primary);
+    border-color: var(--accent);
   }
 
   .landing-page .ui-buy-btn {
@@ -448,6 +452,7 @@ const styles = `
     font-weight: 800;
     letter-spacing: -0.03em;
     margin-bottom: 16px;
+    color: var(--accent);
   }
 
   .landing-page .section-header p {
@@ -472,21 +477,21 @@ const styles = `
   }
 
   .landing-page .feature-card:hover {
-    border-color: var(--text-main);
+    border-color: var(--accent);
     transform: translateY(-4px);
-    box-shadow: 0 12px 24px rgba(0,0,0,0.08);
+    box-shadow: 0 12px 40px rgba(16, 185, 129, 0.15);
   }
 
   .landing-page .icon-bg {
     width: 52px;
     height: 52px;
-    background: var(--border-light);
+    background: var(--accent-glow);
     border-radius: 12px;
     display: flex;
     align-items: center;
     justify-content: center;
     margin-bottom: 20px;
-    color: var(--text-main);
+    color: var(--accent);
   }
 
   .landing-page .card-title {
@@ -494,6 +499,7 @@ const styles = `
     font-weight: 700;
     margin-bottom: 10px;
     letter-spacing: -0.01em;
+    color: var(--accent);
   }
 
   .landing-page .card-desc {
@@ -505,7 +511,7 @@ const styles = `
   /* --- STATS --- */
   .landing-page .stats {
     padding: 60px 0;
-    background: var(--bg-card);
+    background: var(--bg-elevated);
     border-top: 1px solid var(--border);
     border-bottom: 1px solid var(--border);
   }
@@ -522,6 +528,7 @@ const styles = `
     font-weight: 800;
     letter-spacing: -0.03em;
     margin-bottom: 4px;
+    color: var(--accent);
   }
 
   .landing-page .stat-label {
@@ -568,7 +575,7 @@ const styles = `
   /* --- HOW IT WORKS --- */
   .landing-page .how-it-works {
     padding: 100px 0;
-    background: var(--bg-card);
+    background: var(--bg-elevated);
     border-top: 1px solid var(--border);
   }
 
@@ -614,6 +621,7 @@ const styles = `
     font-size: 1.1rem;
     font-weight: 700;
     margin-bottom: 8px;
+    color: var(--accent);
   }
 
   .landing-page .step-desc {
@@ -640,6 +648,7 @@ const styles = `
     font-weight: 800;
     margin-bottom: 16px;
     letter-spacing: -0.02em;
+    color: var(--accent);
   }
 
   .landing-page .token-info p {
@@ -656,9 +665,10 @@ const styles = `
   }
 
   .landing-page .token-stat {
-    background: var(--border-light);
+    background: var(--bg-elevated);
     padding: 20px;
     border-radius: var(--radius-md);
+    border: 1px solid var(--border);
   }
 
   .landing-page .token-stat-value {
@@ -685,6 +695,7 @@ const styles = `
     font-weight: 700;
     margin-bottom: 24px;
     text-align: center;
+    color: var(--accent);
   }
 
   .landing-page .chart-bars {
@@ -708,7 +719,7 @@ const styles = `
   .landing-page .chart-track {
     flex: 1;
     height: 24px;
-    background: var(--border-light);
+    background: var(--border);
     border-radius: 12px;
     overflow: hidden;
   }
@@ -734,7 +745,7 @@ const styles = `
   /* --- ROADMAP --- */
   .landing-page .roadmap {
     padding: 100px 0;
-    background: var(--bg-card);
+    background: var(--bg-elevated);
     border-top: 1px solid var(--border);
   }
 
@@ -745,7 +756,7 @@ const styles = `
   }
 
   .landing-page .roadmap-card {
-    background: var(--bg-body);
+    background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     padding: 32px;
@@ -760,7 +771,7 @@ const styles = `
   .landing-page .roadmap-phase {
     display: inline-block;
     padding: 6px 12px;
-    background: var(--border-light);
+    background: var(--border);
     border-radius: 6px;
     font-size: 0.75rem;
     font-weight: 700;
@@ -779,6 +790,7 @@ const styles = `
     font-size: 1.25rem;
     font-weight: 700;
     margin-bottom: 16px;
+    color: var(--accent);
   }
 
   .landing-page .roadmap-list {
@@ -823,7 +835,7 @@ const styles = `
   .landing-page .team-avatar {
     width: 120px;
     height: 120px;
-    background: linear-gradient(135deg, var(--border-light) 0%, var(--border) 100%);
+    background: linear-gradient(135deg, var(--bg-elevated) 0%, var(--border) 100%);
     border-radius: 50%;
     margin: 0 auto 20px;
     display: flex;
@@ -831,13 +843,15 @@ const styles = `
     justify-content: center;
     font-size: 2.5rem;
     font-weight: 800;
-    color: var(--text-muted);
+    color: var(--accent);
+    border: 1px solid var(--border);
   }
 
   .landing-page .team-name {
     font-size: 1.1rem;
     font-weight: 700;
     margin-bottom: 4px;
+    color: var(--accent);
   }
 
   .landing-page .team-role {
@@ -863,7 +877,7 @@ const styles = `
   .landing-page .team-social a {
     width: 36px;
     height: 36px;
-    background: var(--border-light);
+    background: var(--border);
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -872,7 +886,7 @@ const styles = `
   }
 
   .landing-page .team-social a:hover {
-    background: var(--primary);
+    background: var(--accent);
     color: white;
   }
 
@@ -886,7 +900,7 @@ const styles = `
   .landing-page .cta h2 {
     font-size: 2.5rem;
     font-weight: 800;
-    color: white;
+    color: var(--accent);
     margin-bottom: 16px;
     letter-spacing: -0.03em;
   }
@@ -928,7 +942,7 @@ const styles = `
 `;
 
 const Logo = () => (
-  <svg width="20" height="20" viewBox="0 0 32 32" fill="none">
+  <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
     <path d="M16 4L28 26H4L16 4Z" stroke="white" strokeWidth="2" fill="none"/>
     <ellipse cx="16" cy="16" rx="6" ry="4" stroke="white" strokeWidth="1.5" fill="none"/>
     <circle cx="16" cy="16" r="2" fill="white"/>
@@ -956,7 +970,7 @@ export default function Landing() {
                 <a href="#tokenomics">Token</a>
                 <a href="#roadmap">Roadmap</a>
               </div>
-              <a href="/app" className="btn btn-black">Launch App</a>
+              <a href="/app" className="btn btn-primary">Launch App</a>
             </nav>
           </div>
         </header>
@@ -975,7 +989,7 @@ export default function Landing() {
             </p>
 
             <div className="hero-actions">
-              <a href="/app" className="btn btn-black">Start Researching</a>
+              <a href="/app" className="btn btn-primary">Start Researching</a>
               <a href="https://github.com" target="_blank" rel="noopener noreferrer" className="btn btn-outline">
                 <svg style={{ marginRight: 8 }} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg>
                 View Source
@@ -990,7 +1004,7 @@ export default function Landing() {
                   <div className="ui-dot yellow"></div>
                   <div className="ui-dot green"></div>
                 </div>
-                <div style={{ fontSize: '0.75rem', color: '#71717A', fontWeight: 500 }}>Argus AI</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 500 }}>Argus AI</div>
               </div>
               <div className="ui-body">
                 {/* Search Bar */}
