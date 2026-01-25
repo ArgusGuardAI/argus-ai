@@ -1064,44 +1064,58 @@ export default function App() {
                     </span>
                   )}
                 </div>
-                <div className="space-y-2.5">
-                  {analysisResult.holders.top10.slice(0, 5).map((holder, i) => (
-                    <div key={i} className="flex items-center gap-3">
-                      <span className="text-xs text-zinc-500 w-4">{i + 1}</span>
-                      <div className="flex-1">
-                        <div className="h-2.5 bg-zinc-800 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all ${holder.isBundle ? 'bg-gradient-to-r from-red-500 to-red-400' : 'bg-gradient-to-r from-emerald-500 to-emerald-400'}`}
-                            style={{ width: `${Math.min(holder.percent * 2, 100)}%` }}
-                          />
+                {analysisResult.holders.top10.length > 0 && analysisResult.holders.topHolderPercent > 0 ? (
+                  <>
+                    <div className="space-y-2.5">
+                      {analysisResult.holders.top10.slice(0, 5).map((holder, i) => (
+                        <div key={i} className="flex items-center gap-3">
+                          <span className="text-xs text-zinc-500 w-4">{i + 1}</span>
+                          <div className="flex-1">
+                            <div className="h-2.5 bg-zinc-800 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all ${holder.isBundle ? 'bg-gradient-to-r from-red-500 to-red-400' : 'bg-gradient-to-r from-emerald-500 to-emerald-400'}`}
+                                style={{ width: `${Math.min(holder.percent * 2, 100)}%` }}
+                              />
+                            </div>
+                          </div>
+                          <span className={`text-xs font-mono w-12 text-right font-semibold ${holder.isBundle ? 'text-red-500' : 'text-zinc-400'}`}>
+                            {holder.percent.toFixed(1)}%
+                          </span>
+                          <code className="text-[10px] text-zinc-600 w-20 truncate">
+                            {holder.address.slice(0, 4)}...{holder.address.slice(-4)}
+                          </code>
+                          {holder.isBundle && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-900/50 text-red-400 font-semibold">B{holder.bundleId}</span>
+                          )}
                         </div>
-                      </div>
-                      <span className={`text-xs font-mono w-12 text-right font-semibold ${holder.isBundle ? 'text-red-500' : 'text-zinc-400'}`}>
-                        {holder.percent.toFixed(1)}%
-                      </span>
-                      <code className="text-[10px] text-zinc-600 w-20 truncate">
-                        {holder.address.slice(0, 4)}...{holder.address.slice(-4)}
-                      </code>
-                      {holder.isBundle && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-900/50 text-red-400 font-semibold">B{holder.bundleId}</span>
-                      )}
+                      ))}
                     </div>
-                  ))}
-                </div>
-                <div className="mt-4 pt-4 border-t border-zinc-800 grid grid-cols-3 gap-3">
-                  <div className="text-center">
-                    <div className="text-xs text-zinc-500 mb-1">Top 1</div>
-                    <div className="text-sm font-bold text-white">{analysisResult.holders.topHolderPercent.toFixed(1)}%</div>
+                    <div className="mt-4 pt-4 border-t border-zinc-800 grid grid-cols-3 gap-3">
+                      <div className="text-center">
+                        <div className="text-xs text-zinc-500 mb-1">Top 1</div>
+                        <div className="text-sm font-bold text-white">{analysisResult.holders.topHolderPercent.toFixed(1)}%</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-xs text-zinc-500 mb-1">Top 5</div>
+                        <div className="text-sm font-bold text-white">{analysisResult.holders.top5Percent.toFixed(1)}%</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-xs text-zinc-500 mb-1">Top 10</div>
+                        <div className="text-sm font-bold text-white">{analysisResult.holders.top10Percent.toFixed(1)}%</div>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="py-6 text-center">
+                    <div className="w-10 h-10 mx-auto mb-2 rounded-lg bg-zinc-800 flex items-center justify-center">
+                      <svg className="w-5 h-5 text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                    </div>
+                    <p className="text-sm text-zinc-500">Holder data unavailable</p>
+                    <p className="text-xs text-zinc-600 mt-1">Not tracked for established tokens</p>
                   </div>
-                  <div className="text-center">
-                    <div className="text-xs text-zinc-500 mb-1">Top 5</div>
-                    <div className="text-sm font-bold text-white">{analysisResult.holders.top5Percent.toFixed(1)}%</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-xs text-zinc-500 mb-1">Top 10</div>
-                    <div className="text-sm font-bold text-white">{analysisResult.holders.top10Percent.toFixed(1)}%</div>
-                  </div>
-                </div>
+                )}
               </div>
 
               {/* AI Verdict */}

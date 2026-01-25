@@ -305,13 +305,48 @@ app.post('/api/analyze-full', async (c) => {
     let aiResult: any = null;
     try {
       const decision = await localAnalyzer.analyze(tokenData);
+      let adjustedScore = decision.riskScore;
+      let bundleWarning = '';
+
+      // BUNDLE PENALTY: Coordinated wallets are a major red flag
+      // They can dump together and crash the price
+      if (bundleData.detected) {
+        const bundlePercent = bundleData.totalPercent;
+
+        if (bundlePercent >= 40) {
+          // Massive bundle - very dangerous
+          adjustedScore -= 30;
+          bundleWarning = ` CRITICAL: ${bundleData.count} coordinated wallet cluster(s) hold ${bundlePercent.toFixed(1)}% - extreme dump risk.`;
+        } else if (bundlePercent >= 25) {
+          // Large bundle - significant risk
+          adjustedScore -= 20;
+          bundleWarning = ` WARNING: ${bundleData.count} coordinated wallet cluster(s) hold ${bundlePercent.toFixed(1)}% - high dump risk.`;
+        } else if (bundlePercent >= 15) {
+          // Medium bundle - moderate risk
+          adjustedScore -= 12;
+          bundleWarning = ` Caution: ${bundleData.count} coordinated wallet cluster(s) hold ${bundlePercent.toFixed(1)}% of supply.`;
+        } else if (bundlePercent >= 8) {
+          // Small bundle - minor risk
+          adjustedScore -= 5;
+          bundleWarning = ` Note: Small bundle detected (${bundlePercent.toFixed(1)}%).`;
+        }
+
+        // Ensure score doesn't go below 0
+        adjustedScore = Math.max(0, adjustedScore);
+
+        console.log(`[API] Bundle penalty applied: -${decision.riskScore - adjustedScore} points (${bundlePercent.toFixed(1)}% bundled)`);
+      }
+
+      // Determine signal based on adjusted score
+      const signal = adjustedScore >= 75 ? 'STRONG_BUY' :
+                     adjustedScore >= 60 ? 'BUY' :
+                     adjustedScore >= 45 ? 'WATCH' :
+                     adjustedScore >= 30 ? 'HOLD' : 'AVOID';
+
       aiResult = {
-        signal: decision.riskScore >= 75 ? 'STRONG_BUY' :
-                decision.riskScore >= 60 ? 'BUY' :
-                decision.riskScore >= 45 ? 'WATCH' :
-                decision.riskScore >= 30 ? 'HOLD' : 'AVOID',
-        score: decision.riskScore,
-        verdict: decision.reason || decision.analysis?.summary || 'Analysis complete',
+        signal,
+        score: adjustedScore,
+        verdict: (decision.reason || decision.analysis?.summary || 'Analysis complete') + bundleWarning,
       };
     } catch (e) {
       console.log('[API] AI analysis failed:', e);
