@@ -202,8 +202,7 @@ export async function buyToken(
   const swapResult = await executeSwap(quote, userPublicKey, signTransaction);
 
   // If swap succeeded and fee is configured, send the fee
-  // Skip if fee is too small to justify the tx cost (< 0.001 SOL)
-  if (swapResult.success && feeAmount >= 0.001 && ARGUS_FEE_WALLET) {
+  if (swapResult.success && feeAmount > 0 && ARGUS_FEE_WALLET) {
     try {
       const connection = new Connection(HELIUS_RPC, 'confirmed');
       const feeLamports = Math.floor(feeAmount * LAMPORTS_PER_SOL);
@@ -275,8 +274,7 @@ export async function sellToken(
   const swapResult = await executeSwap(quote, userPublicKey, signTransaction);
 
   // If swap succeeded and fee is configured, send the fee from proceeds
-  // Skip if fee is too small to justify the tx cost (< 0.001 SOL)
-  if (swapResult.success && feeAmount >= 0.001 && ARGUS_FEE_WALLET) {
+  if (swapResult.success && feeAmount > 0 && ARGUS_FEE_WALLET) {
     try {
       const connection = new Connection(HELIUS_RPC, 'confirmed');
       const feeLamports = Math.floor(feeAmount * LAMPORTS_PER_SOL);
