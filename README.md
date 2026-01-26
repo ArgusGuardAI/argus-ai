@@ -1,6 +1,10 @@
-# Argus AI
+<p align="center">
+  <img src="assets/logo.svg" alt="Argus AI" width="120" height="120" />
+</p>
 
-**AI-Powered Token Research Tool for Solana**
+<h1 align="center">Argus AI</h1>
+
+<p align="center"><strong>AI-Powered Token Research Tool for Solana</strong></p>
 
 Argus AI is a comprehensive token research tool that provides instant AI analysis, security checks, bundle detection, and one-click trading for Solana tokens.
 
