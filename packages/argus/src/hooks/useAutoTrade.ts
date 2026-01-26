@@ -60,6 +60,7 @@ export interface Position {
   status: 'active' | 'selling' | 'sold' | 'failed';
   sellReason?: 'take_profit' | 'stop_loss' | 'trailing_stop' | 'manual';
   sellTxSignature?: string;
+  sellFailCount?: number;        // Track consecutive sell failures
 }
 
 export interface AutoTradeState {
@@ -358,7 +359,22 @@ export function useAutoTrade(
       // Get current token balance
       const balanceInfo = await getTokenBalance(position.tokenAddress, publicKey.toString());
       if (!balanceInfo || balanceInfo.balance === 0) {
-        throw new Error('No tokens to sell');
+        // No tokens — position is dead, clear it immediately
+        log(`${position.tokenSymbol}: No tokens found — clearing position`, 'warning');
+        setState(prev => ({
+          ...prev,
+          positions: prev.positions.filter(p => p.tokenAddress !== position.tokenAddress),
+          soldPositions: [{
+            ...position,
+            pnlPercent: -100,
+            currentValueSol: 0,
+            status: 'sold' as const,
+            sellReason: reason,
+          }, ...prev.soldPositions].slice(0, 50),
+        }));
+        isSellingRef.current.delete(position.tokenAddress);
+        sellMutexRef.current = false;
+        return { success: true };
       }
 
       // Track SOL balance BEFORE sell to calculate actual profit
@@ -411,13 +427,31 @@ export function useAutoTrade(
 
         refreshBalance();
       } else {
-        log(`SELL FAILED: ${position.tokenSymbol} - ${result.error}`, 'error');
-        setState(prev => ({
-          ...prev,
-          positions: prev.positions.map(p =>
-            p.tokenAddress === position.tokenAddress ? { ...p, status: 'active' as const } : p
-          ),
-        }));
+        const failCount = (position.sellFailCount || 0) + 1;
+        log(`SELL FAILED: ${position.tokenSymbol} - ${result.error} (attempt ${failCount}/3)`, 'error');
+
+        if (failCount >= 3) {
+          // Token is likely dead/rugged — remove position to stop retry loop
+          log(`${position.tokenSymbol}: Removed after 3 failed sell attempts (likely rugged)`, 'error');
+          setState(prev => ({
+            ...prev,
+            positions: prev.positions.filter(p => p.tokenAddress !== position.tokenAddress),
+            soldPositions: [{
+              ...position,
+              pnlPercent: -100,
+              currentValueSol: 0,
+              status: 'sold' as const,
+              sellReason: position.sellReason || 'stop_loss',
+            }, ...prev.soldPositions].slice(0, 50),
+          }));
+        } else {
+          setState(prev => ({
+            ...prev,
+            positions: prev.positions.map(p =>
+              p.tokenAddress === position.tokenAddress ? { ...p, status: 'active' as const, sellFailCount: failCount } : p
+            ),
+          }));
+        }
       }
 
       isSellingRef.current.delete(position.tokenAddress);
