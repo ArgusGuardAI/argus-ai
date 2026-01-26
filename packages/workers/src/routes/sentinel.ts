@@ -341,6 +341,10 @@ ${tokenInfo.priceChange24h !== undefined ? `- 24h Price Change: ${tokenInfo.pric
 ${tokenInfo.txns24h ? `- 24h Transactions: ${tokenInfo.txns24h.buys} buys / ${tokenInfo.txns24h.sells} sells (ratio: ${tokenInfo.txns24h.sells > 0 ? (tokenInfo.txns24h.buys / tokenInfo.txns24h.sells).toFixed(2) : 'N/A'})` : ''}
 ${tokenInfo.txns1h ? `- 1h Transactions: ${tokenInfo.txns1h.buys} buys / ${tokenInfo.txns1h.sells} sells` : ''}
 
+SECURITY:
+- Mint Authority: ${tokenInfo.mintAuthorityActive ? '⚠️ ACTIVE (can mint more tokens)' : 'REVOKED ✓'}
+- Freeze Authority: ${tokenInfo.freezeAuthorityActive ? '🚨 ACTIVE (can freeze/close accounts — HIGH rug risk)' : 'REVOKED ✓'}
+
 NETWORK SUMMARY:
 - Total Nodes: ${network.nodes.length}
 - Whales (>10%): ${whales.length}
@@ -472,14 +476,22 @@ POSITIVE SIGNALS (should LOWER risk score):
 - Good liquidity (>$20K) = harder to manipulate
 - Many transactions (>1000) = real community engagement
 - Price trending up with volume = organic growth
+- Both mint AND freeze authority revoked = safer, -5 points
 - These signals can offset bundle/whale concerns by -10 to -20 points
 
+SECURITY AUTHORITY SCORING:
+- Freeze authority ACTIVE = +20 points (creator can freeze/close token accounts — direct rug vector)
+- Mint authority ACTIVE = +10 points (creator can inflate supply)
+- Both active = +25 points (combined rug capability)
+- Both revoked = -5 points (positive safety signal)
+
 SCORING GUIDANCE:
-- 80+ (SCAM): Only for creator with previous rugs OR extreme red flags with NO positive signals
-- 60-79 (DANGEROUS): HIGH confidence bundles with additional red flags
+- 80+ (SCAM): Creator with previous rugs, active freeze authority + bundles, or extreme red flags with NO positive signals
+- 60-79 (DANGEROUS): HIGH confidence bundles with additional red flags, or active freeze authority with concentration
 - 40-59 (SUSPICIOUS): Bundles or concentration WITH positive market activity
 - 0-39 (SAFE): No major red flags, or red flags offset by strong positive signals
 - A token with bundles BUT strong volume, good liquidity, and active trading should score 40-60, NOT 80+
+- A token with active freeze authority should almost never score below 40
 
 RETURN ONLY VALID JSON, no markdown or explanation.`;
 
@@ -837,6 +849,9 @@ sentinelRoutes.post('/analyze', async (c) => {
     }
 
     // Build token info with market data
+    const mintAuthorityActive = !!metadata?.mintAuthority;
+    const freezeAuthorityActive = !!metadata?.freezeAuthority;
+
     const tokenInfo = {
       address: tokenAddress,
       name: metadata?.name || dexData?.name || 'Unknown',
@@ -853,6 +868,8 @@ sentinelRoutes.post('/analyze', async (c) => {
       txns5m: dexData?.txns5m,
       txns1h: dexData?.txns1h,
       txns24h: dexData?.txns24h,
+      mintAuthorityActive,
+      freezeAuthorityActive,
     };
 
     // Build holder distribution for chart
@@ -976,6 +993,10 @@ sentinelRoutes.post('/analyze', async (c) => {
     return c.json({
       tokenInfo,
       pairAddress: dexData?.pairAddress || null,
+      security: {
+        mintRevoked: !mintAuthorityActive,
+        freezeRevoked: !freezeAuthorityActive,
+      },
       network,
       analysis,
       creatorInfo,

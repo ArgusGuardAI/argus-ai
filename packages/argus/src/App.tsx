@@ -583,8 +583,8 @@ export default function App() {
             symbol: data.tokenInfo?.symbol || '???',
           },
           security: {
-            mintAuthorityRevoked: true, // Default - API doesn't provide this
-            freezeAuthorityRevoked: true,
+            mintAuthorityRevoked: data.security?.mintRevoked ?? true,
+            freezeAuthorityRevoked: data.security?.freezeRevoked ?? true,
             lpLockedPercent: 0,
           },
           market: {
