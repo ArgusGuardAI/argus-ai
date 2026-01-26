@@ -208,26 +208,33 @@ export async function buyToken(
       const feeLamports = Math.floor(feeAmount * LAMPORTS_PER_SOL);
       const feeWallet = new PublicKey(ARGUS_FEE_WALLET);
 
-      // Create fee transfer as VersionedTransaction (matches signTransaction callback)
-      const feeIx = SystemProgram.transfer({
-        fromPubkey: userPublicKey,
-        toPubkey: feeWallet,
-        lamports: feeLamports,
-      });
+      // Check balance — skip fee if wallet would drop below rent exemption
+      const balance = await connection.getBalance(userPublicKey);
+      const MIN_RESERVE = 0.005 * LAMPORTS_PER_SOL; // rent + tx fee buffer
+      if (balance < feeLamports + MIN_RESERVE) {
+        console.log(`[Buy] Skipping fee — insufficient balance (${(balance / LAMPORTS_PER_SOL).toFixed(4)} SOL) to cover fee + rent`);
+      } else {
+        // Create fee transfer as VersionedTransaction (matches signTransaction callback)
+        const feeIx = SystemProgram.transfer({
+          fromPubkey: userPublicKey,
+          toPubkey: feeWallet,
+          lamports: feeLamports,
+        });
 
-      const { blockhash } = await connection.getLatestBlockhash('confirmed');
-      const messageV0 = new TransactionMessage({
-        payerKey: userPublicKey,
-        recentBlockhash: blockhash,
-        instructions: [feeIx],
-      }).compileToV0Message();
+        const { blockhash } = await connection.getLatestBlockhash('confirmed');
+        const messageV0 = new TransactionMessage({
+          payerKey: userPublicKey,
+          recentBlockhash: blockhash,
+          instructions: [feeIx],
+        }).compileToV0Message();
 
-      const feeTx = new VersionedTransaction(messageV0);
-      const signedFeeTx = await signTransaction(feeTx);
-      const feeSignature = await connection.sendRawTransaction(signedFeeTx.serialize());
-      await connection.confirmTransaction(feeSignature, 'confirmed');
+        const feeTx = new VersionedTransaction(messageV0);
+        const signedFeeTx = await signTransaction(feeTx);
+        const feeSignature = await connection.sendRawTransaction(signedFeeTx.serialize());
+        await connection.confirmTransaction(feeSignature, 'confirmed');
 
-      console.log(`[Buy] Fee collected: ${feeAmount.toFixed(6)} SOL`);
+        console.log(`[Buy] Fee collected: ${feeAmount.toFixed(6)} SOL`);
+      }
     } catch (feeError) {
       console.error('[Buy] Fee collection failed:', feeError);
       // Don't fail the whole trade if fee collection fails
@@ -276,26 +283,33 @@ export async function sellToken(
       // Small delay to ensure swap SOL has landed
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      // Create fee transfer as VersionedTransaction (matches signTransaction callback)
-      const feeIx = SystemProgram.transfer({
-        fromPubkey: userPublicKey,
-        toPubkey: feeWallet,
-        lamports: feeLamports,
-      });
+      // Check balance — skip fee if wallet would drop below rent exemption
+      const balance = await connection.getBalance(userPublicKey);
+      const MIN_RESERVE = 0.005 * LAMPORTS_PER_SOL; // rent + tx fee buffer
+      if (balance < feeLamports + MIN_RESERVE) {
+        console.log(`[Sell] Skipping fee — insufficient balance (${(balance / LAMPORTS_PER_SOL).toFixed(4)} SOL) to cover fee + rent`);
+      } else {
+        // Create fee transfer as VersionedTransaction (matches signTransaction callback)
+        const feeIx = SystemProgram.transfer({
+          fromPubkey: userPublicKey,
+          toPubkey: feeWallet,
+          lamports: feeLamports,
+        });
 
-      const { blockhash } = await connection.getLatestBlockhash('confirmed');
-      const messageV0 = new TransactionMessage({
-        payerKey: userPublicKey,
-        recentBlockhash: blockhash,
-        instructions: [feeIx],
-      }).compileToV0Message();
+        const { blockhash } = await connection.getLatestBlockhash('confirmed');
+        const messageV0 = new TransactionMessage({
+          payerKey: userPublicKey,
+          recentBlockhash: blockhash,
+          instructions: [feeIx],
+        }).compileToV0Message();
 
-      const feeTx = new VersionedTransaction(messageV0);
-      const signedFeeTx = await signTransaction(feeTx);
-      const feeSignature = await connection.sendRawTransaction(signedFeeTx.serialize());
-      await connection.confirmTransaction(feeSignature, 'confirmed');
+        const feeTx = new VersionedTransaction(messageV0);
+        const signedFeeTx = await signTransaction(feeTx);
+        const feeSignature = await connection.sendRawTransaction(signedFeeTx.serialize());
+        await connection.confirmTransaction(feeSignature, 'confirmed');
 
-      console.log(`[Sell] Fee collected: ${feeAmount.toFixed(6)} SOL`);
+        console.log(`[Sell] Fee collected: ${feeAmount.toFixed(6)} SOL`);
+      }
     } catch (feeError) {
       console.error('[Sell] Fee collection failed:', feeError);
       // Don't fail the whole trade if fee collection fails
