@@ -244,7 +244,6 @@ export default function App() {
   const [isBuying, setIsBuying] = useState(false);
   const [isSelling, setIsSelling] = useState(false);
   const [logs, setLogs] = useState<Array<{ time: Date; msg: string; type: string }>>([]);
-  const [showSettings, setShowSettings] = useState(false);
   const [showBuyConfig, setShowBuyConfig] = useState(false);
 
   // Wallet management
@@ -536,19 +535,8 @@ export default function App() {
               </div>
             </div>
 
-            {/* Right Side - Wallet & Settings */}
+            {/* Right Side - Wallet */}
             <div className="flex items-center gap-3">
-              {/* Settings Button */}
-              <button
-                onClick={() => setShowSettings(!showSettings)}
-                className={`p-2.5 rounded-lg transition-all ${showSettings ? 'bg-emerald-500 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-              </button>
-
               {/* Wallet */}
               {autoTrade.wallet.isLoaded ? (
                 <div className="relative">
@@ -776,105 +764,6 @@ export default function App() {
             >
               Backup Now
             </button>
-          </div>
-        </div>
-      )}
-
-      {/* Settings Panel */}
-      {showSettings && (
-        <div className="bg-zinc-900 border-b border-zinc-800 shadow-sm">
-          <div className="max-w-7xl mx-auto px-6 py-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-              {/* Auto-Sell Settings */}
-              <div className="bg-zinc-800 rounded-xl p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold text-emerald-500">Auto-Sell</h3>
-                  <button
-                    onClick={() => autoTrade.updateConfig({ autoSellEnabled: !autoTrade.config.autoSellEnabled })}
-                    className={`w-12 h-6 rounded-full transition-colors relative ${autoTrade.config.autoSellEnabled ? 'bg-green-500' : 'bg-slate-300'}`}
-                  >
-                    <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${autoTrade.config.autoSellEnabled ? 'translate-x-7' : 'translate-x-1'}`} />
-                  </button>
-                </div>
-                <div className="space-y-4">
-                  <div>
-                    <label className="text-xs text-zinc-500 mb-2 block">Take Profit</label>
-                    <div className="flex gap-1.5">
-                      {[50, 100, 200, 500].map(t => (
-                        <button
-                          key={t}
-                          onClick={() => autoTrade.updateConfig({ takeProfitPercent: t })}
-                          className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${autoTrade.config.takeProfitPercent === t ? 'bg-green-500 text-white' : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600'}`}
-                        >
-                          +{t}%
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-xs text-zinc-500 mb-2 block">Stop Loss</label>
-                    <div className="flex gap-1.5">
-                      {[20, 30, 50, 70].map(s => (
-                        <button
-                          key={s}
-                          onClick={() => autoTrade.updateConfig({ stopLossPercent: s })}
-                          className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${autoTrade.config.stopLossPercent === s ? 'bg-red-500 text-white' : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600'}`}
-                        >
-                          -{s}%
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-xs text-zinc-500 mb-2 block">Trailing Stop</label>
-                    <div className="flex gap-1.5">
-                      {[0, 10, 20, 30].map(t => (
-                        <button
-                          key={t}
-                          onClick={() => autoTrade.updateConfig({ trailingStopPercent: t })}
-                          className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${autoTrade.config.trailingStopPercent === t ? 'bg-amber-500 text-white' : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600'}`}
-                        >
-                          {t === 0 ? 'Off' : `-${t}%`}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Stats & History */}
-              <div className="bg-zinc-800 rounded-xl p-5">
-                <h3 className="font-semibold text-emerald-500 mb-4">Statistics</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-zinc-900 rounded-lg p-3">
-                    <div className="text-xs text-zinc-500">Total Trades</div>
-                    <div className="text-xl font-bold text-white">{autoTrade.state.totalTraded}</div>
-                  </div>
-                  <div className="bg-zinc-900 rounded-lg p-3">
-                    <div className="text-xs text-zinc-500">Success Rate</div>
-                    <div className="text-xl font-bold text-white">
-                      {autoTrade.state.totalTraded > 0 ? ((autoTrade.state.totalSuccessful / autoTrade.state.totalTraded) * 100).toFixed(0) : 0}%
-                    </div>
-                  </div>
-                  <div className="bg-zinc-900 rounded-lg p-3">
-                    <div className="text-xs text-zinc-500">Total Sold</div>
-                    <div className="text-xl font-bold text-white">{autoTrade.state.totalSold}</div>
-                  </div>
-                  <div className="bg-zinc-900 rounded-lg p-3">
-                    <div className="text-xs text-zinc-500">Total P&L</div>
-                    <div className={`text-xl font-bold ${autoTrade.state.totalProfitSol >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                      {autoTrade.state.totalProfitSol >= 0 ? '+' : ''}{autoTrade.state.totalProfitSol.toFixed(4)} SOL
-                    </div>
-                  </div>
-                </div>
-                <button
-                  onClick={() => { if (confirm('Clear all history?')) autoTrade.clearHistory(); }}
-                  className="w-full mt-3 py-2 text-xs font-medium text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700 rounded-lg transition-colors"
-                >
-                  Clear History
-                </button>
-              </div>
-            </div>
           </div>
         </div>
       )}
@@ -1371,33 +1260,93 @@ export default function App() {
 
               {/* Expandable Trade Settings */}
               {showBuyConfig && (
-                <div className="mt-4 pt-4 border-t border-zinc-800 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs text-zinc-500 mb-2 block">Max Slippage</label>
-                    <div className="flex gap-1.5">
-                      {[100, 300, 500, 1000].map(s => (
-                        <button
-                          key={s}
-                          onClick={() => autoTrade.updateConfig({ maxSlippageBps: s })}
-                          className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${autoTrade.config.maxSlippageBps === s ? 'bg-emerald-500 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}
-                        >
-                          {s / 100}%
-                        </button>
-                      ))}
+                <div className="mt-4 pt-4 border-t border-zinc-800 space-y-4">
+                  {/* Buy Config */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs text-zinc-500 mb-2 block">Max Slippage</label>
+                      <div className="flex gap-1.5">
+                        {[100, 300, 500, 1000].map(s => (
+                          <button
+                            key={s}
+                            onClick={() => autoTrade.updateConfig({ maxSlippageBps: s })}
+                            className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${autoTrade.config.maxSlippageBps === s ? 'bg-emerald-500 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}
+                          >
+                            {s / 100}%
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs text-zinc-500 mb-2 block">Reserve Balance</label>
+                      <div className="flex gap-1.5">
+                        {[0.05, 0.1, 0.2, 0.5].map(r => (
+                          <button
+                            key={r}
+                            onClick={() => autoTrade.updateConfig({ reserveBalanceSol: r })}
+                            className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${autoTrade.config.reserveBalanceSol === r ? 'bg-emerald-500 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}
+                          >
+                            {r} SOL
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
-                  <div>
-                    <label className="text-xs text-zinc-500 mb-2 block">Reserve Balance</label>
-                    <div className="flex gap-1.5">
-                      {[0.05, 0.1, 0.2, 0.5].map(r => (
-                        <button
-                          key={r}
-                          onClick={() => autoTrade.updateConfig({ reserveBalanceSol: r })}
-                          className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${autoTrade.config.reserveBalanceSol === r ? 'bg-emerald-500 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}
-                        >
-                          {r} SOL
-                        </button>
-                      ))}
+
+                  {/* Auto-Sell */}
+                  <div className="pt-3 border-t border-zinc-800">
+                    <div className="flex items-center justify-between mb-3">
+                      <label className="text-xs text-zinc-500 font-medium">Auto-Sell</label>
+                      <button
+                        onClick={() => autoTrade.updateConfig({ autoSellEnabled: !autoTrade.config.autoSellEnabled })}
+                        className={`w-10 h-5 rounded-full transition-colors relative ${autoTrade.config.autoSellEnabled ? 'bg-green-500' : 'bg-zinc-600'}`}
+                      >
+                        <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${autoTrade.config.autoSellEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div>
+                        <label className="text-xs text-zinc-500 mb-2 block">Take Profit</label>
+                        <div className="flex gap-1.5">
+                          {[50, 100, 200, 500].map(t => (
+                            <button
+                              key={t}
+                              onClick={() => autoTrade.updateConfig({ takeProfitPercent: t })}
+                              className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${autoTrade.config.takeProfitPercent === t ? 'bg-green-500 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}
+                            >
+                              +{t}%
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs text-zinc-500 mb-2 block">Stop Loss</label>
+                        <div className="flex gap-1.5">
+                          {[20, 30, 50, 70].map(s => (
+                            <button
+                              key={s}
+                              onClick={() => autoTrade.updateConfig({ stopLossPercent: s })}
+                              className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${autoTrade.config.stopLossPercent === s ? 'bg-red-500 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}
+                            >
+                              -{s}%
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs text-zinc-500 mb-2 block">Trailing Stop</label>
+                        <div className="flex gap-1.5">
+                          {[0, 10, 20, 30].map(t => (
+                            <button
+                              key={t}
+                              onClick={() => autoTrade.updateConfig({ trailingStopPercent: t })}
+                              className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${autoTrade.config.trailingStopPercent === t ? 'bg-amber-500 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}
+                            >
+                              {t === 0 ? 'Off' : `-${t}%`}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1447,7 +1396,7 @@ export default function App() {
 
         {/* Positions - Always visible */}
         <div className="mt-8">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-3">
               <h3 className="text-lg font-bold text-emerald-500">Your Positions</h3>
               {autoTrade.state.positions.length > 0 && (
@@ -1456,22 +1405,32 @@ export default function App() {
                 </span>
               )}
             </div>
-            {autoTrade.state.positions.length > 0 && (
-              <div className="flex gap-2">
-                <button
-                  onClick={() => autoTrade.sellAllPositions()}
-                  className="px-4 py-2 rounded-lg text-xs font-semibold bg-red-900/50 text-red-400 hover:bg-red-900/70 transition-colors"
-                >
-                  Sell All
-                </button>
-                <button
-                  onClick={() => autoTrade.clearAllPositions()}
-                  className="px-4 py-2 rounded-lg text-xs font-semibold bg-zinc-800 text-zinc-400 hover:bg-zinc-700 transition-colors"
-                >
-                  Clear All
-                </button>
-              </div>
-            )}
+            <div className="flex items-center gap-3">
+              {autoTrade.state.totalTraded > 0 && (
+                <div className="flex items-center gap-3 text-xs text-zinc-500">
+                  <span>{autoTrade.state.totalTraded} trades</span>
+                  <span className={autoTrade.state.totalProfitSol >= 0 ? 'text-green-500' : 'text-red-500'}>
+                    {autoTrade.state.totalProfitSol >= 0 ? '+' : ''}{autoTrade.state.totalProfitSol.toFixed(4)} SOL
+                  </span>
+                </div>
+              )}
+              {autoTrade.state.positions.length > 0 && (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => autoTrade.sellAllPositions()}
+                    className="px-4 py-2 rounded-lg text-xs font-semibold bg-red-900/50 text-red-400 hover:bg-red-900/70 transition-colors"
+                  >
+                    Sell All
+                  </button>
+                  <button
+                    onClick={() => autoTrade.clearAllPositions()}
+                    className="px-4 py-2 rounded-lg text-xs font-semibold bg-zinc-800 text-zinc-400 hover:bg-zinc-700 transition-colors"
+                  >
+                    Clear All
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
           <div className="bg-zinc-900 rounded-xl border border-zinc-800 overflow-x-auto">
             {autoTrade.state.positions.length > 0 ? (
