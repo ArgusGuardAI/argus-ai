@@ -205,6 +205,14 @@ interface AnalysisResult {
     wallets: string[];
     description?: string;
   };
+  devActivity: {
+    hasSold: boolean;
+    percentSold: number;
+    sellCount: number;
+    currentHoldingsPercent: number;
+    severity: string;
+    message: string;
+  } | null;
   ai: {
     signal: SignalType;
     score: number;
@@ -456,6 +464,14 @@ export default function App() {
             wallets: [],
             description: data.bundleInfo?.description,
           },
+          devActivity: data.devActivity ? {
+            hasSold: data.devActivity.hasSold,
+            percentSold: data.devActivity.percentSold,
+            sellCount: data.devActivity.sellCount,
+            currentHoldingsPercent: data.devActivity.currentHoldingsPercent,
+            severity: data.devActivity.severity,
+            message: data.devActivity.message,
+          } : null,
           ai: {
             signal,
             score,
@@ -1209,6 +1225,36 @@ export default function App() {
                       {analysisResult.bundles.description
                         ? `${analysisResult.bundles.description}. This may indicate coordinated trading.`
                         : `${analysisResult.bundles.count} coordinated wallet${analysisResult.bundles.count > 1 ? 's' : ''} detected. This may indicate coordinated trading.`
+                      }
+                    </p>
+                  </div>
+                )}
+
+                {/* Dev Activity */}
+                {analysisResult.devActivity && (
+                  <div className={`p-4 rounded-xl border mt-3 ${
+                    analysisResult.devActivity.severity === 'CRITICAL' || analysisResult.devActivity.severity === 'HIGH'
+                      ? 'bg-red-900/30 border-red-800'
+                      : analysisResult.devActivity.severity === 'MEDIUM'
+                      ? 'bg-amber-900/30 border-amber-800'
+                      : 'bg-zinc-800/50 border-zinc-700'
+                  }`}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <svg className="w-5 h-5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                      <span className={`text-sm font-bold ${
+                        analysisResult.devActivity.severity === 'CRITICAL' || analysisResult.devActivity.severity === 'HIGH'
+                          ? 'text-red-400'
+                          : analysisResult.devActivity.severity === 'MEDIUM'
+                          ? 'text-amber-400'
+                          : 'text-zinc-300'
+                      }`}>Dev Wallet</span>
+                    </div>
+                    <p className="text-sm text-zinc-400">
+                      {analysisResult.devActivity.hasSold
+                        ? `Dev sold ${analysisResult.devActivity.percentSold.toFixed(0)}% of tokens${analysisResult.devActivity.currentHoldingsPercent > 0.1 ? ` but still holds ${analysisResult.devActivity.currentHoldingsPercent.toFixed(1)}%` : ' and fully exited'}.`
+                        : `Dev has not sold. Currently holds ${analysisResult.devActivity.currentHoldingsPercent.toFixed(1)}% of supply.`
                       }
                     </p>
                   </div>

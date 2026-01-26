@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { Bindings } from '../index';
-import { fetchHeliusTokenMetadata, analyzeTokenTransactions } from '../services/helius';
+import { fetchHeliusTokenMetadata, analyzeTokenTransactions, analyzeDevSelling } from '../services/helius';
 import { fetchDexScreenerData } from '../services/dexscreener';
 import { fetchPumpFunData, isPumpFunToken } from '../services/pumpfun';
 
@@ -298,6 +298,14 @@ async function generateNetworkAnalysis(
     suspiciousPatterns?: string[];
     description?: string;
   },
+  devActivity: {
+    hasSold: boolean;
+    percentSold: number;
+    sellCount: number;
+    currentHoldingsPercent: number;
+    severity: string;
+    message: string;
+  } | null,
   apiKey: string,
   model: string
 ): Promise<{
@@ -391,6 +399,31 @@ CREATOR ANALYSIS:
     }
   }
 
+  // DEV SELLING ACTIVITY - critical for risk assessment
+  if (devActivity) {
+    context += `\nDEV WALLET ACTIVITY:\n`;
+    if (devActivity.hasSold) {
+      context += `- Dev has SOLD ${devActivity.percentSold.toFixed(0)}% of their tokens (${devActivity.sellCount} sell transactions)\n`;
+      context += `- Dev currently holds ${devActivity.currentHoldingsPercent.toFixed(1)}% of supply\n`;
+      context += `- Severity: ${devActivity.severity}\n`;
+      context += `- Assessment: ${devActivity.message}\n`;
+
+      if (devActivity.percentSold >= 90 && devActivity.currentHoldingsPercent < 1) {
+        context += `  ⚠️ Dev has almost completely exited - could be community-owned OR abandoned\n`;
+      } else if (devActivity.percentSold >= 50 && devActivity.currentHoldingsPercent > 5) {
+        context += `  ⚠️ Dev sold majority but still holds enough to dump\n`;
+      } else if (devActivity.percentSold >= 50) {
+        context += `  ⚠️ Dev has been actively selling - reduced dump risk going forward\n`;
+      }
+    } else {
+      context += `- Dev has NOT sold any tokens\n`;
+      context += `- Dev currently holds ${devActivity.currentHoldingsPercent.toFixed(1)}% of supply\n`;
+      if (devActivity.currentHoldingsPercent > 20) {
+        context += `  ⚠️ Dev still holds large position - dump risk exists\n`;
+      }
+    }
+  }
+
   const systemPrompt = `You are Sentinel, an AI that analyzes Solana token wallet networks to predict pump & dump schemes.
 
 Analyze the provided network data and return a JSON response with:
@@ -409,6 +442,13 @@ BUNDLE DETECTION - weight by CONFIDENCE LEVEL:
 - LOW CONFIDENCE bundle (similar holdings only) = MINOR (+5-10 points max)
   * LOW confidence often means natural distribution, NOT a scam
   * Do NOT flag as SCAM based on LOW confidence alone
+
+DEV SELLING ACTIVITY - Include this in your analysis:
+- Dev sold >50% but still holds >5% = "Dev sold X% but still holds Y%" - DUMP RISK
+- Dev sold >90% and holds <1% = Likely community-owned, reduced dump risk
+- Dev has NOT sold and holds >20% = Major dump risk pending
+- Dev has NOT sold and holds <5% = Minor concern
+- Always mention specific percentages in your summary
 
 OTHER RISK FACTORS:
 - Concentrated holdings (few wallets hold most supply) = HIGH RISK
@@ -836,6 +876,18 @@ sentinelRoutes.post('/analyze', async (c) => {
       console.log(`[Sentinel] Creator: ${creatorAddress.slice(0, 8)}, holdings: ${creatorHoldingsPercent.toFixed(1)}%`);
     }
 
+    // Analyze dev selling activity (runs in parallel with nothing blocking it)
+    let devActivity = null;
+    if (creatorAddress) {
+      try {
+        const devStart = Date.now();
+        devActivity = await analyzeDevSelling(creatorAddress, tokenAddress, heliusKey);
+        console.log(`[Sentinel] Dev selling analysis took ${Date.now() - devStart}ms: sold ${devActivity.percentSold.toFixed(0)}%, holds ${devActivity.currentHoldingsPercent.toFixed(1)}%`);
+      } catch (err) {
+        console.warn('[Sentinel] Dev selling analysis failed:', err);
+      }
+    }
+
     // Build token info with market data
     const tokenInfo = {
       address: tokenAddress,
@@ -967,6 +1019,7 @@ sentinelRoutes.post('/analyze', async (c) => {
       network,
       creatorInfo,
       bundleInfo,
+      devActivity,
       togetherKey,
       model
     );
@@ -979,6 +1032,14 @@ sentinelRoutes.post('/analyze', async (c) => {
       creatorInfo,
       holderDistribution,
       bundleInfo,
+      devActivity: devActivity ? {
+        hasSold: devActivity.hasSold,
+        percentSold: devActivity.percentSold,
+        sellCount: devActivity.sellCount,
+        currentHoldingsPercent: devActivity.currentHoldingsPercent,
+        severity: devActivity.severity,
+        message: devActivity.message,
+      } : null,
       timestamp: Date.now(),
     });
   } catch (error) {
