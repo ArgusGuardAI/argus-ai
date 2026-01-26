@@ -801,22 +801,33 @@ export default function App() {
               {/* Wallet */}
               {autoTrade.wallet.isLoaded ? (
                 <div className="relative">
-                  <button
-                    onClick={() => setShowWalletMenu(!showWalletMenu)}
-                    className="flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30 transition-all"
-                  >
-                    <div className="text-right">
-                      <div className="text-[10px] text-emerald-200 truncate max-w-[100px]">{walletName}</div>
-                      <div className="text-sm font-bold">{autoTrade.wallet.balance.toFixed(3)} SOL</div>
-                    </div>
-                    <svg className="w-4 h-4 text-emerald-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setShowWalletMenu(!showWalletMenu)}
+                      className="flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-l-xl shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30 transition-all"
+                    >
+                      <div className="text-right">
+                        <div className="text-[10px] text-emerald-200 truncate max-w-[100px]">{walletName}</div>
+                        <div className="text-sm font-bold">{autoTrade.wallet.balance.toFixed(3)} SOL</div>
+                      </div>
+                      <svg className="w-4 h-4 text-emerald-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); autoTrade.refreshBalance(); }}
+                      className="px-2 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-r-xl shadow-lg shadow-emerald-500/20 transition-all h-full"
+                      title="Refresh balance"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                    </button>
+                  </div>
 
                   {/* Wallet Dropdown */}
                   {showWalletMenu && (
-                    <div className="absolute right-0 mt-2 w-72 bg-zinc-900 rounded-xl shadow-2xl border border-zinc-700 overflow-hidden z-50">
+                    <div className="absolute right-0 mt-2 w-80 bg-zinc-900 rounded-xl shadow-2xl border border-zinc-700 overflow-hidden z-50">
                       <div className="p-4 bg-zinc-800 border-b border-zinc-700">
                         {/* Wallet Name */}
                         <div className="mb-3">
