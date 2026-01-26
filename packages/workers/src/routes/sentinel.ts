@@ -876,13 +876,21 @@ sentinelRoutes.post('/analyze', async (c) => {
       console.log(`[Sentinel] Creator: ${creatorAddress.slice(0, 8)}, holdings: ${creatorHoldingsPercent.toFixed(1)}%`);
     }
 
-    // Analyze dev selling activity (runs in parallel with nothing blocking it)
+    // Analyze dev selling activity
     let devActivity = null;
     if (creatorAddress) {
       try {
         const devStart = Date.now();
-        devActivity = await analyzeDevSelling(creatorAddress, tokenAddress, heliusKey);
-        console.log(`[Sentinel] Dev selling analysis took ${Date.now() - devStart}ms: sold ${devActivity.percentSold.toFixed(0)}%, holds ${devActivity.currentHoldingsPercent.toFixed(1)}%`);
+        const devResult = await analyzeDevSelling(creatorAddress, tokenAddress, heliusKey);
+        console.log(`[Sentinel] Dev selling analysis took ${Date.now() - devStart}ms: sold ${devResult.percentSold.toFixed(0)}%, holds ${devResult.currentHoldingsPercent.toFixed(1)}%`);
+
+        // Only use dev activity if the creator actually held tokens
+        // Update authority / protocol addresses never hold tokens — skip them
+        if (devResult.hasSold || devResult.currentHoldingsPercent > 0) {
+          devActivity = devResult;
+        } else {
+          console.log('[Sentinel] Creator never held tokens (likely protocol authority) — skipping dev activity');
+        }
       } catch (err) {
         console.warn('[Sentinel] Dev selling analysis failed:', err);
       }
