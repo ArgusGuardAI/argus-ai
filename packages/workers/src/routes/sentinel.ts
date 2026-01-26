@@ -920,7 +920,11 @@ sentinelRoutes.post('/analyze', async (c) => {
     if (bundleDetected || bundleConfidence === 'LOW') {
       const parts: string[] = [];
       if (txBundleDetected) {
-        parts.push(`${txBundleCount} wallets bought in same block (${txBundlePercent.toFixed(1)}% of buys)`);
+        if (txBundlePercent > 0) {
+          parts.push(`${txBundleCount} wallets bought in same block (${txBundlePercent.toFixed(1)}% of buys)`);
+        } else {
+          parts.push(`${txBundleCount} wallets transacted in same block`);
+        }
       }
       if (exactSameHoldings.length >= 3) {
         parts.push(`${exactSameHoldings.length} wallets with near-identical holdings`);

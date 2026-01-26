@@ -955,10 +955,12 @@ export async function analyzeTokenTransactions(
     const buyers = new Set<string>();
     const sellers = new Set<string>();
     const slotGroups: Map<number, string[]> = new Map();
+    let totalTransactions = 0;
 
     for (const tx of transactions) {
       if (tx.timestamp < dayAgo) continue;
 
+      totalTransactions++;
       const wallet = tx.feePayer;
       const isBuy = tx.description?.toLowerCase().includes('bought') ||
                     tx.description?.toLowerCase().includes('swap') &&
@@ -996,8 +998,10 @@ export async function analyzeTokenTransactions(
       }
     }
 
-    if (analysis.totalBuys24h > 0) {
-      analysis.bundledBuyPercent = (bundledWallets / analysis.totalBuys24h) * 100;
+    // Calculate bundle percentage using detected buys, falling back to total transactions
+    const denominator = analysis.totalBuys24h > 0 ? analysis.totalBuys24h : totalTransactions;
+    if (denominator > 0 && bundledWallets > 0) {
+      analysis.bundledBuyPercent = (bundledWallets / denominator) * 100;
     }
     analysis.coordinatedWallets = bundledWallets;
 
