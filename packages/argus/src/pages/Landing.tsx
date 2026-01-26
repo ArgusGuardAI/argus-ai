@@ -1,3 +1,21 @@
+import { useState, useEffect } from 'react';
+
+// Set this to the $ARGUS token mint address once launched
+const ARGUS_TOKEN_MINT = '';
+
+function formatMarketCap(n: number): string {
+  if (n >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
+  if (n >= 1e6) return `$${(n / 1e6).toFixed(2)}M`;
+  if (n >= 1e3) return `$${(n / 1e3).toFixed(1)}K`;
+  return `$${n.toFixed(0)}`;
+}
+
+function formatPrice(p: number): string {
+  if (p >= 1) return `$${p.toFixed(2)}`;
+  if (p >= 0.01) return `$${p.toFixed(4)}`;
+  return `$${p.toFixed(6)}`;
+}
+
 const styles = `
   /* --- DESIGN TOKENS (DARK THEME) --- */
   .landing-page {
@@ -178,6 +196,60 @@ const styles = `
     max-width: 560px;
     margin: 0 auto 40px;
     line-height: 1.7;
+  }
+
+  /* --- TOKEN TICKER --- */
+  .landing-page .token-ticker {
+    display: inline-flex;
+    align-items: center;
+    gap: 24px;
+    padding: 16px 32px;
+    background: rgba(17, 17, 19, 0.8);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    backdrop-filter: blur(12px);
+    margin-bottom: 32px;
+  }
+
+  .landing-page .ticker-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .landing-page .ticker-label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+  }
+
+  .landing-page .ticker-value {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-main);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .landing-page .ticker-value.green { color: var(--accent); }
+  .landing-page .ticker-value.red { color: #EF4444; }
+
+  .landing-page .ticker-divider {
+    width: 1px;
+    height: 32px;
+    background: var(--border);
+  }
+
+  .landing-page .ticker-coming-soon {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: 0.02em;
   }
 
   .landing-page .hero-actions {
@@ -1164,6 +1236,8 @@ const styles = `
     .landing-page .ui-cards { grid-template-columns: 1fr; }
     .landing-page .feature-grid { grid-template-columns: 1fr; }
     .landing-page .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .landing-page .token-ticker { gap: 16px; padding: 12px 20px; }
+    .landing-page .ticker-value { font-size: 1rem; }
     .landing-page .nav-links { display: none; }
     .landing-page .steps-grid { grid-template-columns: repeat(2, 1fr); }
     .landing-page .steps-grid::before { display: none; }
@@ -1187,6 +1261,38 @@ const Logo = () => (
 );
 
 export default function Landing() {
+  const [tokenData, setTokenData] = useState<{
+    marketCap: number;
+    price: number;
+    priceChange24h: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!ARGUS_TOKEN_MINT) return;
+
+    const fetchTokenData = async () => {
+      try {
+        const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${ARGUS_TOKEN_MINT}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const pair = data.pairs?.[0];
+        if (pair) {
+          setTokenData({
+            marketCap: pair.marketCap || pair.fdv || 0,
+            price: parseFloat(pair.priceUsd) || 0,
+            priceChange24h: pair.priceChange?.h24 || 0,
+          });
+        }
+      } catch {
+        // Silently fail — ticker just won't update
+      }
+    };
+
+    fetchTokenData();
+    const interval = setInterval(fetchTokenData, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <>
       <style>{styles}</style>
@@ -1225,6 +1331,34 @@ export default function Landing() {
               Expose insider clusters and pump groups on Solana with bundle detection.
               See what coordinated wallets are hiding before you invest.
             </p>
+
+            <div className="token-ticker">
+              {ARGUS_TOKEN_MINT && tokenData ? (
+                <>
+                  <div className="ticker-stat">
+                    <span className="ticker-label">Market Cap</span>
+                    <span className="ticker-value">{formatMarketCap(tokenData.marketCap)}</span>
+                  </div>
+                  <div className="ticker-divider" />
+                  <div className="ticker-stat">
+                    <span className="ticker-label">Price</span>
+                    <span className="ticker-value">{formatPrice(tokenData.price)}</span>
+                  </div>
+                  <div className="ticker-divider" />
+                  <div className="ticker-stat">
+                    <span className="ticker-label">24h</span>
+                    <span className={`ticker-value ${tokenData.priceChange24h >= 0 ? 'green' : 'red'}`}>
+                      {tokenData.priceChange24h >= 0 ? '+' : ''}{tokenData.priceChange24h.toFixed(1)}%
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <div className="ticker-coming-soon">
+                  <span className="badge-dot"></span>
+                  $ARGUS — Token Launching Soon
+                </div>
+              )}
+            </div>
 
             <div className="hero-actions">
               <a href="https://app.argusguard.io" className="btn btn-primary">Start Detecting Bundles</a>
