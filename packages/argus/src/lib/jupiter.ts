@@ -4,7 +4,7 @@
  * Routes through backend proxy to avoid CORS issues
  */
 
-import { Connection, VersionedTransaction, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { Connection, VersionedTransaction, PublicKey, SystemProgram, LAMPORTS_PER_SOL, TransactionMessage } from '@solana/web3.js';
 
 // Use our backend proxy for Jupiter (avoids CORS)
 const API_BASE = import.meta.env.VITE_API_URL || 'https://argusguard-api.hermosillo-jessie.workers.dev';
@@ -170,48 +170,6 @@ export async function executeSwap(
 }
 
 /**
- * Send Argus AI fee (used when fee wallet is configured)
- */
-export async function sendArgusFee(
-  connection: Connection,
-  userPublicKey: PublicKey,
-  signTransaction: (tx: Transaction) => Promise<Transaction>,
-  feeAmountSol: number
-): Promise<string | null> {
-  if (!ARGUS_FEE_WALLET || feeAmountSol <= 0) {
-    console.log('[Fee] No fee wallet configured or zero fee');
-    return null;
-  }
-
-  try {
-    const feeLamports = Math.floor(feeAmountSol * LAMPORTS_PER_SOL);
-    const feeWallet = new PublicKey(ARGUS_FEE_WALLET);
-
-    const transaction = new Transaction().add(
-      SystemProgram.transfer({
-        fromPubkey: userPublicKey,
-        toPubkey: feeWallet,
-        lamports: feeLamports,
-      })
-    );
-
-    const { blockhash } = await connection.getLatestBlockhash('confirmed');
-    transaction.recentBlockhash = blockhash;
-    transaction.feePayer = userPublicKey;
-
-    const signedTx = await signTransaction(transaction);
-    const signature = await connection.sendRawTransaction(signedTx.serialize());
-    await connection.confirmTransaction(signature, 'confirmed');
-
-    console.log(`[Fee] Collected ${feeAmountSol} SOL fee: ${signature}`);
-    return signature;
-  } catch (error) {
-    console.error('[Fee] Failed to collect fee:', error);
-    return null;
-  }
-}
-
-/**
  * Buy tokens with SOL
  * @param withAiFee - If true, deducts 0.5% fee for Argus AI
  */
@@ -250,7 +208,7 @@ export async function buyToken(
       const feeLamports = Math.floor(feeAmount * LAMPORTS_PER_SOL);
       const feeWallet = new PublicKey(ARGUS_FEE_WALLET);
 
-      // Create fee transfer instruction
+      // Create fee transfer as VersionedTransaction (matches signTransaction callback)
       const feeIx = SystemProgram.transfer({
         fromPubkey: userPublicKey,
         toPubkey: feeWallet,
@@ -258,18 +216,20 @@ export async function buyToken(
       });
 
       const { blockhash } = await connection.getLatestBlockhash('confirmed');
-      const feeTx = new Transaction().add(feeIx);
-      feeTx.recentBlockhash = blockhash;
-      feeTx.feePayer = userPublicKey;
+      const messageV0 = new TransactionMessage({
+        payerKey: userPublicKey,
+        recentBlockhash: blockhash,
+        instructions: [feeIx],
+      }).compileToV0Message();
 
-      // Sign as legacy transaction (fee transfer is simple)
-      const signedFeeTx = await (signTransaction as unknown as (tx: Transaction) => Promise<Transaction>)(feeTx);
+      const feeTx = new VersionedTransaction(messageV0);
+      const signedFeeTx = await signTransaction(feeTx);
       const feeSignature = await connection.sendRawTransaction(signedFeeTx.serialize());
       await connection.confirmTransaction(feeSignature, 'confirmed');
 
-      console.log(`[Buy] Fee collected: ${feeAmount.toFixed(6)} SOL → ${ARGUS_FEE_WALLET.slice(0, 8)}... (${feeSignature.slice(0, 16)}...)`);
+      console.log(`[Buy] Fee collected: ${feeAmount.toFixed(6)} SOL`);
     } catch (feeError) {
-      console.error('[Buy] Fee collection failed (swap still succeeded):', feeError);
+      console.error('[Buy] Fee collection failed:', feeError);
       // Don't fail the whole trade if fee collection fails
     }
   }
@@ -316,7 +276,7 @@ export async function sellToken(
       // Small delay to ensure swap SOL has landed
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      // Create fee transfer instruction
+      // Create fee transfer as VersionedTransaction (matches signTransaction callback)
       const feeIx = SystemProgram.transfer({
         fromPubkey: userPublicKey,
         toPubkey: feeWallet,
@@ -324,18 +284,20 @@ export async function sellToken(
       });
 
       const { blockhash } = await connection.getLatestBlockhash('confirmed');
-      const feeTx = new Transaction().add(feeIx);
-      feeTx.recentBlockhash = blockhash;
-      feeTx.feePayer = userPublicKey;
+      const messageV0 = new TransactionMessage({
+        payerKey: userPublicKey,
+        recentBlockhash: blockhash,
+        instructions: [feeIx],
+      }).compileToV0Message();
 
-      // Sign as legacy transaction
-      const signedFeeTx = await (signTransaction as unknown as (tx: Transaction) => Promise<Transaction>)(feeTx);
+      const feeTx = new VersionedTransaction(messageV0);
+      const signedFeeTx = await signTransaction(feeTx);
       const feeSignature = await connection.sendRawTransaction(signedFeeTx.serialize());
       await connection.confirmTransaction(feeSignature, 'confirmed');
 
-      console.log(`[Sell] Fee collected: ${feeAmount.toFixed(6)} SOL → ${ARGUS_FEE_WALLET.slice(0, 8)}... (${feeSignature.slice(0, 16)}...)`);
+      console.log(`[Sell] Fee collected: ${feeAmount.toFixed(6)} SOL`);
     } catch (feeError) {
-      console.error('[Sell] Fee collection failed (swap still succeeded):', feeError);
+      console.error('[Sell] Fee collection failed:', feeError);
       // Don't fail the whole trade if fee collection fails
     }
   }
