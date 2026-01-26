@@ -228,6 +228,7 @@ export function useAutoTrade(
   const isBuyingRef = useRef<Set<string>>(new Set()); // Prevent duplicate buys
   const lastTradeTimeRef = useRef<number>(0); // Track last trade time for cooldown
   const sellMutexRef = useRef<boolean>(false); // Global mutex - only one sell at a time (prevents race conditions in P&L calculation)
+  const buyMutexRef = useRef<boolean>(false); // Global mutex - only one buy at a time (prevents balance-based entry calculation corruption)
 
   // Keep latest config in a ref to avoid stale closures
   const configRef = useRef(config);
@@ -359,8 +360,9 @@ export function useAutoTrade(
       // Get current token balance
       const balanceInfo = await getTokenBalance(position.tokenAddress, publicKey.toString());
       if (!balanceInfo || balanceInfo.balance === 0) {
-        // No tokens — position is dead, clear it immediately
-        log(`${position.tokenSymbol}: No tokens found — clearing position`, 'warning');
+        // No tokens — position is dead, count as total loss
+        const lostSol = position.entrySolAmount;
+        log(`${position.tokenSymbol}: No tokens found — clearing position (-${lostSol.toFixed(4)} SOL)`, 'warning');
         setState(prev => ({
           ...prev,
           positions: prev.positions.filter(p => p.tokenAddress !== position.tokenAddress),
@@ -371,6 +373,8 @@ export function useAutoTrade(
             status: 'sold' as const,
             sellReason: reason,
           }, ...prev.soldPositions].slice(0, 50),
+          totalSold: prev.totalSold + 1,
+          totalProfitSol: prev.totalProfitSol - lostSol,
         }));
         isSellingRef.current.delete(position.tokenAddress);
         sellMutexRef.current = false;
@@ -400,11 +404,14 @@ export function useAutoTrade(
         const actualSolReceived = solBalanceAfter - solBalanceBefore;
 
         // Calculate real profit (actual received - what we spent)
+        // If actualSolReceived <= 0, the sell likely returned near-zero
+        // (token was worthless or fee exceeded proceeds). Count as total loss.
         const profitSol = actualSolReceived > 0
           ? actualSolReceived - position.entrySolAmount
-          : position.currentValueSol - position.entrySolAmount; // Fallback to estimate
+          : -position.entrySolAmount; // Total loss — token was worthless
 
-        const actualPnlPercent = (profitSol / position.entrySolAmount) * 100;
+        const safeEntry = position.entrySolAmount > 0 ? position.entrySolAmount : 0.001;
+        const actualPnlPercent = (profitSol / safeEntry) * 100;
 
         log(`SOLD ${position.tokenSymbol}! ${profitSol >= 0 ? '+' : ''}${profitSol.toFixed(4)} SOL (${actualPnlPercent >= 0 ? '+' : ''}${actualPnlPercent.toFixed(1)}%)`,
             profitSol >= 0 ? 'success' : 'error');
@@ -416,7 +423,7 @@ export function useAutoTrade(
           soldPositions: [{
             ...position,
             pnlPercent: actualPnlPercent,
-            currentValueSol: actualSolReceived > 0 ? actualSolReceived : position.currentValueSol,
+            currentValueSol: actualSolReceived > 0 ? actualSolReceived : 0,
             status: 'sold' as const,
             sellReason: reason,
             sellTxSignature: result.signature,
@@ -431,8 +438,9 @@ export function useAutoTrade(
         log(`SELL FAILED: ${position.tokenSymbol} - ${result.error} (attempt ${failCount}/3)`, 'error');
 
         if (failCount >= 3) {
-          // Token is likely dead/rugged — remove position to stop retry loop
-          log(`${position.tokenSymbol}: Removed after 3 failed sell attempts (likely rugged)`, 'error');
+          // Token is likely dead/rugged — remove position and count as total loss
+          const lostSol = position.entrySolAmount;
+          log(`${position.tokenSymbol}: Removed after 3 failed sell attempts, -${lostSol.toFixed(4)} SOL (likely rugged)`, 'error');
           setState(prev => ({
             ...prev,
             positions: prev.positions.filter(p => p.tokenAddress !== position.tokenAddress),
@@ -443,6 +451,8 @@ export function useAutoTrade(
               status: 'sold' as const,
               sellReason: position.sellReason || 'stop_loss',
             }, ...prev.soldPositions].slice(0, 50),
+            totalSold: prev.totalSold + 1,
+            totalProfitSol: prev.totalProfitSol - lostSol,
           }));
         } else {
           setState(prev => ({
@@ -520,10 +530,11 @@ export function useAutoTrade(
           continue;
         }
 
-        // Calculate P&L
-        const pnlPercent = ((currentValueSol - position.entrySolAmount) / position.entrySolAmount) * 100;
+        // Calculate P&L (guard against division by zero)
+        const entrySol = position.entrySolAmount > 0 ? position.entrySolAmount : 0.001;
+        const pnlPercent = ((currentValueSol - entrySol) / entrySol) * 100;
         const newHighest = Math.max(position.highestValueSol, currentValueSol);
-        const dropFromPeak = ((newHighest - currentValueSol) / newHighest) * 100;
+        const dropFromPeak = newHighest > 0 ? ((newHighest - currentValueSol) / newHighest) * 100 : 0;
 
         // Store update
         updatesMap.set(position.tokenAddress, {
@@ -780,6 +791,13 @@ export function useAutoTrade(
       }
     }
 
+    // GLOBAL MUTEX: Wait for any other buy to complete first
+    // This prevents race conditions in balance-based entry calculation
+    while (buyMutexRef.current) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    buyMutexRef.current = true;
+
     // Track balance before trade to calculate actual spent
     const balanceBefore = await tradingWallet.getBalance();
 
@@ -935,14 +953,17 @@ export function useAutoTrade(
           console.error('[AutoTrade] CRITICAL position creation failure:', e);
         }
 
+        buyMutexRef.current = false; // Release buy mutex after position created
         refreshBalance(); // Update balance after trade
       } else {
+        buyMutexRef.current = false; // Release buy mutex on trade failure
         log(`FAILED: ${tokenSymbol} - ${result.error}`, 'error');
       }
 
       onTradeExecuted?.(completedTrade);
       return result;
     } catch (error) {
+      buyMutexRef.current = false; // Release buy mutex on error
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
 
       const failedTrade: PendingTrade = {
