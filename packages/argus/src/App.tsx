@@ -386,10 +386,22 @@ export default function App() {
         // Apply penalties for severe red flags the AI may underweight
         const liquidity = data.tokenInfo?.liquidity || 0;
         const topHolderPct = holders[0]?.percent || 0;
-        if (liquidity <= 0) score = Math.max(0, score - 20);
+        const isPumpFun = address.trim().endsWith('pump');
+
+        // $0 liquidity penalty — skip for pump.fun tokens (they use bonding curves, not DEX liquidity)
+        if (liquidity <= 0 && !isPumpFun) score = Math.max(0, score - 20);
+
         if (topHolderPct > 50) score = Math.max(0, score - 15);
         if (topHolderPct > 75) score = Math.max(0, score - 10);
-        if (data.bundleInfo?.detected && (data.bundleInfo?.count || 0) >= 3) score = Math.max(0, score - 10);
+
+        // Scaled bundle penalty: more bundles = harsher penalty
+        const bundleCount = data.bundleInfo?.count || 0;
+        if (data.bundleInfo?.detected && bundleCount >= 3) {
+          if (bundleCount >= 10) score = Math.max(0, score - 15);
+          else if (bundleCount >= 6) score = Math.max(0, score - 10);
+          else score = Math.max(0, score - 5);
+        }
+
         if (buyRatio < 0.3 && sells24h > 100) score = Math.max(0, score - 10);
 
         const signal: SignalType = score >= 75 ? 'STRONG_BUY' :
