@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import * as d3 from 'd3';
 import { useAutoTrade } from './hooks/useAutoTrade';
 
 type SignalType = 'STRONG_BUY' | 'BUY' | 'WATCH' | 'HOLD' | 'AVOID';
@@ -153,6 +154,164 @@ function Sparkline({ data, color, height = 40 }: { data: number[]; color: string
       />
     </svg>
   );
+}
+
+// Score gauge component
+function ScoreGauge({ score, signal }: { score: number; signal: SignalType }) {
+  const size = 100;
+  const strokeWidth = 8;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = Math.PI * radius; // semicircle
+  const progress = Math.max(0, Math.min(100, score)) / 100;
+  const dashOffset = circumference * (1 - progress);
+
+  const color = SIGNAL_COLORS[signal];
+  const bgColor = '#27272a';
+
+  return (
+    <div className="flex flex-col items-center">
+      <svg width={size} height={size / 2 + 8} viewBox={`0 0 ${size} ${size / 2 + 8}`}>
+        {/* Background arc */}
+        <path
+          d={`M ${strokeWidth / 2} ${size / 2} A ${radius} ${radius} 0 0 1 ${size - strokeWidth / 2} ${size / 2}`}
+          fill="none"
+          stroke={bgColor}
+          strokeWidth={strokeWidth}
+          strokeLinecap="round"
+        />
+        {/* Progress arc */}
+        <path
+          d={`M ${strokeWidth / 2} ${size / 2} A ${radius} ${radius} 0 0 1 ${size - strokeWidth / 2} ${size / 2}`}
+          fill="none"
+          stroke={color}
+          strokeWidth={strokeWidth}
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={dashOffset}
+          style={{ filter: `drop-shadow(0 0 6px ${color}40)` }}
+        />
+        {/* Score text */}
+        <text
+          x={size / 2}
+          y={size / 2 - 4}
+          textAnchor="middle"
+          fill={color}
+          fontSize="28"
+          fontWeight="bold"
+          fontFamily="inherit"
+        >
+          {score}
+        </text>
+      </svg>
+      <span className="text-[10px] text-zinc-500 uppercase tracking-wider -mt-1">AI Score</span>
+    </div>
+  );
+}
+
+// Buy/Sell pressure bar component
+function PressureBar({ label, buys, sells }: { label: string; buys: number; sells: number }) {
+  const total = buys + sells;
+  const buyPct = total > 0 ? (buys / total) * 100 : 50;
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between text-[11px]">
+        <span className="text-green-500 font-medium">{buys}</span>
+        <span className="text-zinc-500">{label}</span>
+        <span className="text-red-500 font-medium">{sells}</span>
+      </div>
+      <div className="h-2 bg-zinc-800 rounded-full overflow-hidden flex">
+        <div
+          className="h-full bg-gradient-to-r from-green-600 to-green-500 rounded-l-full transition-all"
+          style={{ width: `${buyPct}%` }}
+        />
+        <div
+          className="h-full bg-gradient-to-l from-red-600 to-red-500 rounded-r-full transition-all"
+          style={{ width: `${100 - buyPct}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+// Holder donut chart component
+function HolderDonut({ holders }: { holders: Array<{ address: string; percent: number; isBundle: boolean }> }) {
+  const svgRef = useRef<SVGSVGElement>(null);
+
+  useEffect(() => {
+    if (!svgRef.current || holders.length === 0) return;
+
+    const size = 140;
+    const outerRadius = size / 2;
+    const innerRadius = outerRadius - 18;
+
+    // Prepare data: top 5 holders + "others"
+    const top5 = holders.slice(0, 5);
+    const top5Total = top5.reduce((s, h) => s + h.percent, 0);
+    const othersPercent = Math.max(0, 100 - top5Total);
+
+    const data = [
+      ...top5.map(h => ({ ...h, label: `${h.address.slice(0, 4)}...${h.address.slice(-4)}` })),
+      ...(othersPercent > 0 ? [{ percent: othersPercent, isBundle: false, label: 'Others', address: 'others' }] : []),
+    ];
+
+    // Colors
+    const getColor = (d: typeof data[0], i: number) => {
+      if (d.address === 'others') return '#3f3f46'; // zinc-700
+      if (d.isBundle) return '#ef4444'; // red
+      const greens = ['#10b981', '#34d399', '#6ee7b7', '#a7f3d0', '#d1fae5'];
+      return greens[i] || greens[4];
+    };
+
+    const svg = d3.select(svgRef.current);
+    svg.selectAll('*').remove();
+
+    const g = svg
+      .attr('width', size)
+      .attr('height', size)
+      .append('g')
+      .attr('transform', `translate(${size / 2},${size / 2})`);
+
+    const pie = d3.pie<typeof data[0]>()
+      .value(d => d.percent)
+      .sort(null)
+      .padAngle(0.02);
+
+    const arc = d3.arc<d3.PieArcDatum<typeof data[0]>>()
+      .innerRadius(innerRadius)
+      .outerRadius(outerRadius)
+      .cornerRadius(3);
+
+    g.selectAll('path')
+      .data(pie(data))
+      .enter()
+      .append('path')
+      .attr('d', arc)
+      .attr('fill', (d, i) => getColor(d.data, i))
+      .attr('opacity', 0.9)
+      .attr('stroke', '#09090b')
+      .attr('stroke-width', 1);
+
+    // Center text
+    g.append('text')
+      .attr('text-anchor', 'middle')
+      .attr('dy', '-0.2em')
+      .attr('fill', '#fafafa')
+      .attr('font-size', '20')
+      .attr('font-weight', 'bold')
+      .text(`${top5Total.toFixed(0)}%`);
+
+    g.append('text')
+      .attr('text-anchor', 'middle')
+      .attr('dy', '1.2em')
+      .attr('fill', '#71717a')
+      .attr('font-size', '10')
+      .text('Top 5');
+  }, [holders]);
+
+  if (holders.length === 0) return null;
+
+  return <svg ref={svgRef} className="mx-auto mb-3" />;
 }
 
 // Analysis result from /api/analyze-full
@@ -486,6 +645,39 @@ export default function App() {
       setAnalysisResult(result);
       addRecentSearch(result.token.address, result.token.symbol);
       log(`Analyzed ${result.token.symbol}: ${result.ai.signal} (${result.ai.score})`, 'success');
+
+      // Fetch sparkline data from GeckoTerminal (non-blocking)
+      const pairAddr = data.pairAddress;
+      if (pairAddr) {
+        const geckoBase = `https://api.geckoterminal.com/api/v2/networks/solana/pools/${pairAddr}/ohlcv`;
+        const setSparkline = (candles: number[][]) => {
+          const closePrices = candles.map((c: number[]) => c[4]).reverse();
+          setAnalysisResult(prev => prev ? {
+            ...prev,
+            market: { ...prev.market, sparkline: closePrices },
+          } : null);
+        };
+        // Try hourly candles first (24h view), fall back to 5-min candles for newer tokens
+        fetch(`${geckoBase}/hour?aggregate=1&limit=24`)
+          .then(r => r.json())
+          .then((ohlcv: { data?: { attributes?: { ohlcv_list?: number[][] } } }) => {
+            const candles = ohlcv?.data?.attributes?.ohlcv_list;
+            if (candles && candles.length >= 4) {
+              setSparkline(candles);
+            } else {
+              // Fall back to 5-min candles (covers ~4h with 50 points)
+              return fetch(`${geckoBase}/minute?aggregate=5&limit=50`)
+                .then(r2 => r2.json())
+                .then((ohlcv2: { data?: { attributes?: { ohlcv_list?: number[][] } } }) => {
+                  const candles2 = ohlcv2?.data?.attributes?.ohlcv_list;
+                  if (candles2 && candles2.length >= 3) {
+                    setSparkline(candles2);
+                  }
+                });
+            }
+          })
+          .catch(() => { /* sparkline is optional */ });
+      }
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
       setAnalysisError(msg);
@@ -993,12 +1185,7 @@ export default function App() {
                     </div>
                   </div>
                 </div>
-                <div className="text-left sm:text-right flex sm:block items-center gap-2">
-                  <div className="text-4xl sm:text-5xl font-bold" style={{ color: SIGNAL_COLORS[analysisResult.ai.signal] }}>
-                    {analysisResult.ai.score}
-                  </div>
-                  <div className="text-xs text-zinc-500 uppercase tracking-wider">AI Score</div>
-                </div>
+                <ScoreGauge score={analysisResult.ai.score} signal={analysisResult.ai.signal} />
               </div>
             </div>
 
@@ -1088,35 +1275,29 @@ export default function App() {
 
               {/* Trading Activity Card */}
               <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-5">
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="w-8 h-8 bg-emerald-500/10 rounded-lg flex items-center justify-center">
-                    <svg className="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                    </svg>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 bg-emerald-500/10 rounded-lg flex items-center justify-center">
+                      <svg className="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                      </svg>
+                    </div>
+                    <h3 className="font-semibold text-emerald-500">Activity</h3>
                   </div>
-                  <h3 className="font-semibold text-emerald-500">Activity</h3>
+                  <span className={`text-xs font-bold px-2 py-0.5 rounded ${analysisResult.trading.buyRatio > 1 ? 'bg-green-900/50 text-green-400' : 'bg-red-900/50 text-red-400'}`}>
+                    {analysisResult.trading.buyRatio.toFixed(2)}:1
+                  </span>
                 </div>
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-zinc-500">Buys (1h)</span>
-                    <span className="text-sm font-semibold text-green-500">{analysisResult.trading.buys1h}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-zinc-500">Sells (1h)</span>
-                    <span className="text-sm font-semibold text-red-500">{analysisResult.trading.sells1h}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-zinc-500">Buy Ratio</span>
-                    <span className={`text-sm font-semibold ${analysisResult.trading.buyRatio > 1 ? 'text-green-500' : 'text-red-500'}`}>
-                      {analysisResult.trading.buyRatio.toFixed(2)}:1
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-zinc-500">24h Txns</span>
-                    <span className="text-sm font-semibold text-white">
-                      {analysisResult.trading.buys24h + analysisResult.trading.sells24h}
-                    </span>
-                  </div>
+                  <PressureBar label="5m" buys={analysisResult.trading.buys5m} sells={analysisResult.trading.sells5m} />
+                  <PressureBar label="1h" buys={analysisResult.trading.buys1h} sells={analysisResult.trading.sells1h} />
+                  <PressureBar label="24h" buys={analysisResult.trading.buys24h} sells={analysisResult.trading.sells24h} />
+                </div>
+                <div className="mt-3 pt-3 border-t border-zinc-800 flex items-center justify-between">
+                  <span className="text-xs text-zinc-500">Total 24h Txns</span>
+                  <span className="text-xs font-semibold text-white">
+                    {(analysisResult.trading.buys24h + analysisResult.trading.sells24h).toLocaleString()}
+                  </span>
                 </div>
               </div>
             </div>
@@ -1145,6 +1326,7 @@ export default function App() {
                 </div>
                 {analysisResult.holders.top10.length > 0 && analysisResult.holders.topHolderPercent > 0 ? (
                   <>
+                    <HolderDonut holders={analysisResult.holders.top10} />
                     <div className="space-y-2.5">
                       {analysisResult.holders.top10.slice(0, 5).map((holder, i) => (
                         <div key={i} className="flex items-center gap-3">

@@ -2,7 +2,8 @@ import { Hono } from 'hono';
 import type { Bindings } from '../index';
 import { fetchHeliusTokenMetadata, analyzeTokenTransactions, analyzeDevSelling } from '../services/helius';
 import { fetchDexScreenerData } from '../services/dexscreener';
-import { fetchPumpFunData, isPumpFunToken } from '../services/pumpfun';
+// Pump.fun API disabled (Cloudflare 1016 error)
+// import { fetchPumpFunData, isPumpFunToken } from '../services/pumpfun';
 
 const HELIUS_RPC_BASE = 'https://mainnet.helius-rpc.com';
 
@@ -281,6 +282,10 @@ async function generateNetworkAnalysis(
     marketCap?: number;
     liquidity?: number;
     age?: number;
+    volume24h?: number;
+    priceChange24h?: number;
+    txns24h?: { buys: number; sells: number };
+    txns1h?: { buys: number; sells: number };
   },
   network: NetworkData,
   creatorInfo: {
@@ -331,6 +336,10 @@ TOKEN INFO:
 ${tokenInfo.marketCap ? `- Market Cap: $${tokenInfo.marketCap.toLocaleString()}` : ''}
 ${tokenInfo.liquidity ? `- Liquidity: $${tokenInfo.liquidity.toLocaleString()}` : ''}
 ${tokenInfo.age !== undefined ? `- Age: ${tokenInfo.age} days` : ''}
+${tokenInfo.volume24h ? `- 24h Volume: $${tokenInfo.volume24h.toLocaleString()}` : ''}
+${tokenInfo.priceChange24h !== undefined ? `- 24h Price Change: ${tokenInfo.priceChange24h > 0 ? '+' : ''}${tokenInfo.priceChange24h.toFixed(1)}%` : ''}
+${tokenInfo.txns24h ? `- 24h Transactions: ${tokenInfo.txns24h.buys} buys / ${tokenInfo.txns24h.sells} sells (ratio: ${tokenInfo.txns24h.sells > 0 ? (tokenInfo.txns24h.buys / tokenInfo.txns24h.sells).toFixed(2) : 'N/A'})` : ''}
+${tokenInfo.txns1h ? `- 1h Transactions: ${tokenInfo.txns1h.buys} buys / ${tokenInfo.txns1h.sells} sells` : ''}
 
 NETWORK SUMMARY:
 - Total Nodes: ${network.nodes.length}
@@ -347,12 +356,12 @@ ${whales.map(w => `- ${w.label}: ${w.holdingsPercent?.toFixed(2)}%`).join('\n') 
   if (bundleInfo.detected || bundleInfo.confidence === 'LOW') {
     if (bundleInfo.confidence === 'HIGH') {
       context += `
-⚠️ BUNDLE DETECTED - HIGH CONFIDENCE (CRITICAL):
+⚠️ BUNDLE DETECTED - HIGH CONFIDENCE:
 - ${bundleInfo.count} coordinated wallets CONFIRMED via same-block transactions
 ${bundleInfo.txBundlePercent ? `- ${bundleInfo.txBundlePercent.toFixed(1)}% of buys came from bundled transactions` : ''}
-- This is DEFINITIVE evidence of coordinated buying (bundle attack)
-- Bundle wallets will likely dump simultaneously
-- MUST increase risk score significantly (+30-40 points)
+- Evidence of coordinated buying
+- Consider dump risk but weigh against positive market signals
+- Increase risk score +15-25 points (offset by positive signals if present)
 ${bundleInfo.description ? `\nDetails: ${bundleInfo.description}` : ''}
 `;
     } else if (bundleInfo.confidence === 'MEDIUM') {
@@ -360,8 +369,8 @@ ${bundleInfo.description ? `\nDetails: ${bundleInfo.description}` : ''}
 ⚠️ BUNDLE DETECTED - MEDIUM CONFIDENCE:
 - ${bundleInfo.count} wallets show coordination patterns
 ${bundleInfo.txBundlePercent && bundleInfo.txBundlePercent > 0 ? `- ${bundleInfo.txBundlePercent.toFixed(1)}% of buys from same-block transactions` : '- Near-identical holdings detected'}
-- Likely coordinated buying, exercise caution
-- Increase risk score (+15-25 points)
+- Possible coordinated buying, exercise caution
+- Increase risk score +10-15 points (offset by positive signals if present)
 ${bundleInfo.description ? `\nDetails: ${bundleInfo.description}` : ''}
 `;
     } else if (bundleInfo.confidence === 'LOW') {
@@ -437,27 +446,40 @@ Analyze the provided network data and return a JSON response with:
 RISK FACTORS (weight by confidence):
 
 BUNDLE DETECTION - weight by CONFIDENCE LEVEL:
-- HIGH CONFIDENCE bundle (same-block transactions confirmed) = CRITICAL (+30-40 points, min score 70)
-- MEDIUM CONFIDENCE bundle (strong patterns) = HIGH RISK (+15-25 points)
-- LOW CONFIDENCE bundle (similar holdings only) = MINOR (+5-10 points max)
+- HIGH CONFIDENCE bundle (same-block transactions confirmed) = Significant concern (+15-25 points)
+- MEDIUM CONFIDENCE bundle (strong patterns) = Moderate concern (+10-15 points)
+- LOW CONFIDENCE bundle (similar holdings only) = Minor concern (+5 max)
   * LOW confidence often means natural distribution, NOT a scam
   * Do NOT flag as SCAM based on LOW confidence alone
 
-DEV SELLING ACTIVITY - Include this in your analysis:
-- Dev sold >50% but still holds >5% = "Dev sold X% but still holds Y%" - DUMP RISK
+DEV SELLING ACTIVITY:
+- Dev sold >50% but still holds >5% = "Dev sold X% but still holds Y%" - moderate dump risk
 - Dev sold >90% and holds <1% = Likely community-owned, reduced dump risk
 - Dev has NOT sold and holds >20% = Major dump risk pending
 - Dev has NOT sold and holds <5% = Minor concern
 - Always mention specific percentages in your summary
 
 OTHER RISK FACTORS:
-- Concentrated holdings (few wallets hold most supply) = HIGH RISK
+- Concentrated holdings (few wallets hold most supply) = +10-20 points
 - Creator with previous rugs = CRITICAL (+40 points)
-- New creator wallet (<7 days) = MEDIUM RISK (+10 points)
-- Creator still holds large % (>20%) = DUMP RISK (+15 points)
-- Multiple whales >5% each = COORDINATION RISK
+- New creator wallet (<7 days) = +10 points
+- Creator still holds large % (>20%) = +10-15 points
+- Multiple whales >5% each = coordination concern
 
-IMPORTANT: Only score 80+ (SCAM) if you have HIGH confidence bundle detection OR creator has previous rugs. Similar holdings alone is NOT enough for SCAM rating.
+POSITIVE SIGNALS (should LOWER risk score):
+- High trading volume relative to market cap = active, healthy market
+- Strong buy ratio (>1.2:1) = organic demand
+- Good liquidity (>$20K) = harder to manipulate
+- Many transactions (>1000) = real community engagement
+- Price trending up with volume = organic growth
+- These signals can offset bundle/whale concerns by -10 to -20 points
+
+SCORING GUIDANCE:
+- 80+ (SCAM): Only for creator with previous rugs OR extreme red flags with NO positive signals
+- 60-79 (DANGEROUS): HIGH confidence bundles with additional red flags
+- 40-59 (SUSPICIOUS): Bundles or concentration WITH positive market activity
+- 0-39 (SAFE): No major red flags, or red flags offset by strong positive signals
+- A token with bundles BUT strong volume, good liquidity, and active trading should score 40-60, NOT 80+
 
 RETURN ONLY VALID JSON, no markdown or explanation.`;
 
@@ -498,48 +520,28 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
       const aiInsights = parsed.networkInsights || [];
 
       // ============================================
-      // POST-AI COMPOUNDING (always applies)
+      // POST-AI GUARDRAILS (minimums only, no additive scoring)
+      // The AI prompt already instructs scoring for bundles, whales, etc.
+      // Adding points on top would double-count. Only enforce floor scores.
       // ============================================
-      const isNewWallet = creatorInfo?.walletAge !== undefined && creatorInfo.walletAge < 7;
+      const isNewWallet = creatorInfo?.walletAge !== undefined && creatorInfo.walletAge > 0 && creatorInfo.walletAge < 7;
       const hasBundleDetection = bundleInfo.confidence === 'HIGH' || bundleInfo.confidence === 'MEDIUM';
       const hasWhale = whales.length > 0;
       const topWhalePercent = whales[0]?.holdingsPercent || 0;
 
-      console.log(`[Sentinel] Post-AI check: newWallet=${isNewWallet}, bundle=${hasBundleDetection} (${bundleInfo.confidence}), whale=${hasWhale} (${topWhalePercent.toFixed(1)}%)`);
+      console.log(`[Sentinel] Post-AI guardrails: newWallet=${isNewWallet}, bundle=${hasBundleDetection} (${bundleInfo.confidence}), whale=${hasWhale} (${topWhalePercent.toFixed(1)}%), aiScore=${score}`);
 
-      // Count risk factors
-      let riskFactors = 0;
-      if (isNewWallet) riskFactors++;
-      if (hasBundleDetection) riskFactors++;
-      if (hasWhale && topWhalePercent >= 10) riskFactors++;
-
-      // Apply compounding based on number of factors (non-stacking)
-      if (riskFactors >= 3) {
-        // Triple threat: New wallet + Bundle + Whale
-        score += 20;
-        aiFlags.push({
-          type: 'SCAM PATTERN',
-          severity: 'CRITICAL',
-          message: `🚨 High-risk combo: New wallet + Bundle + Whale (${topWhalePercent.toFixed(1)}%)`,
-        });
-        console.log(`[Sentinel] TRIPLE THREAT = +20 (now ${score})`);
-      } else if (riskFactors === 2) {
-        // Double threat
-        score += 10;
-        console.log(`[Sentinel] Double risk factor = +10 (now ${score})`);
+      // Enforce floor scores as safety nets (not additive)
+      // HIGH confidence bundle = minimum 55 (SUSPICIOUS)
+      if (bundleInfo.confidence === 'HIGH' && score < 55) {
+        console.log(`[Sentinel] Enforcing minimum 55 for HIGH bundle (was ${score})`);
+        score = 55;
       }
 
-      // Enforce minimums based on patterns
-      // Triple threat = minimum 65 (DANGEROUS)
-      if (riskFactors >= 3 && score < 65) {
-        console.log(`[Sentinel] Enforcing minimum 65 for triple threat (was ${score})`);
-        score = 65;
-      }
-
-      // HIGH confidence bundle = minimum 70 (DANGEROUS)
-      if (bundleInfo.confidence === 'HIGH' && score < 70) {
-        console.log(`[Sentinel] Enforcing minimum 70 for HIGH bundle (was ${score})`);
-        score = 70;
+      // Triple threat (confirmed new wallet + bundle + whale) = minimum 60 (DANGEROUS)
+      if (isNewWallet && hasBundleDetection && hasWhale && topWhalePercent >= 10 && score < 60) {
+        console.log(`[Sentinel] Enforcing minimum 60 for triple threat (was ${score})`);
+        score = 60;
       }
 
       score = Math.min(100, score);
@@ -660,7 +662,7 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
     });
   }
 
-  if (creatorInfo?.walletAge !== undefined && creatorInfo.walletAge < 7) {
+  if (creatorInfo?.walletAge !== undefined && creatorInfo.walletAge > 0 && creatorInfo.walletAge < 7) {
     riskScore += 10;
     flags.push({
       type: 'DEPLOYER',
@@ -675,87 +677,25 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
   }
 
   // ============================================
-  // COMPOUNDING RISK FACTORS
+  // FALLBACK GUARDRAILS (minimums only)
   // ============================================
-  // When multiple red flags combine, the risk is much higher
-  const isNewWallet = creatorInfo?.walletAge !== undefined && creatorInfo.walletAge < 7;
+  const isNewWallet = creatorInfo?.walletAge !== undefined && creatorInfo.walletAge > 0 && creatorInfo.walletAge < 7;
   const hasBundleDetection = bundleInfo.confidence === 'HIGH' || bundleInfo.confidence === 'MEDIUM';
   const hasWhale = whales.length > 0;
   const topWhalePercent = whales[0]?.holdingsPercent || 0;
 
-  console.log(`[Sentinel] Compounding check: newWallet=${isNewWallet}, bundle=${hasBundleDetection} (${bundleInfo.confidence}), whale=${hasWhale} (${topWhalePercent.toFixed(1)}%)`);
+  console.log(`[Sentinel] Fallback guardrails: newWallet=${isNewWallet}, bundle=${hasBundleDetection} (${bundleInfo.confidence}), whale=${hasWhale} (${topWhalePercent.toFixed(1)}%)`);
 
-  // New wallet + Bundle = coordinated scam setup
-  if (isNewWallet && hasBundleDetection) {
-    riskScore += 15;
-    console.log(`[Sentinel] Compounding: New wallet + Bundle = +15`);
+  // HIGH confidence bundle = minimum 55
+  if (bundleInfo.confidence === 'HIGH' && riskScore < 55) {
+    console.log(`[Sentinel] Enforcing minimum 55 for HIGH bundle (was ${riskScore})`);
+    riskScore = 55;
   }
 
-  // New wallet + Whale = likely insider accumulation
-  if (isNewWallet && hasWhale && topWhalePercent >= 10) {
-    riskScore += 15;
-    console.log(`[Sentinel] Compounding: New wallet + Whale = +15`);
-  }
-
-  // Bundle + Whale = coordinated pump before dump
-  if (hasBundleDetection && hasWhale && topWhalePercent >= 10) {
-    riskScore += 15;
-    console.log(`[Sentinel] Compounding: Bundle + Whale = +15`);
-  }
-
-  // Triple threat: New wallet + Bundle + Whale = HIGHLY LIKELY SCAM
-  if (isNewWallet && hasBundleDetection && hasWhale && topWhalePercent >= 10) {
-    riskScore += 20; // Additional on top of the above
-    flags.push({
-      type: 'SCAM PATTERN',
-      severity: 'CRITICAL',
-      message: `🚨 High-risk combo: New wallet + Bundle + Whale concentration`,
-    });
-    console.log(`[Sentinel] TRIPLE THREAT: New wallet + Bundle + Whale = +20 additional`);
-  }
-
-  // For very new tokens (< 1 day), whale concentration is MORE dangerous
-  const ageInDays = dexData?.pairCreatedAt
-    ? (Date.now() - dexData.pairCreatedAt) / (1000 * 60 * 60 * 24)
-    : undefined;
-
-  if (ageInDays !== undefined && ageInDays < 1 && hasWhale && topWhalePercent >= 15) {
-    riskScore += 10;
-    flags.push({
-      type: 'NEW TOKEN RISK',
-      severity: 'HIGH',
-      message: `Token is < 1 day old with ${topWhalePercent.toFixed(1)}% whale - high dump risk`,
-    });
-    console.log(`[Sentinel] New token + whale = +10`);
-  }
-
-  // ============================================
-  // MINIMUM SCORE ENFORCEMENT
-  // ============================================
-  // Ensure certain patterns get minimum scores regardless of AI output
-
-  // Triple threat (new wallet + bundle + whale) = minimum 70 (DANGEROUS)
-  if (isNewWallet && hasBundleDetection && hasWhale && topWhalePercent >= 10) {
-    if (riskScore < 70) {
-      console.log(`[Sentinel] Enforcing minimum 70 for triple threat (was ${riskScore})`);
-      riskScore = 70;
-    }
-  }
-
-  // High confidence bundle = minimum 65 (DANGEROUS)
-  if (bundleInfo.confidence === 'HIGH') {
-    if (riskScore < 65) {
-      console.log(`[Sentinel] Enforcing minimum 65 for HIGH bundle (was ${riskScore})`);
-      riskScore = 65;
-    }
-  }
-
-  // New wallet (<7 days) + any whale (>10%) = minimum 55 (SUSPICIOUS)
-  if (isNewWallet && hasWhale && topWhalePercent >= 10) {
-    if (riskScore < 55) {
-      console.log(`[Sentinel] Enforcing minimum 55 for new wallet + whale (was ${riskScore})`);
-      riskScore = 55;
-    }
+  // Confirmed new wallet + bundle + whale = minimum 60
+  if (isNewWallet && hasBundleDetection && hasWhale && topWhalePercent >= 10 && riskScore < 60) {
+    console.log(`[Sentinel] Enforcing minimum 60 for triple threat (was ${riskScore})`);
+    riskScore = 60;
   }
 
   riskScore = Math.min(100, riskScore);
@@ -868,7 +808,7 @@ sentinelRoutes.post('/analyze', async (c) => {
       // Full analyzeCreatorWallet takes 10+ seconds checking rug history
       creatorInfo = {
         address: creatorAddress,
-        walletAge: 0, // Would need separate call
+        walletAge: -1, // Unknown — -1 means "not checked", prevents false "new wallet" triggers
         tokensCreated: 0,
         ruggedTokens: 0,
         currentHoldings: creatorHoldingsPercent,
@@ -1035,6 +975,7 @@ sentinelRoutes.post('/analyze', async (c) => {
 
     return c.json({
       tokenInfo,
+      pairAddress: dexData?.pairAddress || null,
       network,
       analysis,
       creatorInfo,

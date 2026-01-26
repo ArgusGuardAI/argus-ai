@@ -202,7 +202,8 @@ export async function buyToken(
   const swapResult = await executeSwap(quote, userPublicKey, signTransaction);
 
   // If swap succeeded and fee is configured, send the fee
-  if (swapResult.success && feeAmount > 0 && ARGUS_FEE_WALLET) {
+  // Skip if fee is too small to justify the tx cost (< 0.001 SOL)
+  if (swapResult.success && feeAmount >= 0.001 && ARGUS_FEE_WALLET) {
     try {
       const connection = new Connection(HELIUS_RPC, 'confirmed');
       const feeLamports = Math.floor(feeAmount * LAMPORTS_PER_SOL);
@@ -210,7 +211,7 @@ export async function buyToken(
 
       // Check balance — skip fee if wallet would drop below rent exemption
       const balance = await connection.getBalance(userPublicKey);
-      const MIN_RESERVE = 0.005 * LAMPORTS_PER_SOL; // rent + tx fee buffer
+      const MIN_RESERVE = 0.01 * LAMPORTS_PER_SOL; // rent + tx fee buffer (0.01 SOL)
       if (balance < feeLamports + MIN_RESERVE) {
         console.log(`[Buy] Skipping fee — insufficient balance (${(balance / LAMPORTS_PER_SOL).toFixed(4)} SOL) to cover fee + rent`);
       } else {
@@ -274,18 +275,19 @@ export async function sellToken(
   const swapResult = await executeSwap(quote, userPublicKey, signTransaction);
 
   // If swap succeeded and fee is configured, send the fee from proceeds
-  if (swapResult.success && feeAmount > 0 && ARGUS_FEE_WALLET) {
+  // Skip if fee is too small to justify the tx cost (< 0.001 SOL)
+  if (swapResult.success && feeAmount >= 0.001 && ARGUS_FEE_WALLET) {
     try {
       const connection = new Connection(HELIUS_RPC, 'confirmed');
       const feeLamports = Math.floor(feeAmount * LAMPORTS_PER_SOL);
       const feeWallet = new PublicKey(ARGUS_FEE_WALLET);
 
       // Small delay to ensure swap SOL has landed
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise(resolve => setTimeout(resolve, 3000));
 
       // Check balance — skip fee if wallet would drop below rent exemption
       const balance = await connection.getBalance(userPublicKey);
-      const MIN_RESERVE = 0.005 * LAMPORTS_PER_SOL; // rent + tx fee buffer
+      const MIN_RESERVE = 0.01 * LAMPORTS_PER_SOL; // rent + tx fee buffer (0.01 SOL)
       if (balance < feeLamports + MIN_RESERVE) {
         console.log(`[Sell] Skipping fee — insufficient balance (${(balance / LAMPORTS_PER_SOL).toFixed(4)} SOL) to cover fee + rent`);
       } else {

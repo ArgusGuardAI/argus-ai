@@ -530,8 +530,8 @@ export function useAutoTrade(
           continue;
         }
 
-        // Delay between positions to avoid rate limits (3 seconds between each)
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        // Delay between positions to avoid rate limits (1 second between each)
+        await new Promise(resolve => setTimeout(resolve, 1000));
 
       } catch (error) {
         console.error(`[AutoTrade] Error checking ${position.tokenSymbol}:`, error);
@@ -566,9 +566,9 @@ export function useAutoTrade(
     // Check immediately if we have positions
     if (state.positions.length > 0) {
       checkSellConditionsRef.current();
-      // Check every 60 seconds.
+      // Check every 10 seconds.
       // Dependency is ONLY positions.length, preventing timer resets when P&L updates.
-      priceMonitorRef.current = setInterval(() => checkSellConditionsRef.current(), 60000);
+      priceMonitorRef.current = setInterval(() => checkSellConditionsRef.current(), 10000);
     }
 
     return () => {
