@@ -518,8 +518,6 @@ async function getHeliusPrice(tokenMint: string): Promise<{
     const actualSupply = supply / Math.pow(10, decimals);
     const marketCap = priceUsd * actualSupply;
 
-    console.log('[Helius] Price:', priceUsd, 'Supply:', actualSupply, 'MC:', marketCap);
-
     return {
       priceUsd,
       priceChange24h: 0, // Helius doesn't provide this
@@ -765,7 +763,6 @@ async function getSolPrice(): Promise<number> {
       if (data.solana?.usd > 0) {
         cachedSolPrice = data.solana.usd;
         solPriceCacheTime = Date.now();
-        console.log(`[SOL] Price updated: $${cachedSolPrice}`);
       }
     }
   } catch {
@@ -792,10 +789,9 @@ export async function getTokenValueInSol(
     const solPrice = await getSolPrice();
     if (solPrice <= 0) return null;
 
-    // METHOD 1: Jupiter Price API (spot price, NOT quote/execution price)
+    // METHOD 1: Jupiter Price API v2 (spot price, NOT quote/execution price)
     try {
-      console.log(`[Value] Jupiter Price API for ${tokenMint.slice(0, 8)}...`);
-      const jupResponse = await fetch(`https://price.jup.ag/v6/price?ids=${tokenMint}`);
+      const jupResponse = await fetch(`https://api.jup.ag/price/v2?ids=${tokenMint}`);
 
       if (jupResponse.ok) {
         const jupData = await jupResponse.json();
@@ -804,17 +800,15 @@ export async function getTokenValueInSol(
         if (tokenPrice && tokenPrice > 0) {
           const valueUsd = humanTokenAmount * tokenPrice;
           const solValue = valueUsd / solPrice;
-          console.log(`[Value] JUPITER PRICE: ${humanTokenAmount.toFixed(2)} @ $${tokenPrice.toFixed(10)} = ${solValue.toFixed(6)} SOL`);
           return solValue;
         }
       }
-    } catch (e) {
-      console.warn(`[Value] Jupiter Price API failed`);
+    } catch {
+      // Jupiter failed, try DexScreener
     }
 
     // METHOD 2: DexScreener fallback
     try {
-      console.log(`[Value] DexScreener for ${tokenMint.slice(0, 8)}...`);
       const dexResponse = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`);
 
       if (dexResponse.ok) {
@@ -829,16 +823,15 @@ export async function getTokenValueInSol(
           if (priceUsd > 0) {
             const valueUsd = humanTokenAmount * priceUsd;
             const solValue = valueUsd / solPrice;
-            console.log(`[Value] DEXSCREENER: ${humanTokenAmount.toFixed(2)} @ $${priceUsd.toFixed(10)} = ${solValue.toFixed(6)} SOL`);
             return solValue;
           }
         }
       }
-    } catch (e) {
-      console.warn(`[Value] DexScreener failed`);
+    } catch {
+      // DexScreener also failed
     }
 
-    console.warn(`[Value] No price available for ${tokenMint.slice(0, 8)} - skipping`);
+    console.warn(`[Value] No price for ${tokenMint.slice(0, 8)}`);
     return null;
   } catch (error) {
     console.error('[Value] Error:', error);
