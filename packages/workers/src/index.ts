@@ -1,7 +1,6 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { analyzeRoutes } from './routes/analyze';
-import { graffitiRoutes } from './routes/graffiti';
 import { walletHistoryRoutes } from './routes/wallet-history';
 import { subscriptionRoutes } from './routes/subscription';
 import { authRoutes } from './routes/auth';
@@ -84,55 +83,55 @@ app.get('/privacy', (c) => {
 <body>
   <div class="container">
     <h1>Privacy Policy</h1>
-    <p class="subtitle">Last updated: January 12, 2025</p>
+    <p class="subtitle">Last updated: January 2026</p>
     <div class="highlight">
-      <strong>TL;DR:</strong> ArgusGuard does not collect, store, or sell your personal data. All analysis happens through our secure API, and we only process the minimum data needed to protect you from scams.
+      <strong>TL;DR:</strong> Argus AI does not collect, store, or sell your personal data. All analysis happens through our secure API, and we only process the minimum data needed to protect you from scams.
     </div>
     <h2>1. Introduction</h2>
-    <p>ArgusGuard ("we", "our", or "us") is committed to protecting your privacy. This Privacy Policy explains how our browser extension handles information when you use our service to analyze tokens on Pump.fun and other supported platforms.</p>
+    <p>Argus AI ("we", "our", or "us") is committed to protecting your privacy. This Privacy Policy explains how our platform handles information when you use our service to analyze and trade Solana tokens.</p>
     <h2>2. Information We Do NOT Collect</h2>
     <ul>
       <li><strong>Personal Information:</strong> We do not collect your name, email, phone number, or any personally identifiable information.</li>
       <li><strong>Browsing History:</strong> We do not track or store your browsing history.</li>
-      <li><strong>Wallet Contents:</strong> We do not access, store, or track your wallet balances, transactions, or holdings beyond the single balance check for token gating.</li>
+      <li><strong>Wallet Contents:</strong> We do not access, store, or track your wallet balances, transactions, or holdings beyond what is needed for trading.</li>
       <li><strong>Cookies or Trackers:</strong> We do not use cookies, analytics, or any third-party tracking services.</li>
     </ul>
     <h2>3. Information We Process</h2>
     <p>To provide our service, we process the following information:</p>
     <ul>
-      <li><strong>Token Addresses:</strong> When you visit a token page, we send the token's contract address to our API for analysis. This is necessary to check for honeypots and scams.</li>
-      <li><strong>Wallet Address (Token Gating):</strong> We check if your connected wallet holds the required $ARGUSGUARD tokens. This check is performed locally and via RPC - we do not store your wallet address on our servers.</li>
-      <li><strong>Community Notes:</strong> If you submit a community note, we store the note content, your wallet address (as the author), and the associated token address. This is publicly visible to other users.</li>
-      <li><strong>Subscription (Optional):</strong> If you subscribe via Stripe, we store your wallet address linked to your Stripe customer ID to verify your subscription status. Payment processing is handled entirely by Stripe.</li>
+      <li><strong>Token Addresses:</strong> When you analyze a token, we send the token's contract address to our API for analysis. This is necessary to check for risks and scams.</li>
+      <li><strong>Trading Wallet:</strong> Your dedicated trading wallet is stored encrypted in your browser's localStorage. Private keys never leave your device.</li>
     </ul>
     <h2>4. How We Use Information</h2>
     <p>The information we process is used solely to:</p>
     <ul>
       <li>Analyze token contracts for potential risks (honeypots, rug pulls, scams)</li>
-      <li>Verify token holder status for premium features</li>
-      <li>Display community warnings and notes from other users</li>
+      <li>Execute trades via Jupiter aggregator on your behalf</li>
+      <li>Track your positions and P&amp;L</li>
     </ul>
     <h2>5. Data Storage and Security</h2>
     <ul>
       <li><strong>Token Analysis Results:</strong> Cached temporarily to improve performance. No personal data is stored.</li>
-      <li><strong>Community Notes:</strong> Stored in our database with the author's wallet address for attribution.</li>
-      <li><strong>Local Storage:</strong> The extension stores your preferences locally in your browser. This data never leaves your device.</li>
+      <li><strong>Trading Wallet:</strong> Stored encrypted in your browser's localStorage. Never transmitted to our servers.</li>
+      <li><strong>Positions &amp; Settings:</strong> Stored locally in your browser. This data never leaves your device.</li>
     </ul>
     <h2>6. Third-Party Services</h2>
     <p>We use the following third-party services:</p>
     <ul>
-      <li><strong>Solana RPC:</strong> To verify wallet balances and token holdings</li>
-      <li><strong>Together AI:</strong> For AI-powered contract analysis (only token contract data is sent, no personal information)</li>
+      <li><strong>Solana RPC (Helius):</strong> To submit transactions and verify balances</li>
+      <li><strong>Groq / Together AI:</strong> For AI-powered risk analysis (only token data is sent, no personal information)</li>
+      <li><strong>DexScreener:</strong> For market data (price, volume, liquidity)</li>
+      <li><strong>RugCheck:</strong> For holder distribution and security checks</li>
+      <li><strong>Jupiter:</strong> For swap execution and price routing</li>
       <li><strong>Cloudflare:</strong> For API hosting and security</li>
-      <li><strong>Stripe:</strong> For payment processing (only if you choose to subscribe). Stripe handles all payment data according to their privacy policy.</li>
     </ul>
     <p>These services have their own privacy policies and do not receive any of your personal information from us.</p>
     <h2>7. Your Rights</h2>
     <p>You have the right to:</p>
     <ul>
-      <li>Uninstall the extension at any time, which removes all local data</li>
-      <li>Request deletion of any community notes you've submitted</li>
-      <li>Use the extension without connecting a wallet (with limited features)</li>
+      <li>Delete your trading wallet at any time, which removes all local data</li>
+      <li>Export your wallet private key before deletion</li>
+      <li>Use the platform without connecting a wallet (analysis only)</li>
     </ul>
     <h2>8. Children's Privacy</h2>
     <p>ArgusGuard is not intended for use by anyone under the age of 18. We do not knowingly collect information from minors.</p>
@@ -141,11 +140,11 @@ app.get('/privacy', (c) => {
     <h2>10. Contact Us</h2>
     <p>If you have any questions about this Privacy Policy, please contact us at:</p>
     <ul>
-      <li>Twitter: <a href="https://twitter.com/ArgusGuard">@ArgusGuard</a></li>
+      <li>X: <a href="https://x.com/ArgusPanoptes7z">@ArgusPanoptes7z</a></li>
       <li>Website: <a href="https://argusguard.io">argusguard.io</a></li>
     </ul>
     <div class="footer">
-      <p>&copy; 2025 ArgusGuard. All rights reserved.</p>
+      <p>&copy; 2026 Argus AI. All rights reserved.</p>
     </div>
   </div>
 </body>
@@ -155,7 +154,6 @@ app.get('/privacy', (c) => {
 
 // Mount routes
 app.route('/analyze', analyzeRoutes);
-app.route('/graffiti', graffitiRoutes);
 app.route('/wallet-history', walletHistoryRoutes);
 app.route('/subscribe', subscriptionRoutes);
 app.route('/auth', authRoutes);

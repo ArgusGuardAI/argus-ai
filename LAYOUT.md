@@ -75,7 +75,6 @@ solana-safeguard-ai/
 │   │       │   ├── auth.ts          # Authentication
 │   │       │   ├── scores.ts        # Score management
 │   │       │   ├── trends.ts        # Trending tokens
-│   │       │   ├── graffiti.ts      # Graffiti feature
 │   │       │   ├── subscription.ts  # Subscription management
 │   │       │   └── wallet-history.ts # Wallet history
 │   │       ├── services/
@@ -101,7 +100,6 @@ solana-safeguard-ai/
 │   │       │   ├── token.ts         # Token interfaces
 │   │       │   ├── ai.ts           # AI response types
 │   │       │   ├── honeypot.ts     # Honeypot detection types
-│   │       │   ├── graffiti.ts     # Graffiti types
 │   │       │   ├── subscription.ts # Subscription types
 │   │       │   └── wallet-reputation.ts # Wallet reputation types
 │   │       └── constants/

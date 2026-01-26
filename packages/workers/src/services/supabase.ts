@@ -1,86 +1,8 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { GraffitiNote, WalletReputation, HoneypotResult } from '@argusguard/shared';
+import { WalletReputation, HoneypotResult } from '@argusguard/shared';
 
 export function createSupabaseClient(url: string, anonKey: string): SupabaseClient {
   return createClient(url, anonKey);
-}
-
-// Graffiti Notes
-
-export async function getGraffitiNotes(
-  supabase: SupabaseClient,
-  tokenAddress: string
-): Promise<GraffitiNote[]> {
-  const { data, error } = await supabase
-    .from('graffiti_notes')
-    .select('*')
-    .eq('token_address', tokenAddress)
-    .order('created_at', { ascending: false });
-
-  if (error) {
-    console.error('Error fetching graffiti notes:', error);
-    return [];
-  }
-
-  return (data || []).map(mapDbToGraffitiNote);
-}
-
-export async function createGraffitiNote(
-  supabase: SupabaseClient,
-  note: Omit<GraffitiNote, 'id' | 'upvotes' | 'downvotes' | 'createdAt'>
-): Promise<GraffitiNote | null> {
-  const { data, error } = await supabase
-    .from('graffiti_notes')
-    .insert({
-      token_address: note.tokenAddress,
-      author_wallet: note.authorWallet,
-      content: note.content,
-      note_type: note.noteType,
-      verified: note.verified,
-    })
-    .select()
-    .single();
-
-  if (error) {
-    console.error('Error creating graffiti note:', error);
-    return null;
-  }
-
-  return mapDbToGraffitiNote(data);
-}
-
-export async function voteOnNote(
-  supabase: SupabaseClient,
-  noteId: string,
-  vote: 'up' | 'down'
-): Promise<boolean> {
-  const column = vote === 'up' ? 'upvotes' : 'downvotes';
-
-  const { error } = await supabase.rpc('increment_vote', {
-    note_id: noteId,
-    vote_column: column,
-  });
-
-  if (error) {
-    console.error('Error voting on note:', error);
-    return false;
-  }
-
-  return true;
-}
-
-function mapDbToGraffitiNote(row: Record<string, unknown>): GraffitiNote {
-  return {
-    id: row.id as string,
-    tokenAddress: row.token_address as string,
-    authorWallet: row.author_wallet as string,
-    content: row.content as string,
-    noteType: row.note_type as GraffitiNote['noteType'],
-    upvotes: row.upvotes as number,
-    downvotes: row.downvotes as number,
-    createdAt: new Date(row.created_at as string).getTime(),
-    verified: row.verified as boolean,
-  };
 }
 
 // Wallet Reputation
