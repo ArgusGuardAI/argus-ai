@@ -20,6 +20,23 @@ const HELIUS_RPC = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
 const ARGUS_FEE_WALLET = 'DvQzNPwaVAC2sKvyAkermrmvhnfGftxYdr3tTchB3NEv';
 const ARGUS_FEE_PERCENT = 0.5; // 0.5% fee on AI-executed trades
 
+// Solana rent-exempt minimum for a system account (~0.00089 SOL)
+// Fees accumulate locally until they exceed this threshold, then transfer
+const RENT_EXEMPT_MINIMUM = 0.001; // SOL — slightly above actual minimum for safety
+const PENDING_FEES_KEY = 'argus_pending_fees';
+
+function getPendingFees(): number {
+  try {
+    return parseFloat(localStorage.getItem(PENDING_FEES_KEY) || '0') || 0;
+  } catch { return 0; }
+}
+
+function setPendingFees(amount: number) {
+  try {
+    localStorage.setItem(PENDING_FEES_KEY, amount.toString());
+  } catch { /* ignore */ }
+}
+
 export interface SwapQuote {
   inputMint: string;
   outputMint: string;
@@ -201,43 +218,53 @@ export async function buyToken(
   // Execute the swap first
   const swapResult = await executeSwap(quote, userPublicKey, signTransaction);
 
-  // If swap succeeded and fee is configured, send the fee
+  // If swap succeeded and fee is configured, accumulate and send fee
   if (swapResult.success && feeAmount > 0 && ARGUS_FEE_WALLET) {
     try {
-      const connection = new Connection(HELIUS_RPC, 'confirmed');
-      const feeLamports = Math.floor(feeAmount * LAMPORTS_PER_SOL);
-      const feeWallet = new PublicKey(ARGUS_FEE_WALLET);
+      const totalPending = getPendingFees() + feeAmount;
+      console.log(`[Buy] Fee accrued: ${feeAmount.toFixed(6)} SOL, total pending: ${totalPending.toFixed(6)} SOL`);
 
-      // Check balance — skip fee if wallet would drop below rent exemption
-      const balance = await connection.getBalance(userPublicKey);
-      const MIN_RESERVE = 0.01 * LAMPORTS_PER_SOL; // rent + tx fee buffer (0.01 SOL)
-      if (balance < feeLamports + MIN_RESERVE) {
-        console.log(`[Buy] Skipping fee — insufficient balance (${(balance / LAMPORTS_PER_SOL).toFixed(4)} SOL) to cover fee + rent`);
+      // Only transfer when accumulated fees exceed rent-exempt minimum
+      if (totalPending >= RENT_EXEMPT_MINIMUM) {
+        const connection = new Connection(HELIUS_RPC, 'confirmed');
+        const feeLamports = Math.floor(totalPending * LAMPORTS_PER_SOL);
+        const feeWallet = new PublicKey(ARGUS_FEE_WALLET);
+
+        const balance = await connection.getBalance(userPublicKey);
+        const MIN_RESERVE = 0.01 * LAMPORTS_PER_SOL;
+        if (balance < feeLamports + MIN_RESERVE) {
+          console.log(`[Buy] Deferring fee — insufficient balance (${(balance / LAMPORTS_PER_SOL).toFixed(4)} SOL)`);
+          setPendingFees(totalPending);
+        } else {
+          const feeIx = SystemProgram.transfer({
+            fromPubkey: userPublicKey,
+            toPubkey: feeWallet,
+            lamports: feeLamports,
+          });
+
+          const { blockhash } = await connection.getLatestBlockhash('confirmed');
+          const messageV0 = new TransactionMessage({
+            payerKey: userPublicKey,
+            recentBlockhash: blockhash,
+            instructions: [feeIx],
+          }).compileToV0Message();
+
+          const feeTx = new VersionedTransaction(messageV0);
+          const signedFeeTx = await signTransaction(feeTx);
+          const feeSignature = await connection.sendRawTransaction(signedFeeTx.serialize());
+          await connection.confirmTransaction(feeSignature, 'confirmed');
+
+          setPendingFees(0);
+          console.log(`[Buy] Fee collected: ${totalPending.toFixed(6)} SOL (tx: ${feeSignature})`);
+        }
       } else {
-        // Create fee transfer as VersionedTransaction (matches signTransaction callback)
-        const feeIx = SystemProgram.transfer({
-          fromPubkey: userPublicKey,
-          toPubkey: feeWallet,
-          lamports: feeLamports,
-        });
-
-        const { blockhash } = await connection.getLatestBlockhash('confirmed');
-        const messageV0 = new TransactionMessage({
-          payerKey: userPublicKey,
-          recentBlockhash: blockhash,
-          instructions: [feeIx],
-        }).compileToV0Message();
-
-        const feeTx = new VersionedTransaction(messageV0);
-        const signedFeeTx = await signTransaction(feeTx);
-        const feeSignature = await connection.sendRawTransaction(signedFeeTx.serialize());
-        await connection.confirmTransaction(feeSignature, 'confirmed');
-
-        console.log(`[Buy] Fee collected: ${feeAmount.toFixed(6)} SOL`);
+        setPendingFees(totalPending);
+        console.log(`[Buy] Fee saved — waiting to reach ${RENT_EXEMPT_MINIMUM} SOL threshold`);
       }
     } catch (feeError) {
-      console.error('[Buy] Fee collection failed:', feeError);
-      // Don't fail the whole trade if fee collection fails
+      // Save the fee so we don't lose it
+      setPendingFees(getPendingFees() + feeAmount);
+      console.error('[Buy] Fee transfer failed, saved for later:', feeError);
     }
   }
 
@@ -273,46 +300,55 @@ export async function sellToken(
   // Execute the swap first
   const swapResult = await executeSwap(quote, userPublicKey, signTransaction);
 
-  // If swap succeeded and fee is configured, send the fee from proceeds
+  // If swap succeeded and fee is configured, accumulate and send fee
   if (swapResult.success && feeAmount > 0 && ARGUS_FEE_WALLET) {
     try {
-      const connection = new Connection(HELIUS_RPC, 'confirmed');
-      const feeLamports = Math.floor(feeAmount * LAMPORTS_PER_SOL);
-      const feeWallet = new PublicKey(ARGUS_FEE_WALLET);
+      const totalPending = getPendingFees() + feeAmount;
+      console.log(`[Sell] Fee accrued: ${feeAmount.toFixed(6)} SOL, total pending: ${totalPending.toFixed(6)} SOL`);
 
-      // Small delay to ensure swap SOL has landed
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      // Only transfer when accumulated fees exceed rent-exempt minimum
+      if (totalPending >= RENT_EXEMPT_MINIMUM) {
+        const connection = new Connection(HELIUS_RPC, 'confirmed');
+        const feeLamports = Math.floor(totalPending * LAMPORTS_PER_SOL);
+        const feeWallet = new PublicKey(ARGUS_FEE_WALLET);
 
-      // Check balance — skip fee if wallet would drop below rent exemption
-      const balance = await connection.getBalance(userPublicKey);
-      const MIN_RESERVE = 0.01 * LAMPORTS_PER_SOL; // rent + tx fee buffer (0.01 SOL)
-      if (balance < feeLamports + MIN_RESERVE) {
-        console.log(`[Sell] Skipping fee — insufficient balance (${(balance / LAMPORTS_PER_SOL).toFixed(4)} SOL) to cover fee + rent`);
+        // Small delay to ensure swap SOL has landed
+        await new Promise(resolve => setTimeout(resolve, 3000));
+
+        const balance = await connection.getBalance(userPublicKey);
+        const MIN_RESERVE = 0.01 * LAMPORTS_PER_SOL;
+        if (balance < feeLamports + MIN_RESERVE) {
+          console.log(`[Sell] Deferring fee — insufficient balance (${(balance / LAMPORTS_PER_SOL).toFixed(4)} SOL)`);
+          setPendingFees(totalPending);
+        } else {
+          const feeIx = SystemProgram.transfer({
+            fromPubkey: userPublicKey,
+            toPubkey: feeWallet,
+            lamports: feeLamports,
+          });
+
+          const { blockhash } = await connection.getLatestBlockhash('confirmed');
+          const messageV0 = new TransactionMessage({
+            payerKey: userPublicKey,
+            recentBlockhash: blockhash,
+            instructions: [feeIx],
+          }).compileToV0Message();
+
+          const feeTx = new VersionedTransaction(messageV0);
+          const signedFeeTx = await signTransaction(feeTx);
+          const feeSignature = await connection.sendRawTransaction(signedFeeTx.serialize());
+          await connection.confirmTransaction(feeSignature, 'confirmed');
+
+          setPendingFees(0);
+          console.log(`[Sell] Fee collected: ${totalPending.toFixed(6)} SOL (tx: ${feeSignature})`);
+        }
       } else {
-        // Create fee transfer as VersionedTransaction (matches signTransaction callback)
-        const feeIx = SystemProgram.transfer({
-          fromPubkey: userPublicKey,
-          toPubkey: feeWallet,
-          lamports: feeLamports,
-        });
-
-        const { blockhash } = await connection.getLatestBlockhash('confirmed');
-        const messageV0 = new TransactionMessage({
-          payerKey: userPublicKey,
-          recentBlockhash: blockhash,
-          instructions: [feeIx],
-        }).compileToV0Message();
-
-        const feeTx = new VersionedTransaction(messageV0);
-        const signedFeeTx = await signTransaction(feeTx);
-        const feeSignature = await connection.sendRawTransaction(signedFeeTx.serialize());
-        await connection.confirmTransaction(feeSignature, 'confirmed');
-
-        console.log(`[Sell] Fee collected: ${feeAmount.toFixed(6)} SOL`);
+        setPendingFees(totalPending);
+        console.log(`[Sell] Fee saved — waiting to reach ${RENT_EXEMPT_MINIMUM} SOL threshold`);
       }
     } catch (feeError) {
-      console.error('[Sell] Fee collection failed:', feeError);
-      // Don't fail the whole trade if fee collection fails
+      setPendingFees(getPendingFees() + feeAmount);
+      console.error('[Sell] Fee transfer failed, saved for later:', feeError);
     }
   }
 
