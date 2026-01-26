@@ -25,8 +25,10 @@ import bs58 from 'bs58';
 
 const STORAGE_KEY = 'argus_trading_wallet';
 const STORAGE_KEY_NAME = 'argus_trading_wallet_name';
-const HELIUS_API_KEY = '54846763-d323-4cb5-8d67-23ed50c19d10';
-const RPC_URL = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
+const HELIUS_API_KEY = import.meta.env.VITE_HELIUS_API_KEY || '';
+const RPC_URL = HELIUS_API_KEY
+  ? `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`
+  : 'https://api.mainnet-beta.solana.com';
 
 export interface TradingWalletState {
   publicKey: string;

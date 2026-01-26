@@ -11,9 +11,11 @@ const API_BASE = import.meta.env.VITE_API_URL || 'https://argusguard-api.hermosi
 const JUPITER_API = `${API_BASE}/jupiter`;
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
 
-// Helius RPC with our API key for reliable connections
-const HELIUS_API_KEY = '54846763-d323-4cb5-8d67-23ed50c19d10';
-const HELIUS_RPC = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
+// Helius RPC for reliable connections (key via VITE_HELIUS_API_KEY env var)
+const HELIUS_API_KEY = import.meta.env.VITE_HELIUS_API_KEY || '';
+const HELIUS_RPC = HELIUS_API_KEY
+  ? `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`
+  : 'https://api.mainnet-beta.solana.com';
 
 // Argus AI fee configuration
 // 0.5% fee on all trades - sent to platform wallet
