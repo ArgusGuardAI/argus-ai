@@ -1194,6 +1194,13 @@ analyzeRoutes.post('/', async (c) => {
       analysisData.ageInDays = pumpFunResult.ageInDays;
       analysisData.marketCapUsd = pumpFunResult.marketCapSol * solPrice;
       analysisData.hasUnknownDeployer = false; // We have the creator
+
+      // Use bonding curve reserves as liquidity when DexScreener shows $0
+      // (PumpFun tokens on the bonding curve have real SOL reserves as liquidity)
+      const bondingCurveLiquidityUsd = pumpFunResult.realSolReserves * solPrice;
+      if (bondingCurveLiquidityUsd > analysisData.liquidityUsd) {
+        analysisData.liquidityUsd = bondingCurveLiquidityUsd;
+      }
     }
 
     // Check authorities from Helius metadata
@@ -1445,18 +1452,29 @@ analyzeRoutes.post('/', async (c) => {
     const response = {
       ...result,
       cached: false,
-      // Market Data
+      // Market Data (use analysisData.liquidityUsd which includes bonding curve reserves)
       market: dexScreenerResult ? {
         name: dexScreenerResult.name,
         symbol: dexScreenerResult.symbol,
         priceUsd: dexScreenerResult.priceUsd,
         priceChange24h: dexScreenerResult.priceChange24h,
-        marketCap: dexScreenerResult.marketCap,
-        liquidity: dexScreenerResult.liquidityUsd,
+        marketCap: analysisData.marketCapUsd || dexScreenerResult.marketCap,
+        liquidity: analysisData.liquidityUsd,
         volume24h: dexScreenerResult.volume24h,
         txns24h: dexScreenerResult.txns24h,
         dex: dexScreenerResult.dex,
         ageInDays: dexScreenerResult.ageInDays,
+      } : pumpFunResult ? {
+        name: pumpFunResult.name,
+        symbol: pumpFunResult.symbol,
+        priceUsd: pumpFunResult.pricePerToken * solPrice,
+        priceChange24h: 0,
+        marketCap: analysisData.marketCapUsd,
+        liquidity: analysisData.liquidityUsd,
+        volume24h: 0,
+        txns24h: 0,
+        dex: 'pumpfun',
+        ageInDays: pumpFunResult.ageInDays,
       } : null,
       // Holder Data
       holders: holderData ? {
