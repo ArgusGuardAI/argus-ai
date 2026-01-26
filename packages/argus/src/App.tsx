@@ -421,6 +421,7 @@ export default function App() {
   const [showImport, setShowImport] = useState(false);
   const [importKey, setImportKey] = useState('');
   const [withdrawAddr, setWithdrawAddr] = useState('');
+  const [withdrawAmount, setWithdrawAmount] = useState('');
   const [walletName, setWalletName] = useState('Trading Wallet');
   const [isEditingName, setIsEditingName] = useState(false);
   const [editNameValue, setEditNameValue] = useState('');
@@ -891,21 +892,43 @@ export default function App() {
                         </div>
                       </div>
                       <div className="p-3 space-y-2">
-                        <div className="flex gap-2">
+                        <div className="flex flex-col gap-2">
                           <input
                             type="text"
-                            placeholder="Withdraw to address"
+                            placeholder="Recipient address"
                             value={withdrawAddr}
                             onChange={e => setWithdrawAddr(e.target.value)}
-                            className="flex-1 px-3 py-2 text-sm rounded-lg border border-zinc-700 bg-zinc-800 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            className="w-full px-3 py-2 text-sm rounded-lg border border-zinc-700 bg-zinc-800 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                           />
-                          <button
-                            onClick={() => { autoTrade.withdraw(withdrawAddr); setWithdrawAddr(''); }}
-                            disabled={!withdrawAddr}
-                            className="px-3 py-2 text-sm font-medium bg-zinc-700 text-zinc-300 rounded-lg hover:bg-zinc-600 disabled:opacity-50"
-                          >
-                            Send
-                          </button>
+                          <div className="flex gap-2">
+                            <input
+                              type="number"
+                              step="0.001"
+                              min="0"
+                              placeholder="Amount (SOL)"
+                              value={withdrawAmount}
+                              onChange={e => setWithdrawAmount(e.target.value)}
+                              className="flex-1 px-3 py-2 text-sm rounded-lg border border-zinc-700 bg-zinc-800 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            />
+                            <button
+                              onClick={() => setWithdrawAmount(Math.max(0, autoTrade.wallet.balance - 0.005).toFixed(4))}
+                              className="px-2 py-2 text-xs font-medium bg-zinc-700 text-zinc-400 rounded-lg hover:bg-zinc-600"
+                            >
+                              Max
+                            </button>
+                            <button
+                              onClick={() => {
+                                const amt = parseFloat(withdrawAmount);
+                                autoTrade.withdraw(withdrawAddr, amt > 0 ? amt : undefined);
+                                setWithdrawAddr('');
+                                setWithdrawAmount('');
+                              }}
+                              disabled={!withdrawAddr}
+                              className="px-4 py-2 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 disabled:opacity-50"
+                            >
+                              Send
+                            </button>
+                          </div>
                         </div>
                         <div className="flex gap-2 pt-2 border-t border-zinc-700">
                           <button

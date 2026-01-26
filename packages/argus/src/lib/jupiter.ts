@@ -20,9 +20,10 @@ const HELIUS_RPC = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
 const ARGUS_FEE_WALLET = 'DvQzNPwaVAC2sKvyAkermrmvhnfGftxYdr3tTchB3NEv';
 const ARGUS_FEE_PERCENT = 0.5; // 0.5% fee on AI-executed trades
 
-// Solana rent-exempt minimum for a system account (~0.00089 SOL)
-// Fees accumulate locally until they exceed this threshold, then transfer
-const RENT_EXEMPT_MINIMUM = 0.001; // SOL — slightly above actual minimum for safety
+// Fee transfer threshold — set to 0 once fee wallet is funded on-chain
+// If the fee wallet account doesn't exist, transfers below ~0.00089 SOL fail
+// and the catch block saves them for the next attempt
+const RENT_EXEMPT_MINIMUM = 0; // Fee wallet is funded, transfer every trade
 const PENDING_FEES_KEY = 'argus_pending_fees';
 
 function getPendingFees(): number {
