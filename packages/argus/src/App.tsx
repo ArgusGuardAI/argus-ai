@@ -203,6 +203,7 @@ interface AnalysisResult {
     count: number;
     totalPercent: number;
     wallets: string[];
+    description?: string;
   };
   ai: {
     signal: SignalType;
@@ -428,6 +429,7 @@ export default function App() {
             count: data.bundleInfo?.count || 0,
             totalPercent: typeof data.bundleInfo?.txBundlePercent === 'number' ? data.bundleInfo.txBundlePercent : 0,
             wallets: [],
+            description: data.bundleInfo?.description,
           },
           ai: {
             signal,
@@ -1153,7 +1155,10 @@ export default function App() {
                       <span className="text-sm font-bold text-red-400">Bundle Warning</span>
                     </div>
                     <p className="text-sm text-red-400/80">
-                      {analysisResult.bundles.count} coordinated wallet cluster{analysisResult.bundles.count > 1 ? 's' : ''} detected holding {analysisResult.bundles.totalPercent.toFixed(1)}% of supply. This may indicate coordinated trading.
+                      {analysisResult.bundles.description
+                        ? `${analysisResult.bundles.description}. This may indicate coordinated trading.`
+                        : `${analysisResult.bundles.count} coordinated wallet${analysisResult.bundles.count > 1 ? 's' : ''} detected. This may indicate coordinated trading.`
+                      }
                     </p>
                   </div>
                 )}
