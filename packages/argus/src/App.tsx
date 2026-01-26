@@ -418,6 +418,7 @@ export default function App() {
 
   // Wallet management
   const [showWalletMenu, setShowWalletMenu] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [importKey, setImportKey] = useState('');
   const [withdrawAddr, setWithdrawAddr] = useState('');
@@ -563,6 +564,9 @@ export default function App() {
 
         // $0 liquidity penalty — skip for pump.fun tokens (they use bonding curves, not DEX liquidity)
         if (liquidity <= 0 && !isPumpFun) score = Math.max(0, score - 20);
+
+        // Structural risk (age, liquidity depth) is handled by backend guardrails
+        // to avoid double-counting — do NOT apply frontend penalties for these
 
         // Extreme holder concentration
         if (topHolderPct > 50) score = Math.max(0, score - 15);
@@ -815,11 +819,23 @@ export default function App() {
                       </svg>
                     </button>
                     <button
-                      onClick={(e) => { e.stopPropagation(); autoTrade.refreshBalance(); }}
-                      className="px-2 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-r-xl shadow-lg shadow-emerald-500/20 transition-all h-full"
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        if (isRefreshing) return;
+                        setIsRefreshing(true);
+                        const minSpin = new Promise(r => setTimeout(r, 750));
+                        await Promise.all([autoTrade.refreshBalance(), minSpin]);
+                        setIsRefreshing(false);
+                      }}
+                      disabled={isRefreshing}
+                      className="px-2 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-r-xl shadow-lg shadow-emerald-500/20 transition-all h-full disabled:opacity-70"
                       title="Refresh balance"
                     >
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <svg
+                        className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`}
+                        style={isRefreshing ? { animationDuration: '0.75s' } : undefined}
+                        fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                      >
                         <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                       </svg>
                     </button>

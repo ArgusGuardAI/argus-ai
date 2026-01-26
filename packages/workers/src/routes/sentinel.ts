@@ -282,10 +282,13 @@ async function generateNetworkAnalysis(
     marketCap?: number;
     liquidity?: number;
     age?: number;
+    ageHours?: number;
     volume24h?: number;
     priceChange24h?: number;
     txns24h?: { buys: number; sells: number };
     txns1h?: { buys: number; sells: number };
+    mintAuthorityActive?: boolean;
+    freezeAuthorityActive?: boolean;
   },
   network: NetworkData,
   creatorInfo: {
@@ -335,7 +338,7 @@ TOKEN INFO:
 - Address: ${tokenInfo.address}
 ${tokenInfo.marketCap ? `- Market Cap: $${tokenInfo.marketCap.toLocaleString()}` : ''}
 ${tokenInfo.liquidity ? `- Liquidity: $${tokenInfo.liquidity.toLocaleString()}` : ''}
-${tokenInfo.age !== undefined ? `- Age: ${tokenInfo.age} days` : ''}
+${tokenInfo.ageHours !== undefined ? (tokenInfo.ageHours < 24 ? `- Age: ${tokenInfo.ageHours.toFixed(1)} hours ⚠️ VERY NEW` : `- Age: ${tokenInfo.age} days`) : ''}
 ${tokenInfo.volume24h ? `- 24h Volume: $${tokenInfo.volume24h.toLocaleString()}` : ''}
 ${tokenInfo.priceChange24h !== undefined ? `- 24h Price Change: ${tokenInfo.priceChange24h > 0 ? '+' : ''}${tokenInfo.priceChange24h.toFixed(1)}%` : ''}
 ${tokenInfo.txns24h ? `- 24h Transactions: ${tokenInfo.txns24h.buys} buys / ${tokenInfo.txns24h.sells} sells (ratio: ${tokenInfo.txns24h.sells > 0 ? (tokenInfo.txns24h.buys / tokenInfo.txns24h.sells).toFixed(2) : 'N/A'})` : ''}
@@ -344,6 +347,33 @@ ${tokenInfo.txns1h ? `- 1h Transactions: ${tokenInfo.txns1h.buys} buys / ${token
 SECURITY:
 - Mint Authority: ${tokenInfo.mintAuthorityActive ? '⚠️ ACTIVE (can mint more tokens)' : 'REVOKED ✓'}
 - Freeze Authority: ${tokenInfo.freezeAuthorityActive ? '🚨 ACTIVE (can freeze/close accounts — HIGH rug risk)' : 'REVOKED ✓'}
+
+STRUCTURAL RISK:${(() => {
+    const warnings: string[] = [];
+    if (tokenInfo.ageHours !== undefined && tokenInfo.ageHours < 6) {
+      warnings.push('- Token is less than 6 hours old (consider +10 risk)');
+    } else if (tokenInfo.ageHours !== undefined && tokenInfo.ageHours < 24) {
+      warnings.push('- Token is less than 24 hours old (consider +5 risk)');
+    }
+    if (tokenInfo.liquidity && tokenInfo.liquidity < 5000) {
+      warnings.push('- Liquidity under $5K — thin exit (consider +10 risk)');
+    } else if (tokenInfo.liquidity && tokenInfo.liquidity < 10000) {
+      warnings.push('- Liquidity under $10K (consider +5 risk)');
+    }
+    if (tokenInfo.volume24h && tokenInfo.liquidity && tokenInfo.liquidity > 0) {
+      const volLiqRatio = tokenInfo.volume24h / tokenInfo.liquidity;
+      if (volLiqRatio > 5) {
+        warnings.push(`- Volume/Liquidity ratio: ${volLiqRatio.toFixed(1)}x — high pool turnover`);
+      }
+    }
+    if (tokenInfo.marketCap && tokenInfo.liquidity && tokenInfo.liquidity > 0) {
+      const mcapLiqRatio = tokenInfo.marketCap / tokenInfo.liquidity;
+      if (mcapLiqRatio > 10) {
+        warnings.push(`- MCap/Liquidity ratio: ${mcapLiqRatio.toFixed(1)}x — inflated relative to exit liquidity`);
+      }
+    }
+    return warnings.length > 0 ? '\n' + warnings.join('\n') : '\n- No structural concerns';
+  })()}
 
 NETWORK SUMMARY:
 - Total Nodes: ${network.nodes.length}
@@ -485,13 +515,22 @@ SECURITY AUTHORITY SCORING:
 - Both active = +25 points (combined rug capability)
 - Both revoked = -5 points (positive safety signal)
 
+STRUCTURAL RISK AWARENESS (consider but do not over-penalize):
+- Token < 6 hours old = +10 points (most rugs happen in first few hours)
+- Token < 24 hours old = +5 points (elevated rug window)
+- Liquidity < $5K = +10 points (thin exit liquidity, easier to rug)
+- Liquidity < $10K = +5 points (moderate exit liquidity)
+- Volume/Liquidity > 5x on a new token = note as churning risk
+- Max structural penalty should be ~+15 points total (hard guardrails enforce minimums separately)
+- Positive trading signals CAN still offset structural risk, but weight them less for tokens < 6h old
+
 SCORING GUIDANCE:
 - 80+ (SCAM): Creator with previous rugs, active freeze authority + bundles, or extreme red flags with NO positive signals
 - 60-79 (DANGEROUS): HIGH confidence bundles with additional red flags, or active freeze authority with concentration
-- 40-59 (SUSPICIOUS): Bundles or concentration WITH positive market activity
+- 40-59 (SUSPICIOUS): Bundles or concentration WITH positive market activity, or new tokens (<24h) with thin liquidity
 - 0-39 (SAFE): No major red flags, or red flags offset by strong positive signals
-- A token with bundles BUT strong volume, good liquidity, and active trading should score 40-60, NOT 80+
 - A token with active freeze authority should almost never score below 40
+- A token with bundles BUT strong volume, good liquidity (>$20K), and active trading should score 40-60, NOT 80+
 
 RETURN ONLY VALID JSON, no markdown or explanation.`;
 
@@ -554,6 +593,49 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
       if (isNewWallet && hasBundleDetection && hasWhale && topWhalePercent >= 10 && score < 60) {
         console.log(`[Sentinel] Enforcing minimum 60 for triple threat (was ${score})`);
         score = 60;
+      }
+
+      // ============================================
+      // STRUCTURAL RISK GUARDRAILS
+      // Token age and liquidity are the hardest signals to fake.
+      // A brand new token with thin liquidity showing "great" buy activity
+      // is the pump phase of a pump-and-dump.
+      // ============================================
+      const liquidityUsd = tokenInfo.liquidity || 0;
+      const tokenAgeHours = tokenInfo.ageHours;
+
+      // Very new token (<6h) with thin liquidity (<$10K) = minimum 50
+      if (tokenAgeHours !== undefined && tokenAgeHours < 6 && liquidityUsd < 10000 && score < 50) {
+        console.log(`[Sentinel] Enforcing minimum 50 for new token (<6h) + thin liquidity (was ${score})`);
+        score = 50;
+        aiFlags.push({ type: 'STRUCTURAL', severity: 'HIGH', message: `Token is ${tokenAgeHours.toFixed(1)}h old with $${liquidityUsd.toLocaleString()} liquidity — high rug risk` });
+      }
+      // New token (<24h) with very thin liquidity (<$5K) = minimum 50
+      else if (tokenAgeHours !== undefined && tokenAgeHours < 24 && liquidityUsd < 5000 && score < 50) {
+        console.log(`[Sentinel] Enforcing minimum 50 for <24h token + <$5K liquidity (was ${score})`);
+        score = 50;
+        aiFlags.push({ type: 'STRUCTURAL', severity: 'HIGH', message: `Token is ${tokenAgeHours.toFixed(1)}h old with only $${liquidityUsd.toLocaleString()} liquidity` });
+      }
+
+      // Any token < 6 hours old = minimum 35 regardless
+      if (tokenAgeHours !== undefined && tokenAgeHours < 6 && score < 35) {
+        console.log(`[Sentinel] Enforcing minimum 35 for <6h token (was ${score})`);
+        score = 35;
+      }
+
+      // Any token with < $5K liquidity = minimum 40
+      if (liquidityUsd > 0 && liquidityUsd < 5000 && score < 40) {
+        console.log(`[Sentinel] Enforcing minimum 40 for <$5K liquidity (was ${score})`);
+        score = 40;
+      }
+
+      // Volume/Liquidity churning: if 24h volume > 8x liquidity on a new token, suspicious
+      if (tokenInfo.volume24h && liquidityUsd > 0 && tokenAgeHours !== undefined && tokenAgeHours < 24) {
+        const volLiqRatio = tokenInfo.volume24h / liquidityUsd;
+        if (volLiqRatio > 8 && score < 45) {
+          console.log(`[Sentinel] Enforcing minimum 45 for volume churning (${volLiqRatio.toFixed(1)}x vol/liq on <24h token, was ${score})`);
+          score = 45;
+        }
       }
 
       score = Math.min(100, score);
@@ -689,6 +771,36 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
   }
 
   // ============================================
+  // STRUCTURAL RISK SCORING (fallback)
+  // ============================================
+  const fallbackLiquidity = tokenInfo.liquidity || 0;
+  const fallbackAgeHours = tokenInfo.ageHours;
+
+  if (fallbackAgeHours !== undefined && fallbackAgeHours < 6) {
+    riskScore += 20;
+    flags.push({ type: 'STRUCTURAL', severity: 'HIGH', message: `Token is only ${fallbackAgeHours.toFixed(1)} hours old — very high rug risk` });
+  } else if (fallbackAgeHours !== undefined && fallbackAgeHours < 24) {
+    riskScore += 10;
+    flags.push({ type: 'STRUCTURAL', severity: 'MEDIUM', message: `Token is ${fallbackAgeHours.toFixed(1)} hours old — elevated rug risk` });
+  }
+
+  if (fallbackLiquidity > 0 && fallbackLiquidity < 5000) {
+    riskScore += 20;
+    flags.push({ type: 'STRUCTURAL', severity: 'HIGH', message: `Liquidity is only $${fallbackLiquidity.toLocaleString()} — paper-thin exit` });
+  } else if (fallbackLiquidity > 0 && fallbackLiquidity < 10000) {
+    riskScore += 10;
+    flags.push({ type: 'STRUCTURAL', severity: 'MEDIUM', message: `Liquidity is $${fallbackLiquidity.toLocaleString()} — thin exit` });
+  }
+
+  if (tokenInfo.volume24h && fallbackLiquidity > 0) {
+    const volLiqRatio = tokenInfo.volume24h / fallbackLiquidity;
+    if (volLiqRatio > 8) {
+      riskScore += 10;
+      networkInsights.push(`Volume/Liquidity ratio: ${volLiqRatio.toFixed(1)}x — rapid pool churning`);
+    }
+  }
+
+  // ============================================
   // FALLBACK GUARDRAILS (minimums only)
   // ============================================
   const isNewWallet = creatorInfo?.walletAge !== undefined && creatorInfo.walletAge > 0 && creatorInfo.walletAge < 7;
@@ -696,7 +808,7 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
   const hasWhale = whales.length > 0;
   const topWhalePercent = whales[0]?.holdingsPercent || 0;
 
-  console.log(`[Sentinel] Fallback guardrails: newWallet=${isNewWallet}, bundle=${hasBundleDetection} (${bundleInfo.confidence}), whale=${hasWhale} (${topWhalePercent.toFixed(1)}%)`);
+  console.log(`[Sentinel] Fallback guardrails: newWallet=${isNewWallet}, bundle=${hasBundleDetection} (${bundleInfo.confidence}), whale=${hasWhale} (${topWhalePercent.toFixed(1)}%), age=${fallbackAgeHours?.toFixed(1)}h, liq=$${fallbackLiquidity}`);
 
   // HIGH confidence bundle = minimum 55
   if (bundleInfo.confidence === 'HIGH' && riskScore < 55) {
@@ -708,6 +820,20 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
   if (isNewWallet && hasBundleDetection && hasWhale && topWhalePercent >= 10 && riskScore < 60) {
     console.log(`[Sentinel] Enforcing minimum 60 for triple threat (was ${riskScore})`);
     riskScore = 60;
+  }
+
+  // Structural minimums
+  if (fallbackAgeHours !== undefined && fallbackAgeHours < 6 && fallbackLiquidity < 10000 && riskScore < 50) {
+    riskScore = 50;
+  }
+  if (fallbackAgeHours !== undefined && fallbackAgeHours < 24 && fallbackLiquidity < 5000 && riskScore < 50) {
+    riskScore = 50;
+  }
+  if (fallbackLiquidity > 0 && fallbackLiquidity < 5000 && riskScore < 40) {
+    riskScore = 40;
+  }
+  if (fallbackAgeHours !== undefined && fallbackAgeHours < 6 && riskScore < 35) {
+    riskScore = 35;
   }
 
   riskScore = Math.min(100, riskScore);
@@ -852,6 +978,10 @@ sentinelRoutes.post('/analyze', async (c) => {
     const mintAuthorityActive = !!metadata?.mintAuthority;
     const freezeAuthorityActive = !!metadata?.freezeAuthority;
 
+    const ageHours = dexData?.pairCreatedAt
+      ? (Date.now() - dexData.pairCreatedAt) / (1000 * 60 * 60)
+      : undefined;
+
     const tokenInfo = {
       address: tokenAddress,
       name: metadata?.name || dexData?.name || 'Unknown',
@@ -859,9 +989,8 @@ sentinelRoutes.post('/analyze', async (c) => {
       price: dexData?.priceUsd,
       marketCap: dexData?.marketCap,
       liquidity: dexData?.liquidityUsd,
-      age: dexData?.pairCreatedAt
-        ? Math.floor((Date.now() - dexData.pairCreatedAt) / (1000 * 60 * 60 * 24))
-        : undefined,
+      age: ageHours !== undefined ? Math.floor(ageHours / 24) : undefined,
+      ageHours: ageHours !== undefined ? Math.round(ageHours * 10) / 10 : undefined,
       holderCount: holders.length,
       priceChange24h: dexData?.priceChange24h,
       volume24h: dexData?.volume24h,

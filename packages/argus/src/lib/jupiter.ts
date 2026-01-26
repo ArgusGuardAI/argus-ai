@@ -58,6 +58,54 @@ export interface SwapResult {
 }
 
 /**
+ * Parse Solana/Jupiter transaction errors into human-readable messages
+ */
+function parseSwapError(error: unknown): string {
+  const raw = typeof error === 'string' ? error : JSON.stringify(error);
+
+  // Custom program error codes (common across Jupiter route programs)
+  const customMatch = raw.match(/Custom["\s:]+(\d+)/i);
+  if (customMatch) {
+    const code = parseInt(customMatch[1]);
+    const knownErrors: Record<number, string> = {
+      1: 'Insufficient funds',
+      6000: 'Slippage exceeded — price moved too fast',
+      6001: 'Invalid swap amount',
+      6003: 'Swap pool has insufficient liquidity',
+      6005: 'Slippage exceeded — price moved too fast, try again',
+      6006: 'Invalid swap route',
+      6007: 'Expired transaction — try again',
+      6022: 'Too little output received — increase slippage',
+      6023: 'Too much input required — increase slippage',
+    };
+    return knownErrors[code] || `Swap program error (code ${code}) — try again or increase slippage`;
+  }
+
+  // InstructionError without Custom
+  if (raw.includes('InstructionError')) {
+    if (raw.includes('InsufficientFunds')) return 'Insufficient SOL balance';
+    if (raw.includes('AccountNotFound')) return 'Token account not found';
+    if (raw.includes('InvalidAccountData')) return 'Invalid account data — token may have been rugged';
+    return 'Transaction instruction failed — try again';
+  }
+
+  // Simulation/preflight errors
+  if (raw.includes('Simulation failed') || raw.includes('preflight')) {
+    return 'Transaction simulation failed — pool may be unstable, try again';
+  }
+
+  // Blockhash/timeout errors
+  if (raw.includes('block height exceeded') || raw.includes('Blockhash not found')) {
+    return 'Transaction expired — network congestion, try again';
+  }
+
+  // Catch-all
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return `Transaction failed: ${raw.slice(0, 120)}`;
+}
+
+/**
  * Get a swap quote from Jupiter via backend proxy
  */
 export async function getSwapQuote(
@@ -168,21 +216,23 @@ export async function executeSwap(
     }, 'confirmed');
 
     if (confirmation.value.err) {
-      console.error('[Jupiter] Transaction failed:', confirmation.value.err);
+      const errMsg = parseSwapError(confirmation.value.err);
+      console.error('[Jupiter] Transaction failed:', errMsg, confirmation.value.err);
       return {
         success: false,
         signature,
-        error: `Transaction failed: ${JSON.stringify(confirmation.value.err)}`
+        error: errMsg
       };
     }
 
     console.log('[Jupiter] Transaction confirmed:', signature);
     return { success: true, signature };
   } catch (error) {
-    console.error('[Jupiter] Swap execution error:', error);
+    const errMsg = parseSwapError(error);
+    console.error('[Jupiter] Swap execution error:', errMsg, error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: errMsg
     };
   }
 }
