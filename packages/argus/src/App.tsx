@@ -409,6 +409,8 @@ export default function App() {
   const [recentSearches, setRecentSearches] = useState<Array<{ address: string; symbol: string }>>([]);
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [buyAmount, setBuyAmount] = useState(0.1);
+  const [showCustomBuy, setShowCustomBuy] = useState(false);
+  const [customBuyValue, setCustomBuyValue] = useState('0.1');
   const [isBuying, setIsBuying] = useState(false);
   const [isSelling, setIsSelling] = useState(false);
   const [logs, setLogs] = useState<Array<{ time: Date; msg: string; type: string }>>([]);
@@ -1473,13 +1475,13 @@ export default function App() {
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
                   <span className="text-sm font-medium text-zinc-500">Amount:</span>
-                  <div className="flex flex-wrap gap-2">
-                    {[0.1, 0.2, 0.5, 1, 2].map(amt => (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {[0.05, 0.1, 0.2, 0.5, 1].map(amt => (
                       <button
                         key={amt}
-                        onClick={() => setBuyAmount(amt)}
+                        onClick={() => { setBuyAmount(amt); setShowCustomBuy(false); }}
                         className={`px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                          buyAmount === amt
+                          buyAmount === amt && !showCustomBuy
                             ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/20'
                             : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
                         }`}
@@ -1487,6 +1489,41 @@ export default function App() {
                         {amt} SOL
                       </button>
                     ))}
+                    {showCustomBuy ? (
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0.01"
+                          value={customBuyValue}
+                          onChange={(e) => setCustomBuyValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              const val = parseFloat(customBuyValue);
+                              if (val > 0) setBuyAmount(val);
+                            }
+                          }}
+                          onBlur={() => {
+                            const val = parseFloat(customBuyValue);
+                            if (val > 0) setBuyAmount(val);
+                          }}
+                          className="w-20 px-2 py-2 rounded-lg text-sm font-medium bg-zinc-800 border border-emerald-500 text-white outline-none"
+                          autoFocus
+                        />
+                        <span className="text-xs text-zinc-500">SOL</span>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => { setShowCustomBuy(true); setCustomBuyValue(buyAmount.toString()); }}
+                        className={`px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                          ![0.05, 0.1, 0.2, 0.5, 1].includes(buyAmount)
+                            ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/20'
+                            : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                        }`}
+                      >
+                        {![0.05, 0.1, 0.2, 0.5, 1].includes(buyAmount) ? `${buyAmount} SOL` : 'Custom'}
+                      </button>
+                    )}
                   </div>
                   <button
                     onClick={() => setShowBuyConfig(!showBuyConfig)}
