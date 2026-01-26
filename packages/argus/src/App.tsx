@@ -267,6 +267,9 @@ export default function App() {
   const [exportKeyCopied, setExportKeyCopied] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
+  // Buy warning modal state
+  const [buyWarning, setBuyWarning] = useState<{ message: string; symbol: string } | null>(null);
+
   const log = useCallback((msg: string, type = 'info') => {
     setLogs(prev => [...prev.slice(-49), { time: new Date(), msg, type }]);
   }, []);
@@ -482,25 +485,31 @@ export default function App() {
       if (result.success) {
         log(`Bought ${analysisResult.token.symbol}!`, 'success');
       } else if (result.error && (result.error.includes('Sell pressure') || result.error.includes('dump'))) {
-        // Safety check blocked the buy — ask user to confirm
-        const proceed = window.confirm(
-          `Warning: ${result.error}\n\nAre you sure you want to buy ${analysisResult.token.symbol}?`
-        );
-        if (proceed) {
-          const forced = await autoTrade.executeTrade(
-            analysisResult.token.address,
-            analysisResult.token.symbol,
-            analysisResult.ai.score,
-            true // force past safety checks
-          );
-          if (forced.success) {
-            log(`Bought ${analysisResult.token.symbol}!`, 'success');
-          } else {
-            log(`Buy failed: ${forced.error}`, 'error');
-          }
-        } else {
-          log(`Buy cancelled by user`, 'info');
-        }
+        // Safety check blocked — show warning modal
+        setBuyWarning({ message: result.error, symbol: analysisResult.token.symbol });
+      } else {
+        log(`Buy failed: ${result.error}`, 'error');
+      }
+    } finally {
+      setIsBuying(false);
+    }
+  };
+
+  // Confirm buy after warning
+  const handleBuyConfirm = async () => {
+    if (!analysisResult || !autoTrade.wallet.isLoaded) return;
+    setBuyWarning(null);
+    setIsBuying(true);
+    try {
+      autoTrade.updateConfig({ buyAmountSol: buyAmount });
+      const result = await autoTrade.executeTrade(
+        analysisResult.token.address,
+        analysisResult.token.symbol,
+        analysisResult.ai.score,
+        true // force past safety checks
+      );
+      if (result.success) {
+        log(`Bought ${analysisResult.token.symbol}!`, 'success');
       } else {
         log(`Buy failed: ${result.error}`, 'error');
       }
@@ -1777,6 +1786,54 @@ export default function App() {
                 className="flex-1 py-3 rounded-lg font-semibold bg-red-500 text-white hover:bg-red-600 transition-colors"
               >
                 Delete Wallet
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Buy Warning Modal */}
+      {buyWarning && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl max-w-md w-full p-6 shadow-2xl">
+            {/* Header */}
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 bg-amber-500/20 rounded-xl flex items-center justify-center">
+                <svg className="w-6 h-6 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white">Risk Warning</h3>
+                <p className="text-sm text-zinc-400">Safety check flagged this token</p>
+              </div>
+            </div>
+
+            {/* Warning Details */}
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 mb-4">
+              <p className="text-sm text-amber-400 font-medium">{buyWarning.message}</p>
+            </div>
+
+            <p className="text-sm text-zinc-400 mb-4">
+              Are you sure you want to buy <span className="font-semibold text-white">${buyWarning.symbol}</span>? This token has been flagged for potential risks.
+            </p>
+
+            {/* Buttons */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setBuyWarning(null);
+                  log('Buy cancelled by user', 'info');
+                }}
+                className="flex-1 py-3 rounded-lg font-medium bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleBuyConfirm}
+                className="flex-1 py-3 rounded-lg font-semibold bg-amber-500 text-black hover:bg-amber-400 transition-colors"
+              >
+                Buy Anyway
               </button>
             </div>
           </div>
