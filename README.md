@@ -8,7 +8,7 @@
 
 Argus AI is a comprehensive token research tool that provides instant AI analysis, security checks, bundle detection, and one-click trading for Solana tokens.
 
-**Live**: [app.argusguard.io](https://app.argusguard.io) | **Landing**: [argusguard.io](https://argusguard.io)
+**Live**: [app.argusguard.io](https://app.argusguard.io) | **Landing**: [argusguard.io](https://argusguard.io) | **X**: [@ArgusPanoptes7z](https://x.com/ArgusPanoptes7z)
 
 ---
 
@@ -288,5 +288,6 @@ npx wrangler deploy
 - [Whitepaper](./WHITEPAPER.md)
 - [Development Guide](./CLAUDE.md)
 - [File Structure](./LAYOUT.md)
+- [X (Twitter)](https://x.com/ArgusPanoptes7z)
 
 **Built with Argus AI**

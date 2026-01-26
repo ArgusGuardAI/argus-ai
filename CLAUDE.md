@@ -12,6 +12,7 @@ Development guidance for AI assistants working on the Solana Safeguard AI codeba
 - **Landing Page**: https://argusguard.io
 - **App Dashboard**: https://app.argusguard.io
 - **Workers API**: https://argusguard-api.hermosillo-jessie.workers.dev
+- **X (Twitter)**: https://x.com/ArgusPanoptes7z
 
 ### Core Components
 - **Argus** (`packages/argus`) - Token Research Dashboard (React + Vite)
@@ -111,9 +112,9 @@ pnpm dev                  # Start workers at localhost:8787
 |------|---------|
 | `src/App.tsx` | Main dashboard: token input, analysis display, buy controls, positions, settings |
 | `src/main.tsx` | Subdomain-aware routing (app.* = dashboard, root = landing) |
-| `src/pages/Landing.tsx` | Marketing landing page with feature showcase |
+| `src/pages/Landing.tsx` | Marketing landing page with feature showcase, live $ARGUS token ticker |
 | `src/hooks/useAutoTrade.ts` | Trading logic: buy, sell, position tracking, wallet management |
-| `src/lib/jupiter.ts` | Jupiter swap integration for buys/sells |
+| `src/lib/jupiter.ts` | Jupiter swap integration for buys/sells, parseSwapError for human-readable errors |
 | `src/lib/tradingWallet.ts` | Dedicated trading wallet (encrypted localStorage) |
 | `src/contexts/AuthContext.tsx` | Wallet connection and auth tier management |
 
@@ -131,7 +132,7 @@ pnpm dev                  # Start workers at localhost:8787
 | File | Purpose |
 |------|---------|
 | `src/index.ts` | Main worker entry, route handling |
-| `src/routes/sentinel.ts` | `/sentinel/analyze` endpoint (production) |
+| `src/routes/sentinel.ts` | `/sentinel/analyze` endpoint (production) with structural risk guardrails |
 | `src/routes/analyze.ts` | Token analysis logic |
 | `src/routes/jupiter.ts` | Jupiter swap proxy |
 
@@ -192,6 +193,22 @@ User pastes token address
 
 ---
 
+## Structural Risk Guardrails
+
+The Workers API (`sentinel.ts`) enforces hard minimum scores that override AI analysis:
+
+| Condition | Minimum Score |
+|-----------|---------------|
+| Token < 6h AND liquidity < $10K | 50 |
+| Token < 24h AND liquidity < $5K | 50 |
+| Token < 6h (any liquidity) | 35 |
+| Liquidity < $5K (any age) | 40 |
+| Volume/Liquidity > 8x on token < 24h | 45 |
+
+These are applied **only on the backend** to avoid double-counting with AI prompt guidance. The frontend (`App.tsx`) does NOT apply additional structural penalties.
+
+---
+
 ## Trading Wallet
 
 - Dedicated wallet stored encrypted in browser localStorage
@@ -200,6 +217,7 @@ User pastes token address
 - Backup modal shown on creation (must confirm)
 - Export/Import private key support
 - Delete confirmation with styled modal
+- 0.5% fee on trades supports development (sent to fee wallet)
 
 ---
 
@@ -290,6 +308,11 @@ SUPABASE_ANON_KEY=       # Optional
 - Verify Workers API is deployed and reachable
 - Check if token address is valid Solana address
 
+### Swap error (Custom: 6005)
+- jupiter.ts `parseSwapError()` maps Solana program error codes to human-readable messages
+- Code 6005 = "Slippage exceeded" — price moved too fast
+- Other common codes: 6000 (slippage), 6003 (insufficient liquidity), 6022/6023 (output too low)
+
 ### "User rejected the request"
 - Normal - user declined wallet connection in browser extension
 - Not a bug
@@ -297,6 +320,11 @@ SUPABASE_ANON_KEY=       # Optional
 ### Position stuck
 - Token may have been sold via Phantom externally
 - Use "Clear All" to remove stale positions
+
+### All scores are 0 or too low
+- Check sentinel.ts structural guardrails — they enforce minimum scores
+- Structural penalties are applied ONLY on the backend (not frontend) to avoid double-counting
+- Frontend App.tsx has a comment explaining this: "Structural risk handled by backend guardrails"
 
 ### Landing page links going to /dashboard
 - Links should point to https://app.argusguard.io
