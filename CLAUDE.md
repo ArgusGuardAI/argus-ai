@@ -11,7 +11,6 @@ Development guidance for AI assistants working on the Solana Safeguard AI codeba
 ### Live URLs
 - **Landing Page**: https://argusguard.io
 - **App Dashboard**: https://app.argusguard.io
-- **Workers API**: https://argusguard-api.hermosillo-jessie.workers.dev
 - **X (Twitter)**: https://x.com/ArgusPanoptes7z
 
 ### Core Components
@@ -79,7 +78,7 @@ npx wrangler deploy
 |---------|--------|---------|
 | `argusguard-app` | app.argusguard.io | Dashboard app |
 | `argusguard-website` | argusguard.io | Landing page |
-| Workers | argusguard-api.hermosillo-jessie.workers.dev | API |
+| Workers | (see wrangler.toml) | API |
 
 ---
 

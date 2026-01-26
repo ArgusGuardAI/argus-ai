@@ -43,7 +43,7 @@ cd ../sniper && pnpm dev    # localhost:8788
 pnpm dev                     # localhost:3000
 ```
 
-In production, the dashboard uses the Cloudflare Workers API at `argusguard-api.hermosillo-jessie.workers.dev`.
+In production, the dashboard uses the Cloudflare Workers API (see `packages/workers/wrangler.toml` for config).
 
 ## Deployment
 
