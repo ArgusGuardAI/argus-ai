@@ -673,7 +673,8 @@ export function useAutoTrade(
   const executeTrade = useCallback(async (
     tokenAddress: string,
     tokenSymbol: string,
-    riskScore: number
+    riskScore: number,
+    force?: boolean
   ): Promise<SwapResult> => {
     // Use ref for latest config
     const currentConfig = configRef.current;
@@ -704,43 +705,45 @@ export function useAutoTrade(
       return { success: false, error: `Insufficient balance: ${balance.toFixed(4)} SOL` };
     }
 
-    // OPTIONAL SAFETY: Check DexScreener data if available
+    // OPTIONAL SAFETY: Check DexScreener data if available (skip when force=true)
     // For brand new tokens, DexScreener won't have data yet, so we proceed with AI validation only
-    try {
-      const priceData = await getTokenPrice(tokenAddress);
-      if (priceData) {
-        // DexScreener has data - run additional safety checks
-        const buys5m = priceData.txnsBuys5m;
-        const sells5m = priceData.txnsSells5m;
+    if (!force) {
+      try {
+        const priceData = await getTokenPrice(tokenAddress);
+        if (priceData) {
+          // DexScreener has data - run additional safety checks
+          const buys5m = priceData.txnsBuys5m;
+          const sells5m = priceData.txnsSells5m;
 
-        // CHECK 1: Sell pressure - skip if sells > 1.5x buys (with some activity)
-        if (sells5m > buys5m * 1.5 && sells5m > 5) {
-          log(`SELL PRESSURE: ${tokenSymbol} has ${sells5m} sells vs ${buys5m} buys - skipping!`, 'warning');
-          return { success: false, error: `Sell pressure: ${sells5m} sells vs ${buys5m} buys` };
+          // CHECK 1: Sell pressure - skip if sells > 1.5x buys (with some activity)
+          if (sells5m > buys5m * 1.5 && sells5m > 5) {
+            log(`SELL PRESSURE: ${tokenSymbol} has ${sells5m} sells vs ${buys5m} buys - skipping!`, 'warning');
+            return { success: false, error: `Sell pressure: ${sells5m} sells vs ${buys5m} buys` };
+          }
+
+          // CHECK 2: 5-minute price change (detect fresh rugs)
+          const change5m = priceData.priceChange5m;
+          if (change5m < -20) {
+            log(`DUMP: ${tokenSymbol} down ${change5m.toFixed(1)}% in 5min - skipping!`, 'warning');
+            return { success: false, error: `5min dump: ${change5m.toFixed(1)}%` };
+          }
+
+          // CHECK 3: 1-hour change
+          const change1h = priceData.priceChange1h;
+          if (change1h < -40) {
+            log(`DUMP: ${tokenSymbol} down ${change1h.toFixed(1)}% in 1hr - skipping!`, 'warning');
+            return { success: false, error: `1hr dump: ${change1h.toFixed(1)}%` };
+          }
+
+          log(`DexScreener OK: ${buys5m} buys, ${sells5m} sells, 5m: ${change5m >= 0 ? '+' : ''}${change5m.toFixed(1)}%`, 'info');
+        } else {
+          // No DexScreener data (brand new token) - proceed with AI validation only
+          log(`NEW TOKEN: ${tokenSymbol} - no DexScreener data yet, proceeding with AI validation`, 'info');
         }
-
-        // CHECK 2: 5-minute price change (detect fresh rugs)
-        const change5m = priceData.priceChange5m;
-        if (change5m < -20) {
-          log(`DUMP: ${tokenSymbol} down ${change5m.toFixed(1)}% in 5min - skipping!`, 'warning');
-          return { success: false, error: `5min dump: ${change5m.toFixed(1)}%` };
-        }
-
-        // CHECK 3: 1-hour change
-        const change1h = priceData.priceChange1h;
-        if (change1h < -40) {
-          log(`DUMP: ${tokenSymbol} down ${change1h.toFixed(1)}% in 1hr - skipping!`, 'warning');
-          return { success: false, error: `1hr dump: ${change1h.toFixed(1)}%` };
-        }
-
-        log(`DexScreener OK: ${buys5m} buys, ${sells5m} sells, 5m: ${change5m >= 0 ? '+' : ''}${change5m.toFixed(1)}%`, 'info');
-      } else {
-        // No DexScreener data (brand new token) - proceed with AI validation only
-        log(`NEW TOKEN: ${tokenSymbol} - no DexScreener data yet, proceeding with AI validation`, 'info');
+      } catch (e) {
+        // DexScreener check failed - proceed anyway since AI validated the token
+        log(`DexScreener check failed for ${tokenSymbol}, proceeding with AI validation`, 'warning');
       }
-    } catch (e) {
-      // DexScreener check failed - proceed anyway since AI validated the token
-      log(`DexScreener check failed for ${tokenSymbol}, proceeding with AI validation`, 'warning');
     }
 
     // Track balance before trade to calculate actual spent

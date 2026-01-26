@@ -23,6 +23,14 @@ export interface DexScreenerData {
 
   // Volume
   volume24h: number;
+  txns5m: {
+    buys: number;
+    sells: number;
+  };
+  txns1h: {
+    buys: number;
+    sells: number;
+  };
   txns24h: {
     buys: number;
     sells: number;
@@ -62,7 +70,11 @@ export async function fetchDexScreenerData(tokenAddress: string): Promise<DexScr
         fdv: number;
         marketCap: number;
         volume: { h24: number };
-        txns: { h24: { buys: number; sells: number } };
+        txns: {
+          m5?: { buys: number; sells: number };
+          h1?: { buys: number; sells: number };
+          h24: { buys: number; sells: number };
+        };
         pairCreatedAt: number;
         info?: {
           websites?: Array<{ url: string }>;
@@ -102,6 +114,14 @@ export async function fetchDexScreenerData(tokenAddress: string): Promise<DexScr
       liquidityUsd: bestPair.liquidity?.usd || 0,
 
       volume24h: bestPair.volume?.h24 || 0,
+      txns5m: {
+        buys: bestPair.txns?.m5?.buys || 0,
+        sells: bestPair.txns?.m5?.sells || 0,
+      },
+      txns1h: {
+        buys: bestPair.txns?.h1?.buys || 0,
+        sells: bestPair.txns?.h1?.sells || 0,
+      },
       txns24h: {
         buys: bestPair.txns?.h24?.buys || 0,
         sells: bestPair.txns?.h24?.sells || 0,

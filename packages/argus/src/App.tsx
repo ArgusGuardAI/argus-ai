@@ -372,17 +372,27 @@ export default function App() {
         const top5Percent = holders.slice(0, 5).reduce((sum: number, h: { percent: number }) => sum + h.percent, 0);
         const top10Percent = top10.reduce((sum: number, h: { percent: number }) => sum + h.percent, 0);
 
-        // Invert risk score (API: higher = worse, we want: higher = better)
-        const score = Math.max(0, 100 - (data.analysis?.riskScore || 50));
-        const signal: SignalType = score >= 75 ? 'STRONG_BUY' :
-                                   score >= 60 ? 'BUY' :
-                                   score >= 45 ? 'WATCH' :
-                                   score >= 30 ? 'HOLD' : 'AVOID';
-
         // Calculate buyRatio safely
         const buys24h = data.tokenInfo?.txns24h?.buys || 0;
         const sells24h = data.tokenInfo?.txns24h?.sells || 0;
         const buyRatio = sells24h > 0 ? buys24h / sells24h : (buys24h > 0 ? 2 : 1);
+
+        // Invert risk score (API: higher = worse, we want: higher = better)
+        let score = Math.max(0, 100 - (data.analysis?.riskScore || 50));
+
+        // Apply penalties for severe red flags the AI may underweight
+        const liquidity = data.tokenInfo?.liquidity || 0;
+        const topHolderPct = holders[0]?.percent || 0;
+        if (liquidity <= 0) score = Math.max(0, score - 20);
+        if (topHolderPct > 50) score = Math.max(0, score - 15);
+        if (topHolderPct > 75) score = Math.max(0, score - 10);
+        if (data.bundleInfo?.detected && (data.bundleInfo?.count || 0) >= 3) score = Math.max(0, score - 10);
+        if (buyRatio < 0.3 && sells24h > 100) score = Math.max(0, score - 10);
+
+        const signal: SignalType = score >= 75 ? 'STRONG_BUY' :
+                                   score >= 60 ? 'BUY' :
+                                   score >= 45 ? 'WATCH' :
+                                   score >= 30 ? 'HOLD' : 'AVOID';
 
         result = {
           token: {
@@ -405,10 +415,10 @@ export default function App() {
             priceChange24h: data.tokenInfo?.priceChange24h || 0,
           },
           trading: {
-            buys5m: 0,
-            sells5m: 0,
-            buys1h: 0,
-            sells1h: 0,
+            buys5m: data.tokenInfo?.txns5m?.buys || 0,
+            sells5m: data.tokenInfo?.txns5m?.sells || 0,
+            buys1h: data.tokenInfo?.txns1h?.buys || 0,
+            sells1h: data.tokenInfo?.txns1h?.sells || 0,
             buys24h,
             sells24h,
             buyRatio,
@@ -471,6 +481,26 @@ export default function App() {
       );
       if (result.success) {
         log(`Bought ${analysisResult.token.symbol}!`, 'success');
+      } else if (result.error && (result.error.includes('Sell pressure') || result.error.includes('dump'))) {
+        // Safety check blocked the buy — ask user to confirm
+        const proceed = window.confirm(
+          `Warning: ${result.error}\n\nAre you sure you want to buy ${analysisResult.token.symbol}?`
+        );
+        if (proceed) {
+          const forced = await autoTrade.executeTrade(
+            analysisResult.token.address,
+            analysisResult.token.symbol,
+            analysisResult.ai.score,
+            true // force past safety checks
+          );
+          if (forced.success) {
+            log(`Bought ${analysisResult.token.symbol}!`, 'success');
+          } else {
+            log(`Buy failed: ${forced.error}`, 'error');
+          }
+        } else {
+          log(`Buy cancelled by user`, 'info');
+        }
       } else {
         log(`Buy failed: ${result.error}`, 'error');
       }

@@ -850,6 +850,8 @@ sentinelRoutes.post('/analyze', async (c) => {
       holderCount: holders.length,
       priceChange24h: dexData?.priceChange24h,
       volume24h: dexData?.volume24h,
+      txns5m: dexData?.txns5m,
+      txns1h: dexData?.txns1h,
       txns24h: dexData?.txns24h,
     };
 
