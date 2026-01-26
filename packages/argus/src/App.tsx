@@ -408,7 +408,7 @@ export default function App() {
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [recentSearches, setRecentSearches] = useState<Array<{ address: string; symbol: string }>>([]);
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
-  const [buyAmount, setBuyAmount] = useState(0.05);
+  const [buyAmount, setBuyAmount] = useState(0.1);
   const [isBuying, setIsBuying] = useState(false);
   const [isSelling, setIsSelling] = useState(false);
   const [logs, setLogs] = useState<Array<{ time: Date; msg: string; type: string }>>([]);
@@ -1474,7 +1474,7 @@ export default function App() {
                 <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
                   <span className="text-sm font-medium text-zinc-500">Amount:</span>
                   <div className="flex flex-wrap gap-2">
-                    {[0.01, 0.05, 0.1, 0.25, 0.5].map(amt => (
+                    {[0.1, 0.2, 0.5, 1, 2].map(amt => (
                       <button
                         key={amt}
                         onClick={() => setBuyAmount(amt)}

@@ -85,7 +85,7 @@ const ESTIMATED_FEE_SOL = 0.001; // Approximate transaction fee in SOL
 
 const DEFAULT_CONFIG: AutoTradeConfig = {
   enabled: false,
-  buyAmountSol: 0.05,      // 0.05 SOL per trade
+  buyAmountSol: 0.1,       // 0.1 SOL per trade
   maxSlippageBps: 500,     // 5% slippage
   minScore: 60,            // Only trade tokens with score >= 60 (BUY or STRONG_BUY)
   maxTradesPerSession: 0,  // 0 = UNLIMITED (keeps trading as long as there's SOL)
