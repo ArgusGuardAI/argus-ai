@@ -263,3 +263,30 @@ telegramRoutes.post('/test', async (c) => {
     error: result.error,
   });
 });
+
+// ============================================
+// POST /telegram/post
+// Post a custom message to the channel (HTML)
+// Body: { text: string }
+// ============================================
+telegramRoutes.post('/post', async (c) => {
+  const botToken = c.env.TELEGRAM_BOT_TOKEN;
+  const channelId = c.env.TELEGRAM_CHANNEL_ID;
+
+  if (!botToken || !channelId) {
+    return c.json({ error: 'Bot token or channel ID not configured' }, 500);
+  }
+
+  const body = (await c.req.json()) as { text?: string };
+  if (!body.text || body.text.length === 0) {
+    return c.json({ error: 'Missing text' }, 400);
+  }
+
+  const result = await sendMessage(botToken, channelId, body.text);
+
+  return c.json({
+    sent: result.ok,
+    messageId: result.messageId,
+    error: result.error,
+  });
+});
