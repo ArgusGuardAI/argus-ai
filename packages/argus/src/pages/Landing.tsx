@@ -169,6 +169,65 @@ const styles = `
 
   .landing-page .nav-links a:hover { color: var(--text-main); }
 
+  /* --- HAMBURGER + MOBILE MENU --- */
+  .landing-page .hamburger {
+    display: none;
+    flex-direction: column;
+    gap: 5px;
+    cursor: pointer;
+    padding: 8px;
+    z-index: 200;
+  }
+  .landing-page .hamburger span {
+    display: block;
+    width: 22px;
+    height: 2px;
+    background: var(--text-main);
+    border-radius: 2px;
+    transition: all 0.3s ease;
+  }
+  .landing-page .hamburger.open span:nth-child(1) {
+    transform: rotate(45deg) translate(5px, 5px);
+  }
+  .landing-page .hamburger.open span:nth-child(2) {
+    opacity: 0;
+  }
+  .landing-page .hamburger.open span:nth-child(3) {
+    transform: rotate(-45deg) translate(5px, -5px);
+  }
+
+  .landing-page .mobile-menu {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100vh;
+    background: rgba(9, 9, 11, 0.97);
+    backdrop-filter: blur(20px);
+    z-index: 150;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 32px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+  }
+  .landing-page .mobile-menu.open {
+    opacity: 1;
+    pointer-events: all;
+  }
+  .landing-page .mobile-menu a {
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    transition: color 0.2s;
+  }
+  .landing-page .mobile-menu a:hover {
+    color: var(--accent);
+  }
+
   /* --- HERO --- */
   .landing-page .hero {
     padding: 100px 0 60px;
@@ -533,6 +592,44 @@ const styles = `
     border-radius: var(--radius-sm);
     font-weight: 700;
     font-size: 0.9rem;
+  }
+
+  /* --- MOCKUP ANIMATION --- */
+  .landing-page .ui-search-input.typing {
+    color: var(--text-main);
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 0.78rem;
+  }
+  .landing-page .ui-search-btn.analyzing {
+    animation: btn-pulse 0.6s ease-in-out infinite;
+  }
+  @keyframes btn-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+  }
+  .landing-page .mockup-results {
+    opacity: 0;
+    transform: translateY(10px);
+    transition: opacity 0.5s ease, transform 0.5s ease;
+  }
+  .landing-page .mockup-results.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .landing-page .mockup-results .ui-card {
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 0.4s ease, transform 0.4s ease;
+  }
+  .landing-page .mockup-results.visible .ui-card:nth-child(1) { opacity: 1; transform: translateY(0); transition-delay: 0.15s; }
+  .landing-page .mockup-results.visible .ui-card:nth-child(2) { opacity: 1; transform: translateY(0); transition-delay: 0.3s; }
+  .landing-page .mockup-results.visible .ui-card:nth-child(3) { opacity: 1; transform: translateY(0); transition-delay: 0.45s; }
+  .landing-page .mockup-analyzing {
+    text-align: center;
+    padding: 40px 0;
+    color: var(--accent);
+    font-size: 0.9rem;
+    font-weight: 600;
   }
 
   /* --- FEATURES GRID --- */
@@ -950,7 +1047,98 @@ const styles = `
     border-top: 1px solid var(--border);
   }
 
-  .landing-page .roadmap-grid {
+  /* Timeline spine */
+  .landing-page .roadmap-timeline {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 48px;
+    padding: 0 40px;
+    position: relative;
+  }
+
+  .landing-page .roadmap-node {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 1;
+  }
+
+  .landing-page .roadmap-node.done {
+    background: linear-gradient(135deg, #10B981, #059669);
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
+  }
+
+  .landing-page .roadmap-node.active {
+    background: transparent;
+    border: 3px solid #10B981;
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
+    animation: roadmap-pulse 2s ease-in-out infinite;
+  }
+  .landing-page .roadmap-node.active::after {
+    content: '';
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #10B981;
+  }
+
+  .landing-page .roadmap-node.upcoming {
+    background: transparent;
+    border: 2px solid #3F3F46;
+  }
+  .landing-page .roadmap-node.upcoming::after {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #3F3F46;
+  }
+
+  @keyframes roadmap-pulse {
+    0%, 100% { box-shadow: 0 0 20px rgba(16, 185, 129, 0.3); }
+    50% { box-shadow: 0 0 30px rgba(16, 185, 129, 0.6), 0 0 60px rgba(16, 185, 129, 0.2); }
+  }
+
+  .landing-page .roadmap-segment {
+    flex: 1;
+    height: 2px;
+    max-width: 200px;
+  }
+  .landing-page .roadmap-segment.done {
+    background: linear-gradient(90deg, #10B981, #059669);
+  }
+  .landing-page .roadmap-segment.upcoming {
+    background: repeating-linear-gradient(
+      90deg,
+      #3F3F46 0px,
+      #3F3F46 8px,
+      transparent 8px,
+      transparent 16px
+    );
+  }
+
+  .landing-page .roadmap-node-label {
+    position: absolute;
+    top: -28px;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    color: var(--text-muted);
+  }
+  .landing-page .roadmap-node.done .roadmap-node-label { color: #10B981; }
+  .landing-page .roadmap-node.active .roadmap-node-label { color: #10B981; }
+
+  /* Phase cards */
+  .landing-page .roadmap-phases {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 24px;
@@ -960,61 +1148,124 @@ const styles = `
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
-    padding: 32px;
+    padding: 28px;
     position: relative;
   }
 
-  .landing-page .roadmap-card.active {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+  .landing-page .roadmap-card.active-card {
+    border-color: rgba(16, 185, 129, 0.4);
+    background: linear-gradient(180deg, rgba(16, 185, 129, 0.04) 0%, var(--bg-card) 100%);
   }
 
-  .landing-page .roadmap-phase {
-    display: inline-block;
-    padding: 6px 12px;
-    background: var(--border);
-    border-radius: 6px;
-    font-size: 0.75rem;
+  .landing-page .roadmap-phase-label {
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 0.72rem;
     font-weight: 700;
-    color: var(--text-muted);
-    margin-bottom: 16px;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    margin-bottom: 6px;
   }
-
-  .landing-page .roadmap-card.active .roadmap-phase {
-    background: linear-gradient(135deg, #10B981 0%, #059669 100%);
-    color: white;
-  }
+  .landing-page .roadmap-card.active-card .roadmap-phase-label { color: #10B981; }
 
   .landing-page .roadmap-title {
-    font-size: 1.25rem;
+    font-size: 1.2rem;
     font-weight: 700;
-    margin-bottom: 16px;
-    color: var(--accent);
+    color: var(--text-main);
+    margin-bottom: 12px;
   }
 
+  .landing-page .roadmap-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+  .landing-page .roadmap-status.complete {
+    background: rgba(16, 185, 129, 0.12);
+    color: #10B981;
+  }
+  .landing-page .roadmap-status.in-progress {
+    background: rgba(245, 158, 11, 0.12);
+    color: #F59E0B;
+  }
+  .landing-page .roadmap-status.upcoming-status {
+    background: rgba(113, 113, 122, 0.12);
+    color: #71717A;
+  }
+
+  .landing-page .roadmap-status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+  .landing-page .roadmap-status.complete .roadmap-status-dot { background: #10B981; }
+  .landing-page .roadmap-status.in-progress .roadmap-status-dot { background: #F59E0B; animation: pulse 2s infinite; }
+  .landing-page .roadmap-status.upcoming-status .roadmap-status-dot { background: #71717A; }
+
+  /* Progress bar */
+  .landing-page .roadmap-progress {
+    width: 100%;
+    height: 3px;
+    background: #27272A;
+    border-radius: 2px;
+    margin-bottom: 20px;
+    overflow: hidden;
+  }
+  .landing-page .roadmap-progress-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: linear-gradient(90deg, #10B981, #059669);
+    transition: width 1s ease;
+  }
+
+  /* Items */
   .landing-page .roadmap-list {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 10px;
   }
 
   .landing-page .roadmap-item {
     display: flex;
-    align-items: flex-start;
-    gap: 12px;
-    font-size: 0.9rem;
-    color: var(--text-muted);
-  }
-
-  .landing-page .roadmap-item svg {
-    flex-shrink: 0;
-    margin-top: 2px;
-  }
-
-  .landing-page .roadmap-card.active .roadmap-item {
+    align-items: center;
+    gap: 10px;
+    font-size: 0.85rem;
     color: var(--text-main);
+  }
+
+  .landing-page .roadmap-badge {
+    display: inline-flex;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    flex-shrink: 0;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  }
+  .landing-page .roadmap-badge.shipped {
+    background: rgba(16, 185, 129, 0.12);
+    color: #10B981;
+  }
+  .landing-page .roadmap-badge.building {
+    background: rgba(245, 158, 11, 0.12);
+    color: #F59E0B;
+  }
+  .landing-page .roadmap-badge.planned {
+    background: rgba(113, 113, 122, 0.1);
+    color: #52525B;
+  }
+
+  .landing-page .roadmap-item.dim {
+    color: var(--text-muted);
   }
 
   /* --- TEAM --- */
@@ -1025,69 +1276,93 @@ const styles = `
 
   .landing-page .team-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 32px;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24px;
+    max-width: 900px;
+    margin: 0 auto;
   }
 
   .landing-page .team-card {
-    text-align: center;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 36px;
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+    transition: border-color 0.2s;
+  }
+  .landing-page .team-card:hover {
+    border-color: rgba(16, 185, 129, 0.3);
   }
 
   .landing-page .team-avatar {
-    width: 120px;
-    height: 120px;
+    width: 64px;
+    height: 64px;
     background: linear-gradient(135deg, var(--bg-elevated) 0%, var(--border) 100%);
-    border-radius: 50%;
-    margin: 0 auto 20px;
+    border-radius: 16px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 2.5rem;
+    font-size: 1.4rem;
     font-weight: 800;
     color: var(--accent);
     border: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .landing-page .team-info {
+    flex: 1;
+    min-width: 0;
   }
 
   .landing-page .team-name {
-    font-size: 1.1rem;
+    font-size: 1.15rem;
     font-weight: 700;
     margin-bottom: 4px;
-    color: var(--accent);
+    color: var(--text-main);
   }
 
   .landing-page .team-role {
-    font-size: 0.9rem;
-    color: var(--accent);
+    display: inline-block;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 0.74rem;
     font-weight: 600;
+    color: var(--accent);
+    background: rgba(16, 185, 129, 0.1);
+    padding: 3px 10px;
+    border-radius: 4px;
     margin-bottom: 12px;
   }
 
   .landing-page .team-bio {
-    font-size: 0.85rem;
+    font-size: 0.92rem;
     color: var(--text-muted);
     line-height: 1.6;
+    margin-bottom: 14px;
   }
 
   .landing-page .team-social {
     display: flex;
-    justify-content: center;
-    gap: 12px;
-    margin-top: 16px;
+    gap: 8px;
   }
 
   .landing-page .team-social a {
-    width: 36px;
-    height: 36px;
-    background: var(--border);
-    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
     color: var(--text-muted);
+    transition: all 0.2s;
   }
 
   .landing-page .team-social a:hover {
     background: var(--accent);
+    border-color: var(--accent);
     color: white;
   }
 
@@ -1218,6 +1493,24 @@ const styles = `
     font-size: 0.8rem;
     letter-spacing: 0.02em;
   }
+
+  /* Stagger reveal on comparison rows */
+  .landing-page .comparison-table tbody tr {
+    opacity: 0;
+    transform: translateY(12px);
+    transition: opacity 0.4s ease, transform 0.4s ease;
+  }
+  .landing-page .comparison.visible .comparison-table tbody tr {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .landing-page .comparison.visible .comparison-table tbody tr:nth-child(1) { transition-delay: 0.1s; }
+  .landing-page .comparison.visible .comparison-table tbody tr:nth-child(2) { transition-delay: 0.2s; }
+  .landing-page .comparison.visible .comparison-table tbody tr:nth-child(3) { transition-delay: 0.3s; }
+  .landing-page .comparison.visible .comparison-table tbody tr:nth-child(4) { transition-delay: 0.4s; }
+  .landing-page .comparison.visible .comparison-table tbody tr:nth-child(5) { transition-delay: 0.5s; }
+  .landing-page .comparison.visible .comparison-table tbody tr:nth-child(6) { transition-delay: 0.6s; }
+  .landing-page .comparison.visible .comparison-table tbody tr:nth-child(7) { transition-delay: 0.7s; }
 
   .landing-page .comparison-callout {
     display: flex;
@@ -1542,11 +1835,15 @@ const styles = `
     .landing-page .token-ticker { gap: 16px; padding: 12px 20px; }
     .landing-page .ticker-value { font-size: 1rem; }
     .landing-page .nav-links { display: none; }
+    .landing-page .hamburger { display: flex; }
     .landing-page .steps-grid { grid-template-columns: repeat(2, 1fr); }
     .landing-page .steps-grid::before { display: none; }
     .landing-page .token-grid { grid-template-columns: 1fr; }
-    .landing-page .roadmap-grid { grid-template-columns: 1fr; }
-    .landing-page .team-grid { grid-template-columns: repeat(2, 1fr); }
+    .landing-page .roadmap-phases { grid-template-columns: 1fr; }
+    .landing-page .roadmap-timeline { flex-direction: column; gap: 0; padding: 0 0 0 20px; align-items: flex-start; margin-bottom: 32px; }
+    .landing-page .roadmap-segment { width: 2px; height: 40px; max-width: none; }
+    .landing-page .roadmap-node-label { position: static; margin-left: 16px; display: inline-block; }
+    .landing-page .team-grid { grid-template-columns: 1fr; }
     .landing-page .teaser-benefits { grid-template-columns: 1fr; }
     .landing-page .comparison-callout { flex-direction: column; gap: 12px; padding: 20px; }
     .landing-page .comparison-table { font-size: 0.8rem; }
@@ -1560,6 +1857,235 @@ const styles = `
     .landing-page .ui-positions-table { font-size: 0.75rem; }
     .landing-page .ui-positions-table th, .landing-page .ui-positions-table td { padding: 8px 6px; }
   }
+
+  /* --- SCROLL REVEAL ANIMATIONS --- */
+  .landing-page .reveal {
+    opacity: 0;
+    transform: translateY(40px);
+    transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1), transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .landing-page .reveal.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .landing-page .reveal-left {
+    opacity: 0;
+    transform: translateX(-40px);
+    transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1), transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .landing-page .reveal-left.visible {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  .landing-page .reveal-right {
+    opacity: 0;
+    transform: translateX(40px);
+    transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1), transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .landing-page .reveal-right.visible {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  /* Stagger children in grids */
+  .landing-page .stagger-children.visible > * {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .landing-page .stagger-children > * {
+    opacity: 0;
+    transform: translateY(25px);
+    transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1), transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .landing-page .stagger-children.visible > *:nth-child(1) { transition-delay: 0.0s; }
+  .landing-page .stagger-children.visible > *:nth-child(2) { transition-delay: 0.08s; }
+  .landing-page .stagger-children.visible > *:nth-child(3) { transition-delay: 0.16s; }
+  .landing-page .stagger-children.visible > *:nth-child(4) { transition-delay: 0.24s; }
+  .landing-page .stagger-children.visible > *:nth-child(5) { transition-delay: 0.32s; }
+  .landing-page .stagger-children.visible > *:nth-child(6) { transition-delay: 0.40s; }
+  .landing-page .stagger-children.visible > *:nth-child(7) { transition-delay: 0.48s; }
+  .landing-page .stagger-children.visible > *:nth-child(8) { transition-delay: 0.56s; }
+
+  /* --- TYPEWRITER --- */
+  .landing-page .typewriter-text {
+    color: var(--accent);
+    display: inline;
+  }
+  .landing-page .typewriter-cursor {
+    display: inline-block;
+    width: 3px;
+    height: 0.9em;
+    background: var(--accent);
+    margin-left: 2px;
+    vertical-align: text-bottom;
+    animation: cursor-blink 0.7s step-end infinite;
+  }
+  @keyframes cursor-blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+  }
+
+  /* --- ANIMATED COUNTER --- */
+  .landing-page .stat-value {
+    transition: none;
+  }
+
+  /* --- TERMINAL / CONSOLE --- */
+  .landing-page .terminal-section {
+    padding: 80px 0;
+  }
+  .landing-page .terminal-section .section-header {
+    text-align: center;
+    margin-bottom: 48px;
+  }
+  .landing-page .terminal-section h2 {
+    font-size: 2rem;
+    font-weight: 700;
+    margin: 0 0 12px 0;
+  }
+  .landing-page .terminal-section p {
+    color: var(--text-muted);
+    font-size: 1.05rem;
+    margin: 0 auto;
+    text-align: center;
+  }
+  .landing-page .terminal {
+    background: #0a0a0c;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 0;
+    max-width: 720px;
+    margin: 0 auto;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  }
+  .landing-page .terminal-titlebar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    background: #111113;
+    border-bottom: 1px solid var(--border);
+  }
+  .landing-page .terminal-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+  }
+  .landing-page .terminal-dot.red { background: #EF4444; }
+  .landing-page .terminal-dot.yellow { background: #F59E0B; }
+  .landing-page .terminal-dot.green { background: #10B981; }
+  .landing-page .terminal-title {
+    flex: 1;
+    text-align: center;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  }
+  .landing-page .terminal-body {
+    padding: 20px 24px;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 0.82rem;
+    line-height: 1.9;
+    min-height: 280px;
+  }
+  .landing-page .terminal-line {
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 0.4s ease, transform 0.4s ease;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .landing-page .terminal-line.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .landing-page .terminal-line .green { color: #10B981; }
+  .landing-page .terminal-line .red { color: #EF4444; }
+  .landing-page .terminal-line .yellow { color: #F59E0B; }
+  .landing-page .terminal-line .cyan { color: #06B6D4; }
+  .landing-page .terminal-line .white { color: #FAFAFA; font-weight: 600; }
+  .landing-page .terminal-line .dim { color: #52525B; }
+  .landing-page .terminal-line .accent { color: #10B981; font-weight: 600; }
+
+  @media (max-width: 768px) {
+    .landing-page .terminal-body { font-size: 0.7rem; padding: 16px; }
+    .landing-page .terminal-section h2 { font-size: 1.5rem; }
+  }
+
+  /* --- NETWORK GRAPH CANVAS --- */
+  .landing-page .network-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    pointer-events: none;
+  }
+  .landing-page .hero {
+    position: relative;
+  }
+  .landing-page .hero .container {
+    position: relative;
+    z-index: 1;
+  }
+
+
+  /* --- LIVE THREAT TICKER --- */
+  .landing-page .threat-ticker {
+    width: 100%;
+    overflow: hidden;
+    background: linear-gradient(90deg, rgba(16, 185, 129, 0.05) 0%, rgba(16, 185, 129, 0.02) 50%, rgba(16, 185, 129, 0.05) 100%);
+    border-top: 1px solid rgba(16, 185, 129, 0.15);
+    border-bottom: 1px solid rgba(16, 185, 129, 0.15);
+    padding: 12px 0;
+    white-space: nowrap;
+  }
+  .landing-page .ticker-track {
+    display: inline-flex;
+    animation: ticker-scroll 35s linear infinite;
+  }
+  .landing-page .ticker-track:hover {
+    animation-play-state: paused;
+  }
+  @keyframes ticker-scroll {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+  .landing-page .ticker-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 32px;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  }
+  .landing-page .ticker-item .ticker-symbol {
+    color: var(--text-main);
+    font-weight: 600;
+  }
+  .landing-page .ticker-item .ticker-danger {
+    color: #EF4444;
+    font-weight: 600;
+  }
+  .landing-page .ticker-item .ticker-warn {
+    color: #F59E0B;
+    font-weight: 600;
+  }
+  .landing-page .ticker-item .ticker-safe {
+    color: #10B981;
+    font-weight: 600;
+  }
+  .landing-page .ticker-separator {
+    display: inline-block;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--border);
+    vertical-align: middle;
+  }
 `;
 
 const Logo = () => (
@@ -1571,6 +2097,45 @@ const Logo = () => (
 );
 
 export default function Landing() {
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  // ============================================
+  // HERO MOCKUP ANIMATION
+  // ============================================
+  const mockupAddress = 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263';
+  const [mockupTyped, setMockupTyped] = useState('');
+  const [mockupPhase, setMockupPhase] = useState<'idle' | 'typing' | 'analyzing' | 'done'>('idle');
+
+  useEffect(() => {
+    // Start after 1.5s
+    const startTimer = setTimeout(() => {
+      setMockupPhase('typing');
+    }, 1500);
+
+    return () => clearTimeout(startTimer);
+  }, []);
+
+  useEffect(() => {
+    if (mockupPhase !== 'typing') return;
+
+    if (mockupTyped.length < mockupAddress.length) {
+      const timer = setTimeout(() => {
+        setMockupTyped(mockupAddress.slice(0, mockupTyped.length + 1));
+      }, 35);
+      return () => clearTimeout(timer);
+    } else {
+      // Typing complete — show analyzing state
+      const timer = setTimeout(() => setMockupPhase('analyzing'), 300);
+      return () => clearTimeout(timer);
+    }
+  }, [mockupPhase, mockupTyped]);
+
+  useEffect(() => {
+    if (mockupPhase !== 'analyzing') return;
+    const timer = setTimeout(() => setMockupPhase('done'), 1200);
+    return () => clearTimeout(timer);
+  }, [mockupPhase]);
+
   const [tokenData, setTokenData] = useState<{
     marketCap: number;
     price: number;
@@ -1615,6 +2180,272 @@ export default function Landing() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // ============================================
+  // SCROLL REVEAL - Intersection Observer
+  // ============================================
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('visible');
+          }
+        });
+      },
+      { threshold: 0.1, rootMargin: '0px 0px -40px 0px' }
+    );
+
+    const revealEls = document.querySelectorAll('.reveal, .reveal-left, .reveal-right, .stagger-children');
+    revealEls.forEach((el) => observer.observe(el));
+
+    return () => observer.disconnect();
+  }, []);
+
+  // ============================================
+  // TYPEWRITER EFFECT
+  // ============================================
+  const typewriterPhrases = [
+    'Detecting bundle attacks',
+    'Scanning dev wallets',
+    'Analyzing holder distribution',
+    'Protecting your capital',
+  ];
+  const [typewriterText, setTypewriterText] = useState('');
+  const [phraseIndex, setPhraseIndex] = useState(0);
+  const [charIndex, setCharIndex] = useState(0);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    const currentPhrase = typewriterPhrases[phraseIndex];
+
+    const timeout = setTimeout(() => {
+      if (!isDeleting) {
+        setTypewriterText(currentPhrase.slice(0, charIndex + 1));
+        setCharIndex((prev) => prev + 1);
+
+        if (charIndex + 1 === currentPhrase.length) {
+          setTimeout(() => setIsDeleting(true), 2000);
+        }
+      } else {
+        setTypewriterText(currentPhrase.slice(0, charIndex - 1));
+        setCharIndex((prev) => prev - 1);
+
+        if (charIndex - 1 === 0) {
+          setIsDeleting(false);
+          setPhraseIndex((prev) => (prev + 1) % typewriterPhrases.length);
+        }
+      }
+    }, isDeleting ? 30 : 70);
+
+    return () => clearTimeout(timeout);
+  }, [charIndex, isDeleting, phraseIndex]);
+
+  // ============================================
+  // ANIMATED COUNTERS
+  // ============================================
+  const statsRef = useRef<HTMLDivElement>(null);
+  const [countersStarted, setCountersStarted] = useState(false);
+  const [counterValues, setCounterValues] = useState({ tokens: 0, bundles: 0 });
+
+  useEffect(() => {
+    if (!statsRef.current) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && !countersStarted) {
+          setCountersStarted(true);
+        }
+      },
+      { threshold: 0.3 }
+    );
+
+    observer.observe(statsRef.current);
+    return () => observer.disconnect();
+  }, [countersStarted]);
+
+  useEffect(() => {
+    if (!countersStarted) return;
+
+    const targets = { tokens: 10000, bundles: 500 };
+    const duration = 2000;
+    const startTime = Date.now();
+
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      // Ease out cubic
+      const eased = 1 - Math.pow(1 - progress, 3);
+
+      setCounterValues({
+        tokens: Math.floor(eased * targets.tokens),
+        bundles: Math.floor(eased * targets.bundles),
+      });
+
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      }
+    };
+
+    requestAnimationFrame(animate);
+  }, [countersStarted]);
+
+  // ============================================
+  // TERMINAL LOG ANIMATION
+  // ============================================
+  const terminalRef = useRef<HTMLDivElement>(null);
+  const [terminalStarted, setTerminalStarted] = useState(false);
+  const [visibleLines, setVisibleLines] = useState(0);
+
+  const terminalLines = [
+    { text: '$ argus scan 7xKp...pump', classes: 'white' },
+    { text: '[Argus] Fetching on-chain data...', classes: 'dim' },
+    { text: '[Argus] DexScreener: $31.2K mcap, $6.2K liquidity', classes: 'cyan' },
+    { text: '[Argus] Helius RPC: 20 holders, mint revoked', classes: 'cyan' },
+    { text: '[Argus] Bundle scan: 6 wallets, MEDIUM confidence', classes: 'yellow' },
+    { text: '[Argus] Dev wallet: holds 22.6%, sold 0%', classes: 'yellow' },
+    { text: '[Argus] AI analysis: risk score 65/100', classes: 'accent' },
+    { text: '[Argus] Signal: HOLD — coordinated wallet risk', classes: 'accent' },
+    { text: '[Argus] Posting alert to Twitter + Telegram...', classes: 'dim' },
+    { text: '[Argus] Done in 2.8s', classes: 'green' },
+  ];
+
+  useEffect(() => {
+    if (!terminalRef.current) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && !terminalStarted) {
+          setTerminalStarted(true);
+        }
+      },
+      { threshold: 0.3 }
+    );
+
+    observer.observe(terminalRef.current);
+    return () => observer.disconnect();
+  }, [terminalStarted]);
+
+  useEffect(() => {
+    if (!terminalStarted) return;
+
+    const interval = setInterval(() => {
+      setVisibleLines((prev) => {
+        if (prev >= terminalLines.length) {
+          clearInterval(interval);
+          return prev;
+        }
+        return prev + 1;
+      });
+    }, 400);
+
+    return () => clearInterval(interval);
+  }, [terminalStarted]);
+
+  // ============================================
+  // NETWORK GRAPH CANVAS
+  // ============================================
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let animationId: number;
+    const particles: { x: number; y: number; vx: number; vy: number; r: number }[] = [];
+    const PARTICLE_COUNT = 60;
+    const CONNECTION_DIST = 180;
+
+    const resize = () => {
+      canvas.width = canvas.offsetWidth * window.devicePixelRatio;
+      canvas.height = canvas.offsetHeight * window.devicePixelRatio;
+      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+    };
+
+    resize();
+
+    // Initialize particles
+    const w = canvas.offsetWidth;
+    const h = canvas.offsetHeight;
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      particles.push({
+        x: Math.random() * w,
+        y: Math.random() * h,
+        vx: (Math.random() - 0.5) * 0.4,
+        vy: (Math.random() - 0.5) * 0.4,
+        r: Math.random() * 2 + 1,
+      });
+    }
+
+    const draw = () => {
+      const cw = canvas.offsetWidth;
+      const ch = canvas.offsetHeight;
+      ctx.clearRect(0, 0, cw, ch);
+
+      // Update + draw particles
+      for (const p of particles) {
+        p.x += p.vx;
+        p.y += p.vy;
+
+        if (p.x < 0 || p.x > cw) p.vx *= -1;
+        if (p.y < 0 || p.y > ch) p.vy *= -1;
+
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(16, 185, 129, 0.7)';
+        ctx.fill();
+      }
+
+      // Draw connections
+      for (let i = 0; i < particles.length; i++) {
+        for (let j = i + 1; j < particles.length; j++) {
+          const dx = particles[i].x - particles[j].x;
+          const dy = particles[i].y - particles[j].y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < CONNECTION_DIST) {
+            const opacity = (1 - dist / CONNECTION_DIST) * 0.3;
+            ctx.beginPath();
+            ctx.moveTo(particles[i].x, particles[i].y);
+            ctx.lineTo(particles[j].x, particles[j].y);
+            ctx.strokeStyle = `rgba(16, 185, 129, ${opacity})`;
+            ctx.lineWidth = 0.8;
+            ctx.stroke();
+          }
+        }
+      }
+
+      animationId = requestAnimationFrame(draw);
+    };
+
+    draw();
+
+    window.addEventListener('resize', resize);
+    return () => {
+      cancelAnimationFrame(animationId);
+      window.removeEventListener('resize', resize);
+    };
+  }, []);
+
+  // ============================================
+  // THREAT TICKER DATA
+  // ============================================
+  const threatTickerItems = [
+    { symbol: 'RUGX', score: 92, level: 'danger', action: 'AVOID' },
+    { symbol: 'SAFEMOON2', score: 87, level: 'danger', action: 'AVOID' },
+    { symbol: 'BONK', score: 28, level: 'safe', action: 'BUY' },
+    { symbol: 'PUMPKIN', score: 71, level: 'warn', action: 'HOLD' },
+    { symbol: 'DUMPIT', score: 95, level: 'danger', action: 'AVOID' },
+    { symbol: 'WIF', score: 22, level: 'safe', action: 'BUY' },
+    { symbol: 'SCAMCOIN', score: 89, level: 'danger', action: 'AVOID' },
+    { symbol: 'MYRO', score: 35, level: 'safe', action: 'BUY' },
+    { symbol: 'INSIDER', score: 78, level: 'warn', action: 'HOLD' },
+    { symbol: 'DEVDUMP', score: 91, level: 'danger', action: 'AVOID' },
+    { symbol: 'POPCAT', score: 31, level: 'safe', action: 'BUY' },
+    { symbol: 'BUNDLED', score: 83, level: 'danger', action: 'AVOID' },
+  ];
+
   return (
     <>
       <style>{styles}</style>
@@ -1636,10 +2467,23 @@ export default function Landing() {
                 <a href="#token">Token</a>
                 <a href="#roadmap">Roadmap</a>
               </div>
+              <div className={`hamburger ${menuOpen ? 'open' : ''}`} onClick={() => setMenuOpen(!menuOpen)}>
+                <span /><span /><span />
+              </div>
               <a href="https://app.argusguard.io" className="btn btn-primary">Launch App</a>
             </nav>
           </div>
         </header>
+
+        {/* MOBILE MENU */}
+        <div className={`mobile-menu ${menuOpen ? 'open' : ''}`}>
+          <a href="#features" onClick={() => setMenuOpen(false)}>Features</a>
+          <a href="#how-it-works" onClick={() => setMenuOpen(false)}>How It Works</a>
+          <a href="#compare" onClick={() => setMenuOpen(false)}>Compare</a>
+          <a href="#token" onClick={() => setMenuOpen(false)}>Token</a>
+          <a href="#roadmap" onClick={() => setMenuOpen(false)}>Roadmap</a>
+          <a href="https://app.argusguard.io" className="btn btn-primary" style={{ marginTop: 16 }}>Launch App</a>
+        </div>
 
         {/* BACKGROUND LOGO (parallax) */}
         <div className="hero-bg-logo" ref={bgRef}>
@@ -1652,12 +2496,17 @@ export default function Landing() {
 
         {/* HERO SECTION */}
         <section className="hero">
+          <canvas className="network-canvas" ref={canvasRef} />
           <div className="container">
             <div className="badge">
               <span className="badge-dot"></span>
               Detect Insider Trading
             </div>
             <h1>Detect Coordinated Wallets<br/><span>Before They Dump</span></h1>
+            <p className="hero-typewriter">
+              <span className="typewriter-text">{typewriterText}</span>
+              <span className="typewriter-cursor" />
+            </p>
             <p>
               Expose insider clusters and pump groups on Solana with bundle detection.
               See what coordinated wallets are hiding before you invest.
@@ -1712,125 +2561,152 @@ export default function Landing() {
               <div className="ui-body">
                 {/* Search Bar */}
                 <div className="ui-search">
-                  <div className="ui-search-input">Enter token address...</div>
-                  <div className="ui-search-btn">Analyze</div>
-                </div>
-
-                {/* Token Header */}
-                <div className="ui-token-header">
-                  <div className="ui-token-info">
-                    <div className="ui-token-icon">BO</div>
-                    <div>
-                      <div className="ui-token-name">$BONK</div>
-                      <div className="ui-token-addr">DezX...5gkR</div>
-                    </div>
+                  <div className={`ui-search-input ${mockupTyped ? 'typing' : ''}`}>
+                    {mockupTyped || 'Enter token address...'}
+                    {mockupPhase === 'typing' && <span className="typewriter-cursor" />}
                   </div>
-                  <div className="ui-signal">
-                    <div className="ui-signal-badge">BUY</div>
-                    <div className="ui-score">72</div>
+                  <div className={`ui-search-btn ${mockupPhase === 'analyzing' ? 'analyzing' : ''}`}>
+                    {mockupPhase === 'analyzing' ? 'Scanning...' : 'Analyze'}
                   </div>
                 </div>
 
-                {/* Cards */}
-                <div className="ui-cards">
-                  <div className="ui-card">
-                    <div className="ui-card-title">Security</div>
-                    <div className="ui-card-row">
-                      <span className="ui-card-label">Mint Authority</span>
-                      <span className="ui-card-value green">Revoked</span>
+                {/* Analyzing state */}
+                {mockupPhase === 'analyzing' && (
+                  <div className="mockup-analyzing">Fetching on-chain data...</div>
+                )}
+
+                {/* Results */}
+                <div className={`mockup-results ${mockupPhase === 'done' ? 'visible' : ''}`} style={mockupPhase === 'done' ? {} : { display: 'none' }}>
+                  {/* Token Header */}
+                  <div className="ui-token-header">
+                    <div className="ui-token-info">
+                      <div className="ui-token-icon">BO</div>
+                      <div>
+                        <div className="ui-token-name">$BONK</div>
+                        <div className="ui-token-addr">DezX...5gkR</div>
+                      </div>
                     </div>
-                    <div className="ui-card-row">
-                      <span className="ui-card-label">Freeze Authority</span>
-                      <span className="ui-card-value green">Revoked</span>
-                    </div>
-                    <div className="ui-card-row">
-                      <span className="ui-card-label">LP Locked</span>
-                      <span className="ui-card-value">100%</span>
+                    <div className="ui-signal">
+                      <div className="ui-signal-badge">BUY</div>
+                      <div className="ui-score">72</div>
                     </div>
                   </div>
 
-                  <div className="ui-card">
-                    <div className="ui-card-title">Market</div>
-                    <div className="ui-card-row">
-                      <span className="ui-card-label">Market Cap</span>
-                      <span className="ui-card-value">$1.2B</span>
+                  {/* Cards */}
+                  <div className="ui-cards">
+                    <div className="ui-card">
+                      <div className="ui-card-title">Security</div>
+                      <div className="ui-card-row">
+                        <span className="ui-card-label">Mint Authority</span>
+                        <span className="ui-card-value green">Revoked</span>
+                      </div>
+                      <div className="ui-card-row">
+                        <span className="ui-card-label">Freeze Authority</span>
+                        <span className="ui-card-value green">Revoked</span>
+                      </div>
+                      <div className="ui-card-row">
+                        <span className="ui-card-label">LP Locked</span>
+                        <span className="ui-card-value">100%</span>
+                      </div>
                     </div>
-                    <div className="ui-card-row">
-                      <span className="ui-card-label">Liquidity</span>
-                      <span className="ui-card-value">$45.2M</span>
+
+                    <div className="ui-card">
+                      <div className="ui-card-title">Market</div>
+                      <div className="ui-card-row">
+                        <span className="ui-card-label">Market Cap</span>
+                        <span className="ui-card-value">$1.2B</span>
+                      </div>
+                      <div className="ui-card-row">
+                        <span className="ui-card-label">Liquidity</span>
+                        <span className="ui-card-value">$45.2M</span>
+                      </div>
+                      <div className="ui-card-row">
+                        <span className="ui-card-label">24h Change</span>
+                        <span className="ui-card-value green">+12.5%</span>
+                      </div>
                     </div>
-                    <div className="ui-card-row">
-                      <span className="ui-card-label">24h Change</span>
-                      <span className="ui-card-value green">+12.5%</span>
+
+                    <div className="ui-card">
+                      <div className="ui-card-title">Activity</div>
+                      <div className="ui-card-row">
+                        <span className="ui-card-label">Buys (1h)</span>
+                        <span className="ui-card-value green">1,234</span>
+                      </div>
+                      <div className="ui-card-row">
+                        <span className="ui-card-label">Sells (1h)</span>
+                        <span className="ui-card-value red">456</span>
+                      </div>
+                      <div className="ui-card-row">
+                        <span className="ui-card-label">Buy Ratio</span>
+                        <span className="ui-card-value">2.7:1</span>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="ui-card">
-                    <div className="ui-card-title">Activity</div>
-                    <div className="ui-card-row">
-                      <span className="ui-card-label">Buys (1h)</span>
-                      <span className="ui-card-value green">1,234</span>
+                  {/* Holders */}
+                  <div className="ui-holders">
+                    <div className="ui-holders-header">
+                      <div className="ui-card-title" style={{ marginBottom: 0 }}>Top Holders</div>
+                      <div className="ui-bundle-badge">2 BUNDLES</div>
                     </div>
-                    <div className="ui-card-row">
-                      <span className="ui-card-label">Sells (1h)</span>
-                      <span className="ui-card-value red">456</span>
+                    <div className="ui-holder-row">
+                      <div className="ui-holder-bar"><div className="ui-holder-fill normal" style={{ width: '45%' }}></div></div>
+                      <span className="ui-holder-pct">24.5%</span>
                     </div>
-                    <div className="ui-card-row">
-                      <span className="ui-card-label">Buy Ratio</span>
-                      <span className="ui-card-value">2.7:1</span>
+                    <div className="ui-holder-row">
+                      <div className="ui-holder-bar"><div className="ui-holder-fill normal" style={{ width: '24%' }}></div></div>
+                      <span className="ui-holder-pct">12.1%</span>
+                    </div>
+                    <div className="ui-holder-row">
+                      <div className="ui-holder-bar"><div className="ui-holder-fill bundle" style={{ width: '16%' }}></div></div>
+                      <span className="ui-holder-pct bundle">8.3%</span>
+                    </div>
+                    <div className="ui-holder-row">
+                      <div className="ui-holder-bar"><div className="ui-holder-fill bundle" style={{ width: '16%' }}></div></div>
+                      <span className="ui-holder-pct bundle">8.2%</span>
                     </div>
                   </div>
-                </div>
 
-                {/* Holders */}
-                <div className="ui-holders">
-                  <div className="ui-holders-header">
-                    <div className="ui-card-title" style={{ marginBottom: 0 }}>Top Holders</div>
-                    <div className="ui-bundle-badge">2 BUNDLES</div>
+                  {/* Buy Controls */}
+                  <div className="ui-buy">
+                    <div className="ui-amounts">
+                      <div className="ui-amount">0.01 SOL</div>
+                      <div className="ui-amount active">0.05 SOL</div>
+                      <div className="ui-amount">0.1 SOL</div>
+                      <div className="ui-amount">0.25 SOL</div>
+                    </div>
+                    <div className="ui-buy-btn">Buy $BONK</div>
                   </div>
-                  <div className="ui-holder-row">
-                    <div className="ui-holder-bar"><div className="ui-holder-fill normal" style={{ width: '45%' }}></div></div>
-                    <span className="ui-holder-pct">24.5%</span>
-                  </div>
-                  <div className="ui-holder-row">
-                    <div className="ui-holder-bar"><div className="ui-holder-fill normal" style={{ width: '24%' }}></div></div>
-                    <span className="ui-holder-pct">12.1%</span>
-                  </div>
-                  <div className="ui-holder-row">
-                    <div className="ui-holder-bar"><div className="ui-holder-fill bundle" style={{ width: '16%' }}></div></div>
-                    <span className="ui-holder-pct bundle">8.3%</span>
-                  </div>
-                  <div className="ui-holder-row">
-                    <div className="ui-holder-bar"><div className="ui-holder-fill bundle" style={{ width: '16%' }}></div></div>
-                    <span className="ui-holder-pct bundle">8.2%</span>
-                  </div>
-                </div>
-
-                {/* Buy Controls */}
-                <div className="ui-buy">
-                  <div className="ui-amounts">
-                    <div className="ui-amount">0.01 SOL</div>
-                    <div className="ui-amount active">0.05 SOL</div>
-                    <div className="ui-amount">0.1 SOL</div>
-                    <div className="ui-amount">0.25 SOL</div>
-                  </div>
-                  <div className="ui-buy-btn">Buy $BONK</div>
                 </div>
               </div>
             </div>
           </div>
         </section>
 
+        {/* LIVE THREAT TICKER */}
+        <div className="threat-ticker">
+          <div className="ticker-track">
+            {[...threatTickerItems, ...threatTickerItems].map((item, i) => (
+              <span key={i} className="ticker-item">
+                <span className="ticker-symbol">${item.symbol}</span>
+                <span>Score: {item.score}</span>
+                <span className={`ticker-${item.level}`}>{item.action}</span>
+                {i < threatTickerItems.length * 2 - 1 && <span className="ticker-separator" />}
+              </span>
+            ))}
+          </div>
+        </div>
+
         {/* STATS */}
-        <section className="stats">
+        <section className="stats reveal" ref={statsRef}>
           <div className="container">
-            <div className="stats-grid">
+            <div className="stats-grid stagger-children">
               <div>
-                <div className="stat-value">10,000+</div>
+                <div className="stat-value">{countersStarted ? `${counterValues.tokens.toLocaleString()}+` : '0'}</div>
                 <div className="stat-label">Tokens Analyzed</div>
               </div>
               <div>
-                <div className="stat-value">500+</div>
+                <div className="stat-value">{countersStarted ? `${counterValues.bundles}+` : '0'}</div>
                 <div className="stat-label">Bundles Detected</div>
               </div>
               <div>
@@ -1848,12 +2724,12 @@ export default function Landing() {
         {/* FEATURES */}
         <section id="features" className="features">
           <div className="container">
-            <div className="section-header">
+            <div className="section-header reveal">
               <h2>Stop Getting Rugged</h2>
               <p>Comprehensive analysis tools to detect manipulation before you invest</p>
             </div>
 
-            <div className="feature-grid">
+            <div className="feature-grid stagger-children reveal">
               <div className="feature-card">
                 <div className="icon-bg">
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
@@ -1922,7 +2798,7 @@ export default function Landing() {
         </section>
 
         {/* TRADING SHOWCASE */}
-        <section className="trading-showcase">
+        <section className="trading-showcase reveal">
           <div className="container">
             <div className="section-header">
               <h2>Trade With Protection</h2>
@@ -2056,7 +2932,7 @@ export default function Landing() {
         </section>
 
         {/* HOW IT WORKS */}
-        <section id="how-it-works" className="how-it-works">
+        <section id="how-it-works" className="how-it-works reveal">
           <div className="container">
             <div className="section-header">
               <h2>How It Works</h2>
@@ -2088,8 +2964,38 @@ export default function Landing() {
           </div>
         </section>
 
+        {/* LIVE TERMINAL */}
+        <section className="terminal-section" ref={terminalRef}>
+          <div className="container">
+            <div className="section-header reveal">
+              <h2>See It In Action</h2>
+              <p>Watch Argus AI analyze a token in real time</p>
+            </div>
+
+            <div className="terminal reveal">
+              <div className="terminal-titlebar">
+                <div className="terminal-dot red" />
+                <div className="terminal-dot yellow" />
+                <div className="terminal-dot green" />
+                <div className="terminal-title">argus-ai &mdash; token analysis</div>
+              </div>
+              <div className="terminal-body">
+                {terminalLines.map((line, i) => (
+                  <div
+                    key={i}
+                    className={`terminal-line ${i < visibleLines ? 'visible' : ''}`}
+                    style={{ transitionDelay: `${i * 0.05}s` }}
+                  >
+                    <span className={line.classes}>{line.text}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
         {/* WHY ARGUS - COMPETITIVE COMPARISON */}
-        <section id="compare" className="comparison">
+        <section id="compare" className="comparison reveal">
           <div className="container">
             <div className="section-header">
               <div className="category-badge">Research-to-Trade Platform</div>
@@ -2185,7 +3091,7 @@ export default function Landing() {
         </section>
 
         {/* TOKEN TEASER */}
-        <section id="token" className="token-teaser">
+        <section id="token" className="token-teaser reveal">
           <div className="container">
             <div className="teaser-content">
               <div className="teaser-badge">
@@ -2228,7 +3134,7 @@ export default function Landing() {
         </section>
 
         {/* TOKENOMICS */}
-        <section id="tokenomics" className="tokenomics">
+        <section id="tokenomics" className="tokenomics reveal">
           <div className="container">
             <div className="section-header">
               <h2>Tokenomics</h2>
@@ -2296,83 +3202,132 @@ export default function Landing() {
         </section>
 
         {/* ROADMAP */}
-        <section id="roadmap" className="roadmap">
+        <section id="roadmap" className="roadmap reveal">
           <div className="container">
             <div className="section-header">
               <h2>Roadmap</h2>
-              <p>Our vision for the future of token research</p>
+              <p>Building the most advanced token research platform on Solana</p>
             </div>
 
-            <div className="roadmap-grid">
-              <div className="roadmap-card active">
-                <div className="roadmap-phase">Phase 1 - Current</div>
+            {/* Timeline Spine */}
+            <div className="roadmap-timeline">
+              <div className="roadmap-node done">
+                <span className="roadmap-node-label">Phase 01</span>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
+              </div>
+              <div className="roadmap-segment done" />
+              <div className="roadmap-node active">
+                <span className="roadmap-node-label">Phase 02</span>
+              </div>
+              <div className="roadmap-segment upcoming" />
+              <div className="roadmap-node upcoming">
+                <span className="roadmap-node-label">Phase 03</span>
+              </div>
+            </div>
+
+            {/* Phase Cards */}
+            <div className="roadmap-phases">
+              {/* Phase 1 */}
+              <div className="roadmap-card">
+                <div className="roadmap-phase-label">Phase_01 // Foundation</div>
                 <div className="roadmap-title">Foundation</div>
+                <div className="roadmap-status complete">
+                  <span className="roadmap-status-dot" />
+                  Complete
+                </div>
+                <div className="roadmap-progress">
+                  <div className="roadmap-progress-fill" style={{ width: '100%' }} />
+                </div>
                 <div className="roadmap-list">
                   <div className="roadmap-item">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>
-                    <span>Bundle detection system</span>
+                    <span className="roadmap-badge shipped">Shipped</span>
+                    <span>Bundle detection engine</span>
                   </div>
                   <div className="roadmap-item">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>
-                    <span>Security analysis</span>
+                    <span className="roadmap-badge shipped">Shipped</span>
+                    <span>AI risk scoring with guardrails</span>
                   </div>
                   <div className="roadmap-item">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>
-                    <span>Auto-sell protection</span>
+                    <span className="roadmap-badge shipped">Shipped</span>
+                    <span>One-click Jupiter trading</span>
                   </div>
                   <div className="roadmap-item">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>
-                    <span>One-click trading</span>
+                    <span className="roadmap-badge shipped">Shipped</span>
+                    <span>Auto-sell protection (TP/SL/trailing)</span>
                   </div>
                   <div className="roadmap-item">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>
-                    <span>Price crash &amp; sell pressure guardrails</span>
+                    <span className="roadmap-badge shipped">Shipped</span>
+                    <span>Twitter + Telegram alert bots</span>
                   </div>
                 </div>
               </div>
 
-              <div className="roadmap-card">
-                <div className="roadmap-phase">Phase 2</div>
-                <div className="roadmap-title">Enhancement</div>
+              {/* Phase 2 */}
+              <div className="roadmap-card active-card">
+                <div className="roadmap-phase-label">Phase_02 // Intelligence</div>
+                <div className="roadmap-title">Intelligence</div>
+                <div className="roadmap-status in-progress">
+                  <span className="roadmap-status-dot" />
+                  In Progress
+                </div>
+                <div className="roadmap-progress">
+                  <div className="roadmap-progress-fill" style={{ width: '20%' }} />
+                </div>
                 <div className="roadmap-list">
                   <div className="roadmap-item">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/></svg>
+                    <span className="roadmap-badge building">Building</span>
                     <span>$ARGUS token launch</span>
                   </div>
-                  <div className="roadmap-item">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/></svg>
-                    <span>Wallet tracking</span>
+                  <div className="roadmap-item dim">
+                    <span className="roadmap-badge planned">Planned</span>
+                    <span>Smart wallet tracking &amp; copy-trade alerts</span>
                   </div>
-                  <div className="roadmap-item">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/></svg>
-                    <span>Price alerts</span>
+                  <div className="roadmap-item dim">
+                    <span className="roadmap-badge planned">Planned</span>
+                    <span>Real-time price alerts (Telegram + push)</span>
                   </div>
-                  <div className="roadmap-item">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/></svg>
-                    <span>Mobile app</span>
+                  <div className="roadmap-item dim">
+                    <span className="roadmap-badge planned">Planned</span>
+                    <span>Portfolio dashboard with P&amp;L analytics</span>
+                  </div>
+                  <div className="roadmap-item dim">
+                    <span className="roadmap-badge planned">Planned</span>
+                    <span>Mobile-optimized PWA</span>
                   </div>
                 </div>
               </div>
 
+              {/* Phase 3 */}
               <div className="roadmap-card">
-                <div className="roadmap-phase">Phase 3</div>
-                <div className="roadmap-title">Expansion</div>
+                <div className="roadmap-phase-label">Phase_03 // Domination</div>
+                <div className="roadmap-title">Domination</div>
+                <div className="roadmap-status upcoming-status">
+                  <span className="roadmap-status-dot" />
+                  Upcoming
+                </div>
+                <div className="roadmap-progress">
+                  <div className="roadmap-progress-fill" style={{ width: '0%' }} />
+                </div>
                 <div className="roadmap-list">
-                  <div className="roadmap-item">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/></svg>
-                    <span>Multi-chain support</span>
+                  <div className="roadmap-item dim">
+                    <span className="roadmap-badge planned">Planned</span>
+                    <span>Multi-chain expansion (Base, ETH L2s)</span>
                   </div>
-                  <div className="roadmap-item">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/></svg>
-                    <span>Advanced detection models</span>
+                  <div className="roadmap-item dim">
+                    <span className="roadmap-badge planned">Planned</span>
+                    <span>ML-based rug prediction model</span>
                   </div>
-                  <div className="roadmap-item">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/></svg>
-                    <span>DAO governance</span>
+                  <div className="roadmap-item dim">
+                    <span className="roadmap-badge planned">Planned</span>
+                    <span>DAO governance for token holders</span>
                   </div>
-                  <div className="roadmap-item">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/></svg>
-                    <span>Enterprise features</span>
+                  <div className="roadmap-item dim">
+                    <span className="roadmap-badge planned">Planned</span>
+                    <span>API access for third-party integrations</span>
+                  </div>
+                  <div className="roadmap-item dim">
+                    <span className="roadmap-badge planned">Planned</span>
+                    <span>Enterprise / institutional tier</span>
                   </div>
                 </div>
               </div>
@@ -2381,65 +3336,73 @@ export default function Landing() {
         </section>
 
         {/* TEAM */}
-        <section id="team" className="team">
+        <section id="team" className="team reveal">
           <div className="container">
             <div className="section-header">
               <h2>Meet the Team</h2>
               <p>Building the future of token research</p>
             </div>
 
-            <div className="team-grid">
+            <div className="team-grid stagger-children">
               <div className="team-card">
                 <div className="team-avatar">JH</div>
-                <div className="team-name">Jessie H.</div>
-                <div className="team-role">Founder & Lead Dev</div>
-                <div className="team-bio">Full-stack developer with a passion for DeFi and AI technologies.</div>
-                <div className="team-social">
-                  <a href="https://x.com/ArgusPanoptes7z" target="_blank" rel="noopener noreferrer" aria-label="Twitter">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
-                  </a>
-                  <a href="https://t.me/ArgusAIAlerts" target="_blank" rel="noopener noreferrer" aria-label="Telegram">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
-                  </a>
-                  <a href="https://github.com/ArgusGuardAI/argus-ai" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
-                  </a>
+                <div className="team-info">
+                  <div className="team-name">Jessie H.</div>
+                  <div className="team-role">Founder & Lead Dev</div>
+                  <div className="team-bio">Full-stack engineer building at the intersection of DeFi and AI. Designed Argus from the ground up to protect Solana traders.</div>
+                  <div className="team-social">
+                    <a href="https://x.com/ArgusPanoptes7z" target="_blank" rel="noopener noreferrer" aria-label="Twitter">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+                    </a>
+                    <a href="https://t.me/ArgusAIAlerts" target="_blank" rel="noopener noreferrer" aria-label="Telegram">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
+                    </a>
+                    <a href="https://github.com/ArgusGuardAI/argus-ai" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                    </a>
+                  </div>
                 </div>
               </div>
 
               <div className="team-card">
                 <div className="team-avatar">AI</div>
-                <div className="team-name">Claude</div>
-                <div className="team-role">AI Assistant</div>
-                <div className="team-bio">Anthropic's AI model helping build intelligent DeFi tools.</div>
-                <div className="team-social">
-                  <a href="https://anthropic.com" target="_blank" rel="noopener noreferrer" aria-label="Website">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-                  </a>
+                <div className="team-info">
+                  <div className="team-name">Claude</div>
+                  <div className="team-role">AI Engineering</div>
+                  <div className="team-bio">Anthropic's AI model powering Argus risk analysis, code generation, and intelligent detection systems.</div>
+                  <div className="team-social">
+                    <a href="https://anthropic.com" target="_blank" rel="noopener noreferrer" aria-label="Website">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                    </a>
+                  </div>
                 </div>
               </div>
 
               <div className="team-card">
                 <div className="team-avatar">OS</div>
-                <div className="team-name">Open Source</div>
-                <div className="team-role">Community</div>
-                <div className="team-bio">Built with love by the open source community.</div>
-                <div className="team-social">
-                  <a href="https://github.com/ArgusGuardAI/argus-ai" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
-                  </a>
+                <div className="team-info">
+                  <div className="team-name">Open Source</div>
+                  <div className="team-role">Community</div>
+                  <div className="team-bio">Fully open-source under MIT. Audit the code, contribute features, or fork your own version.</div>
+                  <div className="team-social">
+                    <a href="https://github.com/ArgusGuardAI/argus-ai" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                    </a>
+                  </div>
                 </div>
               </div>
 
               <div className="team-card">
                 <div className="team-avatar">+</div>
-                <div className="team-name">You?</div>
-                <div className="team-role">Contributor</div>
-                <div className="team-bio">Join us! We're always looking for contributors.</div>
-                <div className="team-social">
-                  <a href="https://github.com/ArgusGuardAI/argus-ai" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
-                  </a>
+                <div className="team-info">
+                  <div className="team-name">You?</div>
+                  <div className="team-role">Contributor</div>
+                  <div className="team-bio">We're looking for developers, designers, and security researchers. Ship code that protects real traders.</div>
+                  <div className="team-social">
+                    <a href="https://github.com/ArgusGuardAI/argus-ai" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                    </a>
+                  </div>
                 </div>
               </div>
             </div>
@@ -2447,7 +3410,7 @@ export default function Landing() {
         </section>
 
         {/* CTA */}
-        <section className="cta">
+        <section className="cta reveal">
           <div className="container">
             <h2>Ready to Stop Getting Rugged?</h2>
             <p>Start detecting coordinated dumps before they happen.</p>

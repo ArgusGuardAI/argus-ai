@@ -507,7 +507,14 @@ export default function App() {
 
   // Analyze token
   const analyzeToken = async (address: string) => {
-    if (!address.trim()) return;
+    const trimmed = address.trim();
+    if (!trimmed) return;
+
+    // Validate Solana address format (base58, 32-44 chars)
+    if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(trimmed)) {
+      setAnalysisError('Invalid Solana address. Please enter a valid token mint address (32-44 base58 characters).');
+      return;
+    }
 
     setIsAnalyzing(true);
     setAnalysisError(null);
@@ -668,9 +675,17 @@ export default function App() {
           .catch(() => { /* sparkline is optional */ });
       }
     } catch (error) {
-      const msg = error instanceof Error ? error.message : 'Unknown error';
+      const raw = error instanceof Error ? error.message : 'Unknown error';
+      let msg = raw;
+      if (raw.includes('Failed to fetch') || raw.includes('NetworkError') || raw.includes('net::')) {
+        msg = 'Network error — check your connection and try again.';
+      } else if (raw.includes('404') || raw.includes('not found')) {
+        msg = 'Token not found. It may not be listed on any DEX yet.';
+      } else if (raw.includes('429') || raw.includes('rate limit')) {
+        msg = 'Too many requests. Please wait a moment and try again.';
+      }
       setAnalysisError(msg);
-      log(`Analysis failed: ${msg}`, 'error');
+      log(`Analysis failed: ${raw}`, 'error');
     } finally {
       setIsAnalyzing(false);
     }
@@ -1503,7 +1518,7 @@ export default function App() {
             </div>
 
             {/* Buy Controls */}
-            <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 sm:p-5">
+            <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 sm:p-5 md:sticky md:bottom-4 z-20">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
                   <span className="text-sm font-medium text-zinc-500">Amount:</span>
@@ -1721,6 +1736,20 @@ export default function App() {
             <p className="text-zinc-500 max-w-lg mx-auto leading-relaxed">
               Paste a Solana token address above to get comprehensive AI analysis including security checks, holder distribution, bundle detection, and trading signals.
             </p>
+
+            {/* Getting Started Steps */}
+            {!autoTrade.wallet.isLoaded && (
+              <div className="mt-8 mx-auto max-w-md p-4 rounded-xl bg-amber-500/5 border border-amber-500/20">
+                <div className="flex items-center gap-2 text-sm font-medium text-amber-500 mb-1">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Get Started
+                </div>
+                <p className="text-xs text-zinc-400">Create a trading wallet to analyze tokens and trade. Click "Create Wallet" in the header above.</p>
+              </div>
+            )}
+
             <div className="mt-8 flex flex-col sm:flex-row justify-center gap-3 sm:gap-4 text-sm text-zinc-500">
               <div className="flex items-center justify-center gap-2">
                 <svg className="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
