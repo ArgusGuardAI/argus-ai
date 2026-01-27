@@ -776,6 +776,38 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
       if (priceChange24h !== undefined && priceChange24h < -30) moderateFlags++;
       if (devActivity && devActivity.hasSold && devActivity.percentSold >= 20) moderateFlags++;
 
+      // POSITIVE SIGNAL OFFSET
+      // Strong bullish counter-signals reduce combo escalation — real momentum
+      // shouldn't be penalized as harshly as tokens with no organic activity.
+      // SAFETY: Disabled when the "positive signals" are likely a coordinated pump:
+      //   - HIGH confidence bundles (wallets ARE the buying pressure)
+      //   - Ultra-thin liquidity <$2K (price trivially manipulable)
+      //   - Token < 1h old (too early to trust any momentum)
+      const isHighBundle = bundleInfo?.confidence === 'HIGH';
+      const tooThinForOffset = liquidityUsd < 2000;
+      const tooNewForOffset = tokenAgeHours !== undefined && tokenAgeHours < 1;
+      const offsetBlocked = isHighBundle || tooThinForOffset || tooNewForOffset;
+
+      const buyRatio = buys24h > 0 && sells24h > 0 ? buys24h / sells24h : 0;
+
+      if (!offsetBlocked) {
+        let positiveSignals = 0;
+        if (buyRatio > 1.3) positiveSignals++;
+        if (priceChange24h !== undefined && priceChange24h > 50) positiveSignals++;
+        if (liquidityUsd > 0 && tokenInfo.volume24h && tokenInfo.volume24h / liquidityUsd > 5 && buyRatio > 1) positiveSignals++;
+
+        const rawFlags = moderateFlags;
+        if (positiveSignals >= 3) {
+          moderateFlags = Math.max(0, moderateFlags - 2);
+          console.log(`[Sentinel] Positive offset -2: ${positiveSignals} bullish signals (buyRatio=${buyRatio.toFixed(2)}, price=${priceChange24h?.toFixed(0)}%) — flags ${rawFlags} → ${moderateFlags}`);
+        } else if (positiveSignals >= 2) {
+          moderateFlags = Math.max(0, moderateFlags - 1);
+          console.log(`[Sentinel] Positive offset -1: ${positiveSignals} bullish signals (buyRatio=${buyRatio.toFixed(2)}, price=${priceChange24h?.toFixed(0)}%) — flags ${rawFlags} → ${moderateFlags}`);
+        }
+      } else {
+        console.log(`[Sentinel] Positive offset BLOCKED: highBundle=${isHighBundle}, thinLiq=${tooThinForOffset}, tooNew=${tooNewForOffset}`);
+      }
+
       if (moderateFlags >= 5 && score < 75) {
         console.log(`[Sentinel] Enforcing minimum 75 for ${moderateFlags} combined risk signals (was ${score})`);
         score = 75;
@@ -1141,6 +1173,33 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
   if (isNewWallet) fbModerateFlags++;
   if (fallbackPriceChange !== undefined && fallbackPriceChange < -30) fbModerateFlags++;
   if (devActivity && devActivity.hasSold && devActivity.percentSold >= 20) fbModerateFlags++;
+
+  // POSITIVE SIGNAL OFFSET (fallback)
+  // SAFETY: Blocked when signals are likely a coordinated pump
+  const fbIsHighBundle = bundleInfo?.confidence === 'HIGH';
+  const fbTooThin = fallbackLiquidity < 2000;
+  const fbTooNew = fallbackAgeHours !== undefined && fallbackAgeHours < 1;
+  const fbOffsetBlocked = fbIsHighBundle || fbTooThin || fbTooNew;
+
+  const fbBuyRatio = fbBuys24h > 0 && fbSells24h > 0 ? fbBuys24h / fbSells24h : 0;
+
+  if (!fbOffsetBlocked) {
+    let fbPositiveSignals = 0;
+    if (fbBuyRatio > 1.3) fbPositiveSignals++;
+    if (fallbackPriceChange !== undefined && fallbackPriceChange > 50) fbPositiveSignals++;
+    if (fallbackLiquidity > 0 && tokenInfo.volume24h && tokenInfo.volume24h / fallbackLiquidity > 5 && fbBuyRatio > 1) fbPositiveSignals++;
+
+    const fbRawFlags = fbModerateFlags;
+    if (fbPositiveSignals >= 3) {
+      fbModerateFlags = Math.max(0, fbModerateFlags - 2);
+      console.log(`[Sentinel] Positive offset -2: ${fbPositiveSignals} bullish signals (buyRatio=${fbBuyRatio.toFixed(2)}, price=${fallbackPriceChange?.toFixed(0)}%) — flags ${fbRawFlags} → ${fbModerateFlags}`);
+    } else if (fbPositiveSignals >= 2) {
+      fbModerateFlags = Math.max(0, fbModerateFlags - 1);
+      console.log(`[Sentinel] Positive offset -1: ${fbPositiveSignals} bullish signals (buyRatio=${fbBuyRatio.toFixed(2)}, price=${fallbackPriceChange?.toFixed(0)}%) — flags ${fbRawFlags} → ${fbModerateFlags}`);
+    }
+  } else {
+    console.log(`[Sentinel] Positive offset BLOCKED: highBundle=${fbIsHighBundle}, thinLiq=${fbTooThin}, tooNew=${fbTooNew}`);
+  }
 
   if (fbModerateFlags >= 5 && riskScore < 75) {
     console.log(`[Sentinel] Enforcing minimum 75 for ${fbModerateFlags} combined risk signals (was ${riskScore})`);
