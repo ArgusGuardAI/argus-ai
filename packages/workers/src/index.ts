@@ -8,6 +8,7 @@ import { trendsRoutes } from './routes/trends';
 import scoresRoutes from './routes/scores';
 import { sentinelRoutes } from './routes/sentinel';
 import { jupiterRoutes } from './routes/jupiter';
+import { twitterRoutes } from './routes/twitter';
 
 export type Bindings = {
   SCAN_CACHE: KVNamespace;
@@ -19,6 +20,10 @@ export type Bindings = {
   ARGUSGUARD_MINT?: string; // Token mint address for token gating (optional until launch)
   STRIPE_SECRET_KEY: string;
   STRIPE_WEBHOOK_SECRET: string;
+  TWITTER_API_KEY?: string;
+  TWITTER_API_SECRET?: string;
+  TWITTER_ACCESS_TOKEN?: string;
+  TWITTER_ACCESS_TOKEN_SECRET?: string;
   ENVIRONMENT: string;
 };
 
@@ -161,6 +166,7 @@ app.route('/trends', trendsRoutes);
 app.route('/scores', scoresRoutes);
 app.route('/sentinel', sentinelRoutes);
 app.route('/jupiter', jupiterRoutes);
+app.route('/twitter', twitterRoutes);
 
 // 404 handler
 app.notFound((c) => {

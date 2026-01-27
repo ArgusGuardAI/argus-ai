@@ -22,6 +22,10 @@ cpu_ms = 50
 #    wrangler secret put TOGETHER_AI_API_KEY
 #    wrangler secret put SUPABASE_URL
 #    wrangler secret put SUPABASE_ANON_KEY
+#    wrangler secret put TWITTER_API_KEY
+#    wrangler secret put TWITTER_API_SECRET
+#    wrangler secret put TWITTER_ACCESS_TOKEN
+#    wrangler secret put TWITTER_ACCESS_TOKEN_SECRET
 #
 # 4. For local development, create .dev.vars file:
 #    cp .dev.vars.example .dev.vars

@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Bindings } from '../index';
 import { fetchHeliusTokenMetadata, analyzeTokenTransactions, analyzeDevSelling } from '../services/helius';
 import { fetchDexScreenerData } from '../services/dexscreener';
+import { postTweet, formatAlertTweet, canTweet, recordTweet, type TwitterConfig } from '../services/twitter';
 // Pump.fun API disabled (Cloudflare 1016 error)
 // import { fetchPumpFunData, isPumpFunToken } from '../services/pumpfun';
 
@@ -1408,6 +1409,58 @@ sentinelRoutes.post('/analyze', async (c) => {
       model
     );
     console.log(`[Sentinel] AI analysis took ${Date.now() - aiStart}ms`);
+
+    // ============================================
+    // AUTO-TWEET: Alert on high-risk tokens
+    // Fire-and-forget via waitUntil (doesn't block response)
+    // Criteria: riskScore >= 70 (DANGEROUS/SCAM)
+    // ============================================
+    if (analysis.riskScore >= 70 && c.env.TWITTER_API_KEY) {
+      const twitterConfig: TwitterConfig = {
+        apiKey: c.env.TWITTER_API_KEY,
+        apiSecret: c.env.TWITTER_API_SECRET || '',
+        accessToken: c.env.TWITTER_ACCESS_TOKEN || '',
+        accessTokenSecret: c.env.TWITTER_ACCESS_TOKEN_SECRET || '',
+      };
+
+      c.executionCtx.waitUntil(
+        (async () => {
+          try {
+            const { allowed, reason } = await canTweet(c.env.SCAN_CACHE, tokenAddress);
+            if (!allowed) {
+              console.log(`[Twitter] Skipping tweet for ${tokenAddress}: ${reason}`);
+              return;
+            }
+
+            const tweetText = formatAlertTweet({
+              tokenAddress,
+              name: tokenInfo.name,
+              symbol: tokenInfo.symbol,
+              riskScore: analysis.riskScore,
+              riskLevel: analysis.riskLevel,
+              liquidity: tokenInfo.liquidity || 0,
+              marketCap: tokenInfo.marketCap || 0,
+              ageHours: tokenInfo.ageHours || 0,
+              bundleDetected: bundleInfo?.detected || false,
+              bundleCount: bundleInfo?.count || 0,
+              bundleConfidence: bundleInfo?.confidence || 'NONE',
+              flags: analysis.flags || [],
+              summary: analysis.summary || '',
+            });
+
+            const result = await postTweet(tweetText, twitterConfig);
+            if (result.success && result.tweetId) {
+              await recordTweet(c.env.SCAN_CACHE, tokenAddress, result.tweetId);
+              console.log(`[Twitter] Alert posted: ${result.tweetUrl}`);
+            } else {
+              console.warn(`[Twitter] Failed to post: ${result.error}`);
+            }
+          } catch (err) {
+            console.error('[Twitter] Auto-tweet error:', err);
+          }
+        })()
+      );
+    }
 
     return c.json({
       tokenInfo,
