@@ -363,6 +363,13 @@ interface AnalysisResult {
     totalPercent: number;
     wallets: string[];
     description?: string;
+    confidence?: string;
+    syndicateWallets?: Array<{
+      address: string;
+      holdingsPercent: number;
+      type: string;
+      isHighRisk: boolean;
+    }>;
   };
   devActivity: {
     hasSold: boolean;
@@ -615,8 +622,18 @@ export default function App() {
             detected: data.bundleInfo?.detected || false,
             count: data.bundleInfo?.count || 0,
             totalPercent: typeof data.bundleInfo?.txBundlePercent === 'number' ? data.bundleInfo.txBundlePercent : 0,
-            wallets: [],
+            wallets: data.bundleInfo?.wallets || [],
             description: data.bundleInfo?.description,
+            confidence: data.bundleInfo?.confidence,
+            syndicateWallets: (data.network?.nodes || [])
+              .filter((n: { type: string }) => n.type !== 'token' && n.type !== 'lp')
+              .map((n: { address: string; holdingsPercent?: number; type: string; isHighRisk?: boolean }) => ({
+                address: n.address,
+                holdingsPercent: n.holdingsPercent || 0,
+                type: n.type,
+                isHighRisk: n.isHighRisk || false,
+              }))
+              .sort((a: { holdingsPercent: number }, b: { holdingsPercent: number }) => b.holdingsPercent - a.holdingsPercent),
           },
           devActivity: data.devActivity ? {
             hasSold: data.devActivity.hasSold,
@@ -1605,17 +1622,126 @@ export default function App() {
                   <svg className="w-5 h-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                   </svg>
-                  <span className="text-sm font-bold text-red-400">Bundle Warning</span>
-                  <span className="ml-auto px-2 py-0.5 rounded text-[10px] font-bold bg-red-800/60 text-red-300">
-                    {analysisResult.bundles.count} CLUSTER{analysisResult.bundles.count > 1 ? 'S' : ''} &middot; {analysisResult.bundles.totalPercent.toFixed(1)}% SUPPLY
+                  <span className="text-sm font-bold text-red-400">
+                    {analysisResult.bundles.confidence === 'HIGH' && analysisResult.holders.total > 0 && (analysisResult.bundles.count / analysisResult.holders.total) > 0.4
+                      ? 'Pump Syndicate Detected'
+                      : 'Bundle Warning'}
                   </span>
+                  <div className="ml-auto flex gap-1.5">
+                    {analysisResult.bundles.confidence && (
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                        analysisResult.bundles.confidence === 'HIGH' ? 'bg-red-700/80 text-red-200' : 'bg-amber-800/60 text-amber-300'
+                      }`}>
+                        {analysisResult.bundles.confidence}
+                      </span>
+                    )}
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-800/60 text-red-300">
+                      {analysisResult.bundles.count} WALLETS
+                    </span>
+                  </div>
                 </div>
-                <p className="text-sm text-red-400/80">
-                  {analysisResult.bundles.description
-                    ? `${analysisResult.bundles.description}. This indicates coordinated wallet activity designed to manipulate price action.`
-                    : `${analysisResult.bundles.count} coordinated wallet cluster${analysisResult.bundles.count > 1 ? 's' : ''} detected holding ${analysisResult.bundles.totalPercent.toFixed(1)}% of supply. This indicates coordinated wallet activity designed to manipulate price action.`
-                  }
-                </p>
+
+                {/* Syndicate summary */}
+                <div className="mb-3 text-sm text-red-400/80">
+                  {analysisResult.bundles.confidence === 'HIGH' ? (
+                    <span><span className="text-red-300 font-medium">{analysisResult.bundles.count} wallets</span> confirmed buying in the same block (same-block sniping). {
+                      analysisResult.holders.total > 0
+                        ? `That's ${((analysisResult.bundles.count / analysisResult.holders.total) * 100).toFixed(0)}% of all ${analysisResult.holders.total} holders.`
+                        : ''
+                    }</span>
+                  ) : (
+                    <span>{analysisResult.bundles.count} wallets show coordination patterns — possible coordinated buying activity.</span>
+                  )}
+                </div>
+
+                {/* Syndicate signs */}
+                {analysisResult.bundles.confidence === 'HIGH' && analysisResult.bundles.syndicateWallets && analysisResult.bundles.syndicateWallets.length > 0 && (() => {
+                  const sw = analysisResult.bundles.syndicateWallets!;
+                  const nonCreator = sw.filter(w => w.type !== 'creator');
+                  const insiders = nonCreator.filter(w => w.type === 'insider');
+                  const holdings = nonCreator.filter(w => w.holdingsPercent > 0);
+                  const holdingsPcts = holdings.map(w => w.holdingsPercent);
+                  const min = holdingsPcts.length > 0 ? Math.min(...holdingsPcts) : 0;
+                  const max = holdingsPcts.length > 0 ? Math.max(...holdingsPcts) : 0;
+                  const totalSupply = holdings.reduce((s, w) => s + w.holdingsPercent, 0);
+                  const uniformSizing = max > 0 && min > 0 && (max / min) < 3;
+                  const creator = sw.find(w => w.type === 'creator');
+
+                  return (
+                    <div className="space-y-3">
+                      {/* Signs of syndicate */}
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div className="flex items-center gap-1.5 text-red-300">
+                          <span className="text-red-500">&#x2716;</span>
+                          Same-block sniping
+                        </div>
+                        {uniformSizing && (
+                          <div className="flex items-center gap-1.5 text-red-300">
+                            <span className="text-red-500">&#x2716;</span>
+                            Uniform position sizing ({min.toFixed(1)}-{max.toFixed(1)}%)
+                          </div>
+                        )}
+                        {insiders.length > 0 && (
+                          <div className="flex items-center gap-1.5 text-red-300">
+                            <span className="text-red-500">&#x2716;</span>
+                            {insiders.length} insider wallet{insiders.length > 1 ? 's' : ''} flagged
+                          </div>
+                        )}
+                        {creator && creator.holdingsPercent < 0.1 && (
+                          <div className="flex items-center gap-1.5 text-red-300">
+                            <span className="text-red-500">&#x2716;</span>
+                            Creator holds 0% (distributed)
+                          </div>
+                        )}
+                        <div className="flex items-center gap-1.5 text-red-300">
+                          <span className="text-red-500">&#x2716;</span>
+                          Controls ~{totalSupply.toFixed(0)}% of supply
+                        </div>
+                      </div>
+
+                      {/* Wallet table */}
+                      <div className="mt-2 rounded-lg bg-black/30 border border-red-900/40 overflow-hidden">
+                        <div className="grid grid-cols-[1fr_80px_70px] gap-2 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-red-400/60 border-b border-red-900/30">
+                          <span>Wallet</span>
+                          <span className="text-right">Holdings</span>
+                          <span className="text-right">Type</span>
+                        </div>
+                        <div className="max-h-[180px] overflow-y-auto">
+                          {nonCreator.filter(w => w.holdingsPercent > 0).slice(0, 15).map((w, i) => (
+                            <div key={i} className={`grid grid-cols-[1fr_80px_70px] gap-2 px-3 py-1.5 text-xs border-b border-red-900/20 ${w.isHighRisk ? 'bg-red-900/20' : ''}`}>
+                              <span className="font-mono text-zinc-400 truncate">
+                                {w.address.slice(0, 4)}...{w.address.slice(-4)}
+                              </span>
+                              <span className="text-right text-zinc-300">{w.holdingsPercent.toFixed(2)}%</span>
+                              <span className="text-right">
+                                {w.type === 'insider' ? (
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-800/80 text-red-200">INSIDER</span>
+                                ) : (
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-zinc-800 text-zinc-400">Bundle</span>
+                                )}
+                              </span>
+                            </div>
+                          ))}
+                          {nonCreator.filter(w => w.holdingsPercent > 0).length > 15 && (
+                            <div className="px-3 py-1.5 text-[10px] text-zinc-500 text-center">
+                              +{nonCreator.filter(w => w.holdingsPercent > 0).length - 15} more wallets
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Fallback for non-HIGH or missing wallet data */}
+                {(analysisResult.bundles.confidence !== 'HIGH' || !analysisResult.bundles.syndicateWallets || analysisResult.bundles.syndicateWallets.length === 0) && (
+                  <p className="text-sm text-red-400/80">
+                    {analysisResult.bundles.description
+                      ? `${analysisResult.bundles.description}. This indicates coordinated wallet activity designed to manipulate price action.`
+                      : `${analysisResult.bundles.count} coordinated wallet cluster${analysisResult.bundles.count > 1 ? 's' : ''} detected. This indicates coordinated wallet activity designed to manipulate price action.`
+                    }
+                  </p>
+                )}
               </div>
             )}
 
@@ -1872,9 +1998,9 @@ export default function App() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
-            <h3 className="text-2xl font-bold text-emerald-500 mb-2">Token Research Tool</h3>
+            <h3 className="text-2xl font-bold text-emerald-500 mb-2">The Hundred-Eyed Guardian</h3>
             <p className="text-zinc-500 max-w-lg mx-auto leading-relaxed">
-              Paste a Solana token address above to get comprehensive AI analysis including security checks, holder distribution, bundle detection, and trading signals.
+              Paste a Solana token address above. Argus will scan every wallet, detect pump syndicates, and deliver a full risk analysis before you invest.
             </p>
 
             {/* Getting Started Steps */}

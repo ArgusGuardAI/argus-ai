@@ -2205,10 +2205,11 @@ export default function Landing() {
   // TYPEWRITER EFFECT
   // ============================================
   const typewriterPhrases = [
-    'Detecting bundle attacks',
+    'A hundred eyes, always watching',
+    'Exposing pump syndicates',
     'Scanning dev wallets',
-    'Analyzing holder distribution',
-    'Protecting your capital',
+    'Detecting coordinated wallets',
+    'Nothing hides from Argus',
   ];
   const [typewriterText, setTypewriterText] = useState('');
   const [phraseIndex, setPhraseIndex] = useState(0);
@@ -2500,7 +2501,7 @@ export default function Landing() {
           <div className="container">
             <div className="badge">
               <span className="badge-dot"></span>
-              Detect Insider Trading
+              The Hundred-Eyed Guardian
             </div>
             <h1>Detect Coordinated Wallets<br/><span>Before They Dump</span></h1>
             <p className="hero-typewriter">
@@ -2508,8 +2509,8 @@ export default function Landing() {
               <span className="typewriter-cursor" />
             </p>
             <p>
-              Expose insider clusters and pump groups on Solana with bundle detection.
-              See what coordinated wallets are hiding before you invest.
+              A titan blessed with one hundred eyes, each one watching a different wallet.
+              Argus exposes pump syndicates, insider clusters, and coordinated dumps on Solana before they strike.
             </p>
 
             <div className="token-ticker">
@@ -2726,7 +2727,7 @@ export default function Landing() {
           <div className="container">
             <div className="section-header reveal">
               <h2>Stop Getting Rugged</h2>
-              <p>Comprehensive analysis tools to detect manipulation before you invest</p>
+              <p>Every eye sees a different threat. Every signal, exposed before you invest.</p>
             </div>
 
             <div className="feature-grid stagger-children reveal">
@@ -2734,8 +2735,8 @@ export default function Landing() {
                 <div className="icon-bg">
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                 </div>
-                <div className="card-title">Bundle Detection</div>
-                <div className="card-desc">Expose coordinated wallet clusters that indicate insider trading, pump groups, or coordinated dumps. See the manipulation others miss.</div>
+                <div className="card-title">Syndicate Detection</div>
+                <div className="card-desc">Expose pump syndicates and coordinated wallet clusters via same-block transaction analysis. See the manipulation others miss.</div>
               </div>
 
               <div className="feature-card">
@@ -2936,7 +2937,7 @@ export default function Landing() {
           <div className="container">
             <div className="section-header">
               <h2>How It Works</h2>
-              <p>Expose insider trading in four simple steps</p>
+              <p>Four steps. A hundred eyes. Zero blind spots.</p>
             </div>
 
             <div className="steps-grid">
@@ -2947,8 +2948,8 @@ export default function Landing() {
               </div>
               <div className="step">
                 <div className="step-number">2</div>
-                <div className="step-title">Detect Bundles</div>
-                <div className="step-desc">Algorithm analyzes holder patterns to find coordinated wallet clusters</div>
+                <div className="step-title">Detect Syndicates</div>
+                <div className="step-desc">Argus scans every wallet for same-block sniping and coordinated pump groups</div>
               </div>
               <div className="step">
                 <div className="step-number">3</div>
@@ -2998,9 +2999,9 @@ export default function Landing() {
         <section id="compare" className="comparison reveal">
           <div className="container">
             <div className="section-header">
-              <div className="category-badge">Research-to-Trade Platform</div>
+              <div className="category-badge">The All-Seeing Guardian</div>
               <h2>One Tool, Not Five</h2>
-              <p>Other traders juggle RugCheck, DexScreener, Bubble Maps, a DEX, and a price tracker. Argus replaces them all in a single interface.</p>
+              <p>Other traders juggle RugCheck, DexScreener, Bubble Maps, a DEX, and a price tracker. Argus sees it all in a single interface.</p>
             </div>
 
             <div className="comparison-table-wrap">
@@ -3081,9 +3082,9 @@ export default function Landing() {
                 <i className="fa-solid fa-lightbulb"></i>
               </div>
               <div className="callout-content">
-                <h4>You're not comparing apples to apples</h4>
+                <h4>Other tools see fragments. Argus sees everything.</h4>
                 <p>
-                  RugCheck does security. DexScreener does charts. Sniper bots do trading. Nobody combines research <em>and</em> execution in one place. Argus is the first <strong>Research-to-Trade</strong> platform&mdash;analyze a token and act on it instantly, with auto-sell protecting your position. No more tab-hopping between five different tools.
+                  RugCheck does security. DexScreener does charts. Sniper bots do trading. Nobody combines research <em>and</em> execution in one place. Argus is the first <strong>Research-to-Trade</strong> platform&mdash;a hundred eyes analyzing every angle of a token so you can act on it instantly, with auto-sell protecting your position. No more tab-hopping between five different tools.
                 </p>
               </div>
             </div>
@@ -3145,8 +3146,8 @@ export default function Landing() {
               <div className="token-info">
                 <h3>$ARGUS Token</h3>
                 <p>
-                  The $ARGUS token powers the ecosystem, providing holders with premium features,
-                  reduced trading fees, and governance rights over protocol decisions.
+                  The $ARGUS token powers the hundred-eyed guardian, granting holders premium features,
+                  reduced trading fees, and governance rights over the protocol's evolution.
                 </p>
                 <div className="token-stats">
                   <div className="token-stat">
@@ -3206,7 +3207,7 @@ export default function Landing() {
           <div className="container">
             <div className="section-header">
               <h2>Roadmap</h2>
-              <p>Building the most advanced token research platform on Solana</p>
+              <p>Every eye evolving. Every signal sharpening.</p>
             </div>
 
             {/* Timeline Spine */}
@@ -3340,7 +3341,7 @@ export default function Landing() {
           <div className="container">
             <div className="section-header">
               <h2>Meet the Team</h2>
-              <p>Building the future of token research</p>
+              <p>The minds behind the hundred eyes</p>
             </div>
 
             <div className="team-grid stagger-children">
@@ -3349,7 +3350,7 @@ export default function Landing() {
                 <div className="team-info">
                   <div className="team-name">Jessie H.</div>
                   <div className="team-role">Founder & Lead Dev</div>
-                  <div className="team-bio">Full-stack engineer building at the intersection of DeFi and AI. Designed Argus from the ground up to protect Solana traders.</div>
+                  <div className="team-bio">Full-stack engineer building at the intersection of DeFi and AI. Forged the hundred-eyed guardian from the ground up to protect Solana traders.</div>
                   <div className="team-social">
                     <a href="https://x.com/ArgusPanoptes7z" target="_blank" rel="noopener noreferrer" aria-label="Twitter">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
@@ -3436,7 +3437,7 @@ export default function Landing() {
               <a href="https://t.me/ArgusAIAlerts" target="_blank" rel="noopener noreferrer">Telegram</a>
             </div>
             <div className="copyright">
-              2026 Argus AI. Open Source under MIT License.
+              2026 Argus AI &mdash; The Hundred-Eyed Guardian. Open Source under MIT License.
             </div>
           </div>
         </footer>

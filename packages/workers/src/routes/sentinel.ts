@@ -672,6 +672,24 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
         aiFlags.push({ type: 'STRUCTURAL', severity: 'HIGH', message: `Bundle activity detected with only $${liquidityUsd.toLocaleString()} liquidity — coordinated rug risk` });
       }
 
+      // ============================================
+      // BUNDLE DOMINANCE GUARDRAIL
+      // When coordinated wallets make up a large % of holders, it's a syndicate pump
+      // ============================================
+      const holderCountForBundle = tokenInfo.holderCount || 0;
+      if (bundleInfo.count > 0 && holderCountForBundle > 0) {
+        const bundleRatio = bundleInfo.count / holderCountForBundle;
+        if (bundleInfo.confidence === 'HIGH' && bundleRatio > 0.4 && score < 75) {
+          console.log(`[Sentinel] Enforcing minimum 75 for bundle dominance: ${bundleInfo.count}/${holderCountForBundle} holders (${(bundleRatio * 100).toFixed(0)}%) are coordinated (was ${score})`);
+          score = 75;
+          aiFlags.push({ type: 'BUNDLE_DOMINANCE', severity: 'CRITICAL', message: `Pump syndicate: ${bundleInfo.count} of ${holderCountForBundle} holders (${(bundleRatio * 100).toFixed(0)}%) are coordinated wallets confirmed via same-block transactions` });
+        } else if (bundleRatio > 0.5 && score < 70) {
+          console.log(`[Sentinel] Enforcing minimum 70 for bundle dominance: ${bundleInfo.count}/${holderCountForBundle} holders (${(bundleRatio * 100).toFixed(0)}%) are coordinated (was ${score})`);
+          score = 70;
+          aiFlags.push({ type: 'BUNDLE_DOMINANCE', severity: 'HIGH', message: `${bundleInfo.count} of ${holderCountForBundle} holders (${(bundleRatio * 100).toFixed(0)}%) show coordinated wallet patterns — likely pump syndicate` });
+        }
+      }
+
       // Very new token (<6h) with thin liquidity (<$10K) = minimum 55
       if (tokenAgeHours !== undefined && tokenAgeHours < 6 && liquidityUsd < 10000 && score < 55) {
         console.log(`[Sentinel] Enforcing minimum 55 for new token (<6h) + thin liquidity (was ${score})`);
@@ -781,12 +799,14 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
       // shouldn't be penalized as harshly as tokens with no organic activity.
       // SAFETY: Disabled when the "positive signals" are likely a coordinated pump:
       //   - HIGH confidence bundles (wallets ARE the buying pressure)
+      //   - Bundle wallets dominate holder base (>40% = syndicate)
       //   - Ultra-thin liquidity <$2K (price trivially manipulable)
       //   - Token < 1h old (too early to trust any momentum)
       const isHighBundle = bundleInfo?.confidence === 'HIGH';
+      const bundleDominant = holderCountForBundle > 0 && bundleInfo.count > 0 && (bundleInfo.count / holderCountForBundle) > 0.4;
       const tooThinForOffset = liquidityUsd < 2000;
       const tooNewForOffset = tokenAgeHours !== undefined && tokenAgeHours < 1;
-      const offsetBlocked = isHighBundle || tooThinForOffset || tooNewForOffset;
+      const offsetBlocked = isHighBundle || bundleDominant || tooThinForOffset || tooNewForOffset;
 
       const buyRatio = buys24h > 0 && sells24h > 0 ? buys24h / sells24h : 0;
 
@@ -805,7 +825,7 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
           console.log(`[Sentinel] Positive offset -1: ${positiveSignals} bullish signals (buyRatio=${buyRatio.toFixed(2)}, price=${priceChange24h?.toFixed(0)}%) — flags ${rawFlags} → ${moderateFlags}`);
         }
       } else {
-        console.log(`[Sentinel] Positive offset BLOCKED: highBundle=${isHighBundle}, thinLiq=${tooThinForOffset}, tooNew=${tooNewForOffset}`);
+        console.log(`[Sentinel] Positive offset BLOCKED: highBundle=${isHighBundle}, bundleDominant=${bundleDominant}, thinLiq=${tooThinForOffset}, tooNew=${tooNewForOffset}`);
       }
 
       if (moderateFlags >= 5 && score < 75) {
@@ -1097,6 +1117,24 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
     flags.push({ type: 'STRUCTURAL', severity: 'HIGH', message: `Bundle activity detected with only $${fallbackLiquidity.toLocaleString()} liquidity — coordinated rug risk` });
   }
 
+  // ============================================
+  // BUNDLE DOMINANCE GUARDRAIL (fallback)
+  // When coordinated wallets make up a large % of holders, it's a syndicate pump
+  // ============================================
+  const fbHolderCountForBundle = tokenInfo.holderCount || 0;
+  if (bundleInfo.count > 0 && fbHolderCountForBundle > 0) {
+    const fbBundleRatio = bundleInfo.count / fbHolderCountForBundle;
+    if (bundleInfo.confidence === 'HIGH' && fbBundleRatio > 0.4 && riskScore < 75) {
+      console.log(`[Sentinel] Enforcing minimum 75 for bundle dominance: ${bundleInfo.count}/${fbHolderCountForBundle} holders (${(fbBundleRatio * 100).toFixed(0)}%) are coordinated (was ${riskScore})`);
+      riskScore = 75;
+      flags.push({ type: 'BUNDLE_DOMINANCE', severity: 'CRITICAL', message: `Pump syndicate: ${bundleInfo.count} of ${fbHolderCountForBundle} holders (${(fbBundleRatio * 100).toFixed(0)}%) are coordinated wallets confirmed via same-block transactions` });
+    } else if (fbBundleRatio > 0.5 && riskScore < 70) {
+      console.log(`[Sentinel] Enforcing minimum 70 for bundle dominance: ${bundleInfo.count}/${fbHolderCountForBundle} holders (${(fbBundleRatio * 100).toFixed(0)}%) are coordinated (was ${riskScore})`);
+      riskScore = 70;
+      flags.push({ type: 'BUNDLE_DOMINANCE', severity: 'HIGH', message: `${bundleInfo.count} of ${fbHolderCountForBundle} holders (${(fbBundleRatio * 100).toFixed(0)}%) show coordinated wallet patterns — likely pump syndicate` });
+    }
+  }
+
   // Structural minimums
   if (fallbackAgeHours !== undefined && fallbackAgeHours < 6 && fallbackLiquidity < 10000 && riskScore < 55) {
     riskScore = 55;
@@ -1177,9 +1215,10 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
   // POSITIVE SIGNAL OFFSET (fallback)
   // SAFETY: Blocked when signals are likely a coordinated pump
   const fbIsHighBundle = bundleInfo?.confidence === 'HIGH';
+  const fbBundleDominant = fbHolderCountForBundle > 0 && bundleInfo.count > 0 && (bundleInfo.count / fbHolderCountForBundle) > 0.4;
   const fbTooThin = fallbackLiquidity < 2000;
   const fbTooNew = fallbackAgeHours !== undefined && fallbackAgeHours < 1;
-  const fbOffsetBlocked = fbIsHighBundle || fbTooThin || fbTooNew;
+  const fbOffsetBlocked = fbIsHighBundle || fbBundleDominant || fbTooThin || fbTooNew;
 
   const fbBuyRatio = fbBuys24h > 0 && fbSells24h > 0 ? fbBuys24h / fbSells24h : 0;
 
@@ -1198,7 +1237,7 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
       console.log(`[Sentinel] Positive offset -1: ${fbPositiveSignals} bullish signals (buyRatio=${fbBuyRatio.toFixed(2)}, price=${fallbackPriceChange?.toFixed(0)}%) — flags ${fbRawFlags} → ${fbModerateFlags}`);
     }
   } else {
-    console.log(`[Sentinel] Positive offset BLOCKED: highBundle=${fbIsHighBundle}, thinLiq=${fbTooThin}, tooNew=${fbTooNew}`);
+    console.log(`[Sentinel] Positive offset BLOCKED: highBundle=${fbIsHighBundle}, bundleDominant=${fbBundleDominant}, thinLiq=${fbTooThin}, tooNew=${fbTooNew}`);
   }
 
   if (fbModerateFlags >= 5 && riskScore < 75) {
