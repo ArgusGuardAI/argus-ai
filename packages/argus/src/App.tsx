@@ -552,28 +552,10 @@ export default function App() {
         const buyRatio = sells24h > 0 ? buys24h / sells24h : (buys24h > 0 ? 2 : 1);
 
         // Invert risk score (API: higher = worse, we want: higher = better)
-        let score = Math.max(0, 100 - (data.analysis?.riskScore || 50));
-
-        // Apply penalties for red flags the backend may underweight
-        // NOTE: Bundles are NOT penalized here — the backend AI prompt and post-AI
-        // compounding already handle bundle scoring thoroughly. Adding frontend
-        // bundle penalties was double/triple counting the same signal.
-        const liquidity = data.tokenInfo?.liquidity || 0;
-        const topHolderPct = holders[0]?.percent || 0;
-        const isPumpFun = address.trim().endsWith('pump');
-
-        // $0 liquidity penalty — skip for pump.fun tokens (they use bonding curves, not DEX liquidity)
-        if (liquidity <= 0 && !isPumpFun) score = Math.max(0, score - 20);
-
-        // Structural risk (age, liquidity depth) is handled by backend guardrails
-        // to avoid double-counting — do NOT apply frontend penalties for these
-
-        // Extreme holder concentration
-        if (topHolderPct > 50) score = Math.max(0, score - 15);
-        if (topHolderPct > 75) score = Math.max(0, score - 10);
-
-        // Heavy sell pressure
-        if (buyRatio < 0.3 && sells24h > 100) score = Math.max(0, score - 10);
+        // Backend sentinel handles ALL risk scoring: bundles, holder concentration,
+        // liquidity, token age, sell pressure, etc. via AI analysis + post-AI guardrails.
+        // No frontend penalties — they were double-counting and defeating backend guardrails.
+        const score = Math.max(0, 100 - (data.analysis?.riskScore || 50));
 
         const signal: SignalType = score >= 75 ? 'STRONG_BUY' :
                                    score >= 60 ? 'BUY' :

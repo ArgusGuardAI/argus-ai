@@ -524,13 +524,27 @@ STRUCTURAL RISK AWARENESS (consider but do not over-penalize):
 - Max structural penalty should be ~+15 points total (hard guardrails enforce minimums separately)
 - Positive trading signals CAN still offset structural risk, but weight them less for tokens < 6h old
 
+PRICE CRASH — CRITICAL SIGNAL (do NOT let positive signals offset a crash):
+- 24h price change < -80% = ALREADY RUGGED. Score 75+ minimum regardless of other signals
+- 24h price change < -50% = Major dump in progress. Score 65+ minimum
+- 24h price change < -30% = Significant selling pressure. Score 55+ minimum
+- Revoked authorities do NOT offset a price crash — the rug already happened
+- A token down 90% with revoked mint/freeze is STILL a rug, not a safe token
+
+SELL PRESSURE:
+- Sells significantly exceeding buys (ratio < 0.7) on a new token (<24h) = dump in progress (+10-15 points)
+- Very few holders (<25) on a new token (<6h) = no organic adoption (+10 points)
+- Multiple moderate red flags together compound risk — do not treat them independently
+
 SCORING GUIDANCE:
 - 80+ (SCAM): Creator with previous rugs, active freeze authority + bundles, or extreme red flags with NO positive signals
-- 60-79 (DANGEROUS): HIGH confidence bundles with additional red flags, or active freeze authority with concentration
+- 75-79 (DANGEROUS): Token already crashed >80% — likely rugged
+- 60-74 (DANGEROUS): HIGH confidence bundles with additional red flags, active freeze authority with concentration, or >50% price crash
 - 40-59 (SUSPICIOUS): Bundles or concentration WITH positive market activity, or new tokens (<24h) with thin liquidity
-- 0-39 (SAFE): No major red flags, or red flags offset by strong positive signals
+- 0-39 (SAFE): No major red flags, or red flags offset by strong positive signals AND no price crash
 - A token with active freeze authority should almost never score below 40
 - A token with bundles BUT strong volume, good liquidity (>$20K), and active trading should score 40-60, NOT 80+
+- A token down >50% should NEVER score below 55 regardless of other signals
 
 RETURN ONLY VALID JSON, no markdown or explanation.`;
 
@@ -575,7 +589,8 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
       // The AI prompt already instructs scoring for bundles, whales, etc.
       // Adding points on top would double-count. Only enforce floor scores.
       // ============================================
-      const isNewWallet = creatorInfo?.walletAge !== undefined && creatorInfo.walletAge > 0 && creatorInfo.walletAge < 7;
+      // walletAge === -1 means unknown (API couldn't determine) — treat as potentially new
+      const isNewWallet = creatorInfo?.walletAge !== undefined && (creatorInfo.walletAge === -1 || (creatorInfo.walletAge > 0 && creatorInfo.walletAge < 7));
       const hasBundleDetection = bundleInfo.confidence === 'HIGH' || bundleInfo.confidence === 'MEDIUM';
       const hasWhale = whales.length > 0;
       const topWhalePercent = whales[0]?.holdingsPercent || 0;
@@ -589,10 +604,36 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
         score = 55;
       }
 
+      // MEDIUM confidence bundle = minimum 50 (SUSPICIOUS)
+      if (bundleInfo.confidence === 'MEDIUM' && score < 50) {
+        console.log(`[Sentinel] Enforcing minimum 50 for MEDIUM bundle (was ${score})`);
+        score = 50;
+      }
+
       // Triple threat (confirmed new wallet + bundle + whale) = minimum 60 (DANGEROUS)
       if (isNewWallet && hasBundleDetection && hasWhale && topWhalePercent >= 10 && score < 60) {
         console.log(`[Sentinel] Enforcing minimum 60 for triple threat (was ${score})`);
         score = 60;
+      }
+
+      // ============================================
+      // PRICE CRASH GUARDRAIL — highest priority
+      // If a token has already crashed, it's already rugged.
+      // No positive signals (revoked mint, etc.) can offset an actual crash.
+      // ============================================
+      const priceChange24h = tokenInfo.priceChange24h;
+      if (priceChange24h !== undefined && priceChange24h < -80 && score < 75) {
+        console.log(`[Sentinel] Enforcing minimum 75 for >80% price crash (${priceChange24h.toFixed(1)}%, was ${score})`);
+        score = 75;
+        aiFlags.push({ type: 'PRICE_CRASH', severity: 'CRITICAL', message: `Price crashed ${priceChange24h.toFixed(1)}% — token likely already rugged` });
+      } else if (priceChange24h !== undefined && priceChange24h < -50 && score < 65) {
+        console.log(`[Sentinel] Enforcing minimum 65 for >50% price crash (${priceChange24h.toFixed(1)}%, was ${score})`);
+        score = 65;
+        aiFlags.push({ type: 'PRICE_CRASH', severity: 'HIGH', message: `Price dropped ${priceChange24h.toFixed(1)}% — significant dump in progress` });
+      } else if (priceChange24h !== undefined && priceChange24h < -30 && score < 55) {
+        console.log(`[Sentinel] Enforcing minimum 55 for >30% price drop (${priceChange24h.toFixed(1)}%, was ${score})`);
+        score = 55;
+        aiFlags.push({ type: 'PRICE_CRASH', severity: 'MEDIUM', message: `Price dropped ${priceChange24h.toFixed(1)}% — selling pressure detected` });
       }
 
       // ============================================
@@ -604,38 +645,105 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
       const liquidityUsd = tokenInfo.liquidity || 0;
       const tokenAgeHours = tokenInfo.ageHours;
 
-      // Very new token (<6h) with thin liquidity (<$10K) = minimum 50
-      if (tokenAgeHours !== undefined && tokenAgeHours < 6 && liquidityUsd < 10000 && score < 50) {
-        console.log(`[Sentinel] Enforcing minimum 50 for new token (<6h) + thin liquidity (was ${score})`);
-        score = 50;
+      // CRITICAL: $0 liquidity = cannot sell = minimum 70
+      // (DexScreener reports $0 for PumpFun bonding curve tokens, but also for dead tokens)
+      if (liquidityUsd <= 0 && score < 70) {
+        console.log(`[Sentinel] Enforcing minimum 70 for $0 liquidity (was ${score})`);
+        score = 70;
+        aiFlags.push({ type: 'LIQUIDITY', severity: 'CRITICAL', message: '$0 reported liquidity — extremely high rug risk, may not be sellable' });
+      }
+
+      // Very new token (<6h) with thin liquidity (<$10K) = minimum 55
+      if (tokenAgeHours !== undefined && tokenAgeHours < 6 && liquidityUsd < 10000 && score < 55) {
+        console.log(`[Sentinel] Enforcing minimum 55 for new token (<6h) + thin liquidity (was ${score})`);
+        score = 55;
         aiFlags.push({ type: 'STRUCTURAL', severity: 'HIGH', message: `Token is ${tokenAgeHours.toFixed(1)}h old with $${liquidityUsd.toLocaleString()} liquidity — high rug risk` });
       }
-      // New token (<24h) with very thin liquidity (<$5K) = minimum 50
-      else if (tokenAgeHours !== undefined && tokenAgeHours < 24 && liquidityUsd < 5000 && score < 50) {
-        console.log(`[Sentinel] Enforcing minimum 50 for <24h token + <$5K liquidity (was ${score})`);
-        score = 50;
+      // New token (<24h) with very thin liquidity (<$5K) = minimum 55
+      else if (tokenAgeHours !== undefined && tokenAgeHours < 24 && liquidityUsd < 5000 && score < 55) {
+        console.log(`[Sentinel] Enforcing minimum 55 for <24h token + <$5K liquidity (was ${score})`);
+        score = 55;
         aiFlags.push({ type: 'STRUCTURAL', severity: 'HIGH', message: `Token is ${tokenAgeHours.toFixed(1)}h old with only $${liquidityUsd.toLocaleString()} liquidity` });
       }
 
-      // Any token < 6 hours old = minimum 35 regardless
-      if (tokenAgeHours !== undefined && tokenAgeHours < 6 && score < 35) {
-        console.log(`[Sentinel] Enforcing minimum 35 for <6h token (was ${score})`);
-        score = 35;
+      // Any token < 6 hours old = minimum 50 regardless
+      if (tokenAgeHours !== undefined && tokenAgeHours < 6 && score < 50) {
+        console.log(`[Sentinel] Enforcing minimum 50 for <6h token (was ${score})`);
+        score = 50;
       }
 
-      // Any token with < $5K liquidity = minimum 40
-      if (liquidityUsd > 0 && liquidityUsd < 5000 && score < 40) {
-        console.log(`[Sentinel] Enforcing minimum 40 for <$5K liquidity (was ${score})`);
+      // Any token < 24 hours old = minimum 40
+      if (tokenAgeHours !== undefined && tokenAgeHours < 24 && score < 40) {
+        console.log(`[Sentinel] Enforcing minimum 40 for <24h token (was ${score})`);
         score = 40;
+      }
+
+      // Any token with $0 < liquidity < $5K = minimum 50
+      if (liquidityUsd > 0 && liquidityUsd < 5000 && score < 50) {
+        console.log(`[Sentinel] Enforcing minimum 50 for <$5K liquidity (was ${score})`);
+        score = 50;
       }
 
       // Volume/Liquidity churning: if 24h volume > 8x liquidity on a new token, suspicious
       if (tokenInfo.volume24h && liquidityUsd > 0 && tokenAgeHours !== undefined && tokenAgeHours < 24) {
         const volLiqRatio = tokenInfo.volume24h / liquidityUsd;
-        if (volLiqRatio > 8 && score < 45) {
-          console.log(`[Sentinel] Enforcing minimum 45 for volume churning (${volLiqRatio.toFixed(1)}x vol/liq on <24h token, was ${score})`);
-          score = 45;
+        if (volLiqRatio > 8 && score < 50) {
+          console.log(`[Sentinel] Enforcing minimum 50 for volume churning (${volLiqRatio.toFixed(1)}x vol/liq on <24h token, was ${score})`);
+          score = 50;
         }
+      }
+
+      // ============================================
+      // SELL PRESSURE GUARDRAIL
+      // Heavy selling on a new token = dump in progress
+      // ============================================
+      const sells24h = tokenInfo.txns24h?.sells || 0;
+      const buys24h = tokenInfo.txns24h?.buys || 0;
+      if (sells24h > 0 && buys24h > 0) {
+        const buyRatio = buys24h / sells24h;
+        if (buyRatio < 0.7 && sells24h > 100 && tokenAgeHours !== undefined && tokenAgeHours < 24 && score < 60) {
+          console.log(`[Sentinel] Enforcing minimum 60 for sell-heavy new token (ratio ${buyRatio.toFixed(2)}, ${sells24h} sells, was ${score})`);
+          score = 60;
+          aiFlags.push({ type: 'SELL_PRESSURE', severity: 'HIGH', message: `Sell-heavy trading: ${sells24h} sells vs ${buys24h} buys (ratio ${buyRatio.toFixed(2)}) on <24h token` });
+        } else if (buyRatio < 0.5 && sells24h > 50 && score < 55) {
+          console.log(`[Sentinel] Enforcing minimum 55 for extreme sell pressure (ratio ${buyRatio.toFixed(2)}, was ${score})`);
+          score = 55;
+          aiFlags.push({ type: 'SELL_PRESSURE', severity: 'MEDIUM', message: `Heavy sell pressure: ${sells24h} sells vs ${buys24h} buys (ratio ${buyRatio.toFixed(2)})` });
+        }
+      }
+
+      // ============================================
+      // LOW HOLDER COUNT GUARDRAIL
+      // Very few holders on a new token = no organic adoption
+      // ============================================
+      const holderCount = tokenInfo.holderCount || 0;
+      if (holderCount > 0 && holderCount < 25 && tokenAgeHours !== undefined && tokenAgeHours < 6 && score < 55) {
+        console.log(`[Sentinel] Enforcing minimum 55 for low holder count (${holderCount} holders on <6h token, was ${score})`);
+        score = 55;
+        aiFlags.push({ type: 'LOW_HOLDERS', severity: 'MEDIUM', message: `Only ${holderCount} holders on a ${tokenAgeHours.toFixed(1)}h old token — very low organic adoption` });
+      }
+
+      // ============================================
+      // COMBO SIGNAL ESCALATION
+      // Multiple moderate flags firing together = higher risk than any individual flag
+      // ============================================
+      let moderateFlags = 0;
+      if (tokenAgeHours !== undefined && tokenAgeHours < 6) moderateFlags++;
+      if (liquidityUsd > 0 && liquidityUsd < 10000) moderateFlags++;
+      if (sells24h > buys24h && sells24h > 50) moderateFlags++;
+      if (holderCount > 0 && holderCount < 30) moderateFlags++;
+      if (hasBundleDetection) moderateFlags++;
+      if (isNewWallet) moderateFlags++;
+      if (priceChange24h !== undefined && priceChange24h < -30) moderateFlags++;
+
+      if (moderateFlags >= 4 && score < 65) {
+        console.log(`[Sentinel] Enforcing minimum 65 for ${moderateFlags} combined risk signals (was ${score})`);
+        score = 65;
+        aiFlags.push({ type: 'COMBO_RISK', severity: 'HIGH', message: `${moderateFlags} risk signals detected simultaneously — compounding risk` });
+      } else if (moderateFlags >= 3 && score < 60) {
+        console.log(`[Sentinel] Enforcing minimum 60 for ${moderateFlags} combined risk signals (was ${score})`);
+        score = 60;
+        aiFlags.push({ type: 'COMBO_RISK', severity: 'MEDIUM', message: `${moderateFlags} risk signals detected — elevated compound risk` });
       }
 
       score = Math.min(100, score);
@@ -756,12 +864,14 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
     });
   }
 
-  if (creatorInfo?.walletAge !== undefined && creatorInfo.walletAge > 0 && creatorInfo.walletAge < 7) {
+  if (creatorInfo?.walletAge !== undefined && (creatorInfo.walletAge === -1 || (creatorInfo.walletAge > 0 && creatorInfo.walletAge < 7))) {
     riskScore += 10;
     flags.push({
       type: 'DEPLOYER',
       severity: 'MEDIUM',
-      message: `Creator wallet is only ${creatorInfo.walletAge} days old`,
+      message: creatorInfo.walletAge === -1
+        ? 'Creator wallet age unknown — could be brand new'
+        : `Creator wallet is only ${creatorInfo.walletAge} days old`,
     });
   }
 
@@ -801,9 +911,53 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
   }
 
   // ============================================
+  // POSITIVE SIGNAL OFFSET (fallback only)
+  // The AI naturally weighs positive signals against negatives,
+  // but the fallback scoring is purely additive. Apply discounts
+  // for strong positive market signals to avoid false SCAM ratings
+  // on tokens with real market activity.
+  // ============================================
+  let positiveOffset = 0;
+  const fbPriceChange24h = tokenInfo.priceChange24h;
+  const positiveBuys = tokenInfo.txns24h?.buys || 0;
+  const positiveSells = tokenInfo.txns24h?.sells || 0;
+  const positiveBuyRatio = positiveSells > 0 ? positiveBuys / positiveSells : 1;
+  const totalTxns = positiveBuys + positiveSells;
+
+  // Good liquidity ($20K+) = harder to manipulate
+  if (fallbackLiquidity >= 20000) positiveOffset += 10;
+  if (fallbackLiquidity >= 50000) positiveOffset += 5;
+
+  // Healthy buy/sell ratio (>=1.0) with real volume = organic demand
+  if (positiveBuyRatio >= 1.0 && positiveBuys > 100) positiveOffset += 10;
+
+  // High transaction count = real community engagement
+  if (totalTxns >= 1000) positiveOffset += 5;
+  if (totalTxns >= 5000) positiveOffset += 5;
+
+  // Price trending up = not crashing/dumping
+  if (fbPriceChange24h !== undefined && fbPriceChange24h > 0) positiveOffset += 5;
+
+  // Both mint and freeze authority revoked = safer
+  if (!tokenInfo.mintAuthorityActive && !tokenInfo.freezeAuthorityActive) positiveOffset += 5;
+
+  // Cap total offset at 40 — positive signals reduce risk but don't erase it
+  positiveOffset = Math.min(40, positiveOffset);
+
+  if (positiveOffset > 0) {
+    const beforeOffset = riskScore;
+    riskScore = Math.max(30, riskScore - positiveOffset); // Never below baseline 30
+    console.log(`[Sentinel] Fallback positive offset: -${positiveOffset} (${beforeOffset} → ${riskScore})`);
+    if (positiveOffset >= 20) {
+      networkInsights.push(`Strong positive market signals detected (offset -${positiveOffset})`);
+    }
+  }
+
+  // ============================================
   // FALLBACK GUARDRAILS (minimums only)
   // ============================================
-  const isNewWallet = creatorInfo?.walletAge !== undefined && creatorInfo.walletAge > 0 && creatorInfo.walletAge < 7;
+  // walletAge === -1 means unknown (API couldn't determine) — treat as potentially new
+  const isNewWallet = creatorInfo?.walletAge !== undefined && (creatorInfo.walletAge === -1 || (creatorInfo.walletAge > 0 && creatorInfo.walletAge < 7));
   const hasBundleDetection = bundleInfo.confidence === 'HIGH' || bundleInfo.confidence === 'MEDIUM';
   const hasWhale = whales.length > 0;
   const topWhalePercent = whales[0]?.holdingsPercent || 0;
@@ -816,24 +970,108 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
     riskScore = 55;
   }
 
+  // MEDIUM confidence bundle = minimum 50
+  if (bundleInfo.confidence === 'MEDIUM' && riskScore < 50) {
+    console.log(`[Sentinel] Enforcing minimum 50 for MEDIUM bundle (was ${riskScore})`);
+    riskScore = 50;
+  }
+
   // Confirmed new wallet + bundle + whale = minimum 60
   if (isNewWallet && hasBundleDetection && hasWhale && topWhalePercent >= 10 && riskScore < 60) {
     console.log(`[Sentinel] Enforcing minimum 60 for triple threat (was ${riskScore})`);
     riskScore = 60;
   }
 
+  // ============================================
+  // PRICE CRASH GUARDRAIL — highest priority
+  // ============================================
+  const fallbackPriceChange = tokenInfo.priceChange24h;
+  if (fallbackPriceChange !== undefined && fallbackPriceChange < -80 && riskScore < 75) {
+    console.log(`[Sentinel] Enforcing minimum 75 for >80% price crash (${fallbackPriceChange.toFixed(1)}%, was ${riskScore})`);
+    riskScore = 75;
+    flags.push({ type: 'PRICE_CRASH', severity: 'CRITICAL', message: `Price crashed ${fallbackPriceChange.toFixed(1)}% — token likely already rugged` });
+  } else if (fallbackPriceChange !== undefined && fallbackPriceChange < -50 && riskScore < 65) {
+    console.log(`[Sentinel] Enforcing minimum 65 for >50% price crash (${fallbackPriceChange.toFixed(1)}%, was ${riskScore})`);
+    riskScore = 65;
+    flags.push({ type: 'PRICE_CRASH', severity: 'HIGH', message: `Price dropped ${fallbackPriceChange.toFixed(1)}% — significant dump in progress` });
+  } else if (fallbackPriceChange !== undefined && fallbackPriceChange < -30 && riskScore < 55) {
+    console.log(`[Sentinel] Enforcing minimum 55 for >30% price drop (${fallbackPriceChange.toFixed(1)}%, was ${riskScore})`);
+    riskScore = 55;
+    flags.push({ type: 'PRICE_CRASH', severity: 'MEDIUM', message: `Price dropped ${fallbackPriceChange.toFixed(1)}% — selling pressure detected` });
+  }
+
+  // CRITICAL: $0 liquidity = cannot sell = minimum 70
+  if (fallbackLiquidity <= 0 && riskScore < 70) {
+    console.log(`[Sentinel] Enforcing minimum 70 for $0 liquidity (was ${riskScore})`);
+    riskScore = 70;
+    flags.push({ type: 'LIQUIDITY', severity: 'CRITICAL', message: '$0 reported liquidity — extremely high rug risk, may not be sellable' });
+  }
+
   // Structural minimums
-  if (fallbackAgeHours !== undefined && fallbackAgeHours < 6 && fallbackLiquidity < 10000 && riskScore < 50) {
+  if (fallbackAgeHours !== undefined && fallbackAgeHours < 6 && fallbackLiquidity < 10000 && riskScore < 55) {
+    riskScore = 55;
+  }
+  if (fallbackAgeHours !== undefined && fallbackAgeHours < 24 && fallbackLiquidity < 5000 && riskScore < 55) {
+    riskScore = 55;
+  }
+  if (fallbackLiquidity > 0 && fallbackLiquidity < 5000 && riskScore < 50) {
     riskScore = 50;
   }
-  if (fallbackAgeHours !== undefined && fallbackAgeHours < 24 && fallbackLiquidity < 5000 && riskScore < 50) {
+  if (fallbackAgeHours !== undefined && fallbackAgeHours < 6 && riskScore < 50) {
     riskScore = 50;
   }
-  if (fallbackLiquidity > 0 && fallbackLiquidity < 5000 && riskScore < 40) {
+  if (fallbackAgeHours !== undefined && fallbackAgeHours < 24 && riskScore < 40) {
     riskScore = 40;
   }
-  if (fallbackAgeHours !== undefined && fallbackAgeHours < 6 && riskScore < 35) {
-    riskScore = 35;
+
+  // ============================================
+  // SELL PRESSURE GUARDRAIL
+  // ============================================
+  const fbSells24h = tokenInfo.txns24h?.sells || 0;
+  const fbBuys24h = tokenInfo.txns24h?.buys || 0;
+  if (fbSells24h > 0 && fbBuys24h > 0) {
+    const fbBuyRatio = fbBuys24h / fbSells24h;
+    if (fbBuyRatio < 0.7 && fbSells24h > 100 && fallbackAgeHours !== undefined && fallbackAgeHours < 24 && riskScore < 60) {
+      console.log(`[Sentinel] Enforcing minimum 60 for sell-heavy new token (ratio ${fbBuyRatio.toFixed(2)}, was ${riskScore})`);
+      riskScore = 60;
+      flags.push({ type: 'SELL_PRESSURE', severity: 'HIGH', message: `Sell-heavy trading: ${fbSells24h} sells vs ${fbBuys24h} buys (ratio ${fbBuyRatio.toFixed(2)}) on <24h token` });
+    } else if (fbBuyRatio < 0.5 && fbSells24h > 50 && riskScore < 55) {
+      console.log(`[Sentinel] Enforcing minimum 55 for extreme sell pressure (ratio ${fbBuyRatio.toFixed(2)}, was ${riskScore})`);
+      riskScore = 55;
+      flags.push({ type: 'SELL_PRESSURE', severity: 'MEDIUM', message: `Heavy sell pressure: ${fbSells24h} sells vs ${fbBuys24h} buys (ratio ${fbBuyRatio.toFixed(2)})` });
+    }
+  }
+
+  // ============================================
+  // LOW HOLDER COUNT GUARDRAIL
+  // ============================================
+  const fbHolderCount = tokenInfo.holderCount || 0;
+  if (fbHolderCount > 0 && fbHolderCount < 25 && fallbackAgeHours !== undefined && fallbackAgeHours < 6 && riskScore < 55) {
+    console.log(`[Sentinel] Enforcing minimum 55 for low holder count (${fbHolderCount} holders on <6h token, was ${riskScore})`);
+    riskScore = 55;
+    flags.push({ type: 'LOW_HOLDERS', severity: 'MEDIUM', message: `Only ${fbHolderCount} holders on a ${fallbackAgeHours.toFixed(1)}h old token — very low organic adoption` });
+  }
+
+  // ============================================
+  // COMBO SIGNAL ESCALATION
+  // ============================================
+  let fbModerateFlags = 0;
+  if (fallbackAgeHours !== undefined && fallbackAgeHours < 6) fbModerateFlags++;
+  if (fallbackLiquidity > 0 && fallbackLiquidity < 10000) fbModerateFlags++;
+  if (fbSells24h > fbBuys24h && fbSells24h > 50) fbModerateFlags++;
+  if (fbHolderCount > 0 && fbHolderCount < 30) fbModerateFlags++;
+  if (hasBundleDetection) fbModerateFlags++;
+  if (isNewWallet) fbModerateFlags++;
+  if (fallbackPriceChange !== undefined && fallbackPriceChange < -30) fbModerateFlags++;
+
+  if (fbModerateFlags >= 4 && riskScore < 65) {
+    console.log(`[Sentinel] Enforcing minimum 65 for ${fbModerateFlags} combined risk signals (was ${riskScore})`);
+    riskScore = 65;
+    flags.push({ type: 'COMBO_RISK', severity: 'HIGH', message: `${fbModerateFlags} risk signals detected simultaneously — compounding risk` });
+  } else if (fbModerateFlags >= 3 && riskScore < 60) {
+    console.log(`[Sentinel] Enforcing minimum 60 for ${fbModerateFlags} combined risk signals (was ${riskScore})`);
+    riskScore = 60;
+    flags.push({ type: 'COMBO_RISK', severity: 'MEDIUM', message: `${fbModerateFlags} risk signals detected — elevated compound risk` });
   }
 
   riskScore = Math.min(100, riskScore);
