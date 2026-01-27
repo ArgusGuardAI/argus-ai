@@ -645,11 +645,12 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
       const liquidityUsd = tokenInfo.liquidity || 0;
       const tokenAgeHours = tokenInfo.ageHours;
 
-      // CRITICAL: $0 liquidity = cannot sell = minimum 70
-      // (DexScreener reports $0 for PumpFun bonding curve tokens, but also for dead tokens)
-      if (liquidityUsd <= 0 && score < 70) {
-        console.log(`[Sentinel] Enforcing minimum 70 for $0 liquidity (was ${score})`);
-        score = 70;
+      // CRITICAL: $0 liquidity = cannot sell = minimum 80
+      // PumpFun bonding curve tokens already have estimated liquidity from market cap,
+      // so this only fires for genuinely dead/untradeable tokens
+      if (liquidityUsd <= 0 && score < 80) {
+        console.log(`[Sentinel] Enforcing minimum 80 for $0 liquidity (was ${score})`);
+        score = 80;
         aiFlags.push({ type: 'LIQUIDITY', severity: 'CRITICAL', message: '$0 reported liquidity — extremely high rug risk, may not be sellable' });
       }
 
@@ -724,17 +725,38 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
       }
 
       // ============================================
+      // DEV SELLING GUARDRAIL
+      // Developer dumping tokens on a new token = major red flag
+      // ============================================
+      if (devActivity && devActivity.hasSold && tokenAgeHours !== undefined) {
+        if (devActivity.percentSold >= 50 && tokenAgeHours < 6 && score < 80) {
+          console.log(`[Sentinel] Enforcing minimum 80 for dev sold ${devActivity.percentSold.toFixed(0)}% on <6h token (was ${score})`);
+          score = 80;
+          aiFlags.push({ type: 'DEV_DUMP', severity: 'CRITICAL', message: `Developer sold ${devActivity.percentSold.toFixed(0)}% of tokens on a ${tokenAgeHours.toFixed(1)}h old token — likely rug` });
+        } else if (devActivity.percentSold >= 20 && devActivity.currentHoldingsPercent > 20 && tokenAgeHours < 6 && score < 75) {
+          console.log(`[Sentinel] Enforcing minimum 75 for dev sold ${devActivity.percentSold.toFixed(0)}% + still holds ${devActivity.currentHoldingsPercent.toFixed(0)}% on <6h token (was ${score})`);
+          score = 75;
+          aiFlags.push({ type: 'DEV_DUMP', severity: 'HIGH', message: `Developer sold ${devActivity.percentSold.toFixed(0)}% but still holds ${devActivity.currentHoldingsPercent.toFixed(0)}% — more selling likely` });
+        } else if (devActivity.percentSold >= 20 && tokenAgeHours < 24 && score < 65) {
+          console.log(`[Sentinel] Enforcing minimum 65 for dev sold ${devActivity.percentSold.toFixed(0)}% on <24h token (was ${score})`);
+          score = 65;
+          aiFlags.push({ type: 'DEV_DUMP', severity: 'MEDIUM', message: `Developer sold ${devActivity.percentSold.toFixed(0)}% of tokens within first 24h` });
+        }
+      }
+
+      // ============================================
       // COMBO SIGNAL ESCALATION
       // Multiple moderate flags firing together = higher risk than any individual flag
       // ============================================
       let moderateFlags = 0;
       if (tokenAgeHours !== undefined && tokenAgeHours < 6) moderateFlags++;
-      if (liquidityUsd > 0 && liquidityUsd < 10000) moderateFlags++;
+      if (liquidityUsd < 10000) moderateFlags++;
       if (sells24h > buys24h && sells24h > 50) moderateFlags++;
       if (holderCount > 0 && holderCount < 30) moderateFlags++;
       if (hasBundleDetection) moderateFlags++;
       if (isNewWallet) moderateFlags++;
       if (priceChange24h !== undefined && priceChange24h < -30) moderateFlags++;
+      if (devActivity && devActivity.hasSold && devActivity.percentSold >= 20) moderateFlags++;
 
       if (moderateFlags >= 4 && score < 65) {
         console.log(`[Sentinel] Enforcing minimum 65 for ${moderateFlags} combined risk signals (was ${score})`);
@@ -1000,10 +1022,10 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
     flags.push({ type: 'PRICE_CRASH', severity: 'MEDIUM', message: `Price dropped ${fallbackPriceChange.toFixed(1)}% — selling pressure detected` });
   }
 
-  // CRITICAL: $0 liquidity = cannot sell = minimum 70
-  if (fallbackLiquidity <= 0 && riskScore < 70) {
-    console.log(`[Sentinel] Enforcing minimum 70 for $0 liquidity (was ${riskScore})`);
-    riskScore = 70;
+  // CRITICAL: $0 liquidity = cannot sell = minimum 80 (fallback)
+  if (fallbackLiquidity <= 0 && riskScore < 80) {
+    console.log(`[Sentinel] Enforcing minimum 80 for $0 liquidity (was ${riskScore})`);
+    riskScore = 80;
     flags.push({ type: 'LIQUIDITY', severity: 'CRITICAL', message: '$0 reported liquidity — extremely high rug risk, may not be sellable' });
   }
 
@@ -1053,16 +1075,36 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
   }
 
   // ============================================
+  // DEV SELLING GUARDRAIL (fallback)
+  // ============================================
+  if (devActivity && devActivity.hasSold && fallbackAgeHours !== undefined) {
+    if (devActivity.percentSold >= 50 && fallbackAgeHours < 6 && riskScore < 80) {
+      console.log(`[Sentinel] Enforcing minimum 80 for dev sold ${devActivity.percentSold.toFixed(0)}% on <6h token (was ${riskScore})`);
+      riskScore = 80;
+      flags.push({ type: 'DEV_DUMP', severity: 'CRITICAL', message: `Developer sold ${devActivity.percentSold.toFixed(0)}% of tokens on a ${fallbackAgeHours.toFixed(1)}h old token — likely rug` });
+    } else if (devActivity.percentSold >= 20 && devActivity.currentHoldingsPercent > 20 && fallbackAgeHours < 6 && riskScore < 75) {
+      console.log(`[Sentinel] Enforcing minimum 75 for dev sold ${devActivity.percentSold.toFixed(0)}% + still holds ${devActivity.currentHoldingsPercent.toFixed(0)}% on <6h token (was ${riskScore})`);
+      riskScore = 75;
+      flags.push({ type: 'DEV_DUMP', severity: 'HIGH', message: `Developer sold ${devActivity.percentSold.toFixed(0)}% but still holds ${devActivity.currentHoldingsPercent.toFixed(0)}% — more selling likely` });
+    } else if (devActivity.percentSold >= 20 && fallbackAgeHours < 24 && riskScore < 65) {
+      console.log(`[Sentinel] Enforcing minimum 65 for dev sold ${devActivity.percentSold.toFixed(0)}% on <24h token (was ${riskScore})`);
+      riskScore = 65;
+      flags.push({ type: 'DEV_DUMP', severity: 'MEDIUM', message: `Developer sold ${devActivity.percentSold.toFixed(0)}% of tokens within first 24h` });
+    }
+  }
+
+  // ============================================
   // COMBO SIGNAL ESCALATION
   // ============================================
   let fbModerateFlags = 0;
   if (fallbackAgeHours !== undefined && fallbackAgeHours < 6) fbModerateFlags++;
-  if (fallbackLiquidity > 0 && fallbackLiquidity < 10000) fbModerateFlags++;
+  if (fallbackLiquidity < 10000) fbModerateFlags++;
   if (fbSells24h > fbBuys24h && fbSells24h > 50) fbModerateFlags++;
   if (fbHolderCount > 0 && fbHolderCount < 30) fbModerateFlags++;
   if (hasBundleDetection) fbModerateFlags++;
   if (isNewWallet) fbModerateFlags++;
   if (fallbackPriceChange !== undefined && fallbackPriceChange < -30) fbModerateFlags++;
+  if (devActivity && devActivity.hasSold && devActivity.percentSold >= 20) fbModerateFlags++;
 
   if (fbModerateFlags >= 4 && riskScore < 65) {
     console.log(`[Sentinel] Enforcing minimum 65 for ${fbModerateFlags} combined risk signals (was ${riskScore})`);
@@ -1220,13 +1262,23 @@ sentinelRoutes.post('/analyze', async (c) => {
       ? (Date.now() - dexData.pairCreatedAt) / (1000 * 60 * 60)
       : undefined;
 
+    // Estimate bonding curve liquidity for PumpFun tokens
+    // DexScreener reports $0 for tokens still on bonding curve, but they ARE tradeable
+    // PumpFun bonding curve provides ~20% of market cap as effective liquidity
+    const isPumpFun = tokenAddress.endsWith('pump') || dexData?.dex === 'pumpfun';
+    let effectiveLiquidity = dexData?.liquidityUsd || 0;
+    if (isPumpFun && effectiveLiquidity <= 0 && dexData?.marketCap && dexData.marketCap > 0) {
+      effectiveLiquidity = Math.round(dexData.marketCap * 0.20);
+      console.log(`[Sentinel] PumpFun bonding curve: estimated liquidity $${effectiveLiquidity} from $${dexData.marketCap} market cap`);
+    }
+
     const tokenInfo = {
       address: tokenAddress,
       name: metadata?.name || dexData?.name || 'Unknown',
       symbol: metadata?.symbol || dexData?.symbol || '???',
       price: dexData?.priceUsd,
       marketCap: dexData?.marketCap,
-      liquidity: dexData?.liquidityUsd,
+      liquidity: effectiveLiquidity,
       age: ageHours !== undefined ? Math.floor(ageHours / 24) : undefined,
       ageHours: ageHours !== undefined ? Math.round(ageHours * 10) / 10 : undefined,
       holderCount: holders.length,

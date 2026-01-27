@@ -1257,6 +1257,282 @@ const styles = `
     line-height: 1.6;
   }
 
+  /* --- TRADING SHOWCASE --- */
+  .landing-page .trading-showcase {
+    padding: 100px 0;
+    background: var(--bg-body);
+    border-top: 1px solid var(--border);
+  }
+
+  .landing-page .trading-showcase .ui-mockup {
+    position: relative;
+    z-index: 1;
+  }
+
+  .landing-page .ui-trade-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+
+  .landing-page .ui-trade-row-label {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    font-weight: 500;
+    margin-right: 4px;
+    white-space: nowrap;
+  }
+
+  .landing-page .ui-trade-btn {
+    padding: 8px 14px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+
+  .landing-page .ui-trade-btn.active {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+  }
+
+  .landing-page .ui-trade-btn.active-red {
+    background: #EF4444;
+    color: white;
+    border-color: #EF4444;
+  }
+
+  .landing-page .ui-trade-actions {
+    display: flex;
+    gap: 8px;
+    margin-left: auto;
+  }
+
+  .landing-page .ui-action-sell {
+    padding: 10px 24px;
+    background: #EF4444;
+    color: white;
+    border-radius: var(--radius-sm);
+    font-weight: 700;
+    font-size: 0.85rem;
+  }
+
+  .landing-page .ui-action-buy {
+    padding: 10px 24px;
+    background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+    color: white;
+    border-radius: var(--radius-sm);
+    font-weight: 700;
+    font-size: 0.85rem;
+  }
+
+  .landing-page .ui-settings-row {
+    display: flex;
+    gap: 40px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+
+  .landing-page .ui-settings-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+    min-width: 200px;
+  }
+
+  .landing-page .ui-settings-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+
+  .landing-page .ui-settings-options {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .landing-page .ui-autosell {
+    background: var(--bg-elevated);
+    border-radius: var(--radius-sm);
+    padding: 16px;
+    margin-bottom: 20px;
+  }
+
+  .landing-page .ui-autosell-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+  }
+
+  .landing-page .ui-autosell-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-main);
+  }
+
+  .landing-page .ui-toggle {
+    width: 40px;
+    height: 22px;
+    background: var(--accent);
+    border-radius: 11px;
+    position: relative;
+  }
+
+  .landing-page .ui-toggle::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    width: 16px;
+    height: 16px;
+    background: white;
+    border-radius: 50%;
+  }
+
+  .landing-page .ui-autosell-groups {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+
+  .landing-page .ui-autosell-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .landing-page .ui-autosell-group-label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+
+  .landing-page .ui-autosell-options {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .landing-page .ui-positions {
+    margin-top: 20px;
+  }
+
+  .landing-page .ui-positions-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+
+  .landing-page .ui-positions-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .landing-page .ui-positions-badge {
+    width: 20px;
+    height: 20px;
+    background: var(--accent);
+    color: white;
+    border-radius: 50%;
+    font-size: 0.7rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .landing-page .ui-positions-summary {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+  }
+
+  .landing-page .ui-positions-pnl {
+    color: #EF4444;
+    font-weight: 600;
+  }
+
+  .landing-page .ui-pos-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .landing-page .ui-pos-action-btn {
+    padding: 6px 14px;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  .landing-page .ui-pos-action-btn.sell {
+    background: #EF4444;
+    color: white;
+  }
+
+  .landing-page .ui-pos-action-btn.clear {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    color: var(--text-main);
+  }
+
+  .landing-page .ui-positions-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .landing-page .ui-positions-table th {
+    padding: 10px 12px;
+    text-align: left;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    font-weight: 600;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .landing-page .ui-positions-table td {
+    padding: 14px 12px;
+    font-size: 0.85rem;
+    color: var(--text-main);
+    font-weight: 500;
+    border-bottom: 1px solid var(--border-light);
+  }
+
+  .landing-page .ui-positions-table td.token-name {
+    font-weight: 700;
+  }
+
+  .landing-page .ui-positions-table td.pnl-positive {
+    color: var(--accent);
+    font-weight: 700;
+  }
+
+  .landing-page .ui-pos-sell-btn {
+    padding: 6px 16px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-main);
+  }
+
   /* --- RESPONSIVE --- */
   @media (max-width: 900px) {
     .landing-page .hero h1 { font-size: 2.5rem; }
@@ -1276,6 +1552,13 @@ const styles = `
     .landing-page .comparison-table { font-size: 0.8rem; }
     .landing-page .comparison-table th,
     .landing-page .comparison-table td { padding: 10px 10px; }
+    .landing-page .ui-trade-actions { margin-left: 0; width: 100%; }
+    .landing-page .ui-action-sell, .landing-page .ui-action-buy { flex: 1; text-align: center; }
+    .landing-page .ui-settings-row { gap: 16px; }
+    .landing-page .ui-autosell-groups { gap: 16px; }
+    .landing-page .ui-positions-summary { font-size: 0.7rem; }
+    .landing-page .ui-positions-table { font-size: 0.75rem; }
+    .landing-page .ui-positions-table th, .landing-page .ui-positions-table td { padding: 8px 6px; }
   }
 `;
 
@@ -1633,6 +1916,140 @@ export default function Landing() {
                 </div>
                 <div className="card-title">Dev Wallet Tracking</div>
                 <div className="card-desc">Analyzes creator wallet age, deployment history, and activity patterns. Unknown or brand-new deployer wallets trigger automatic risk escalation.</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* TRADING SHOWCASE */}
+        <section className="trading-showcase">
+          <div className="container">
+            <div className="section-header">
+              <h2>Trade With Protection</h2>
+              <p>Auto-sell shields your positions while you sleep</p>
+            </div>
+
+            <div className="ui-mockup" style={{ maxWidth: 900, margin: '0 auto' }}>
+              <div className="ui-header">
+                <div className="ui-dots">
+                  <div className="ui-dot red"></div>
+                  <div className="ui-dot yellow"></div>
+                  <div className="ui-dot green"></div>
+                </div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 500 }}>Trading Panel</div>
+              </div>
+              <div className="ui-body">
+                {/* Trading Controls */}
+                <div className="ui-trade-row">
+                  <span className="ui-trade-row-label">Amount:</span>
+                  <div className="ui-trade-btn active">0.05 SOL</div>
+                  <div className="ui-trade-btn">0.1 SOL</div>
+                  <div className="ui-trade-btn">0.2 SOL</div>
+                  <div className="ui-trade-btn">0.5 SOL</div>
+                  <div className="ui-trade-btn">1 SOL</div>
+                  <div className="ui-trade-btn">Custom</div>
+                  <div className="ui-trade-actions">
+                    <div className="ui-action-sell">Sell STARTUP</div>
+                    <div className="ui-action-buy">Buy STARTUP</div>
+                  </div>
+                </div>
+
+                {/* Settings */}
+                <div className="ui-settings-row">
+                  <div className="ui-settings-group">
+                    <div className="ui-settings-label">Max Slippage</div>
+                    <div className="ui-settings-options">
+                      <div className="ui-trade-btn">1%</div>
+                      <div className="ui-trade-btn active">3%</div>
+                      <div className="ui-trade-btn">5%</div>
+                      <div className="ui-trade-btn">10%</div>
+                    </div>
+                  </div>
+                  <div className="ui-settings-group">
+                    <div className="ui-settings-label">Reserve Balance</div>
+                    <div className="ui-settings-options">
+                      <div className="ui-trade-btn">0.05 SOL</div>
+                      <div className="ui-trade-btn active">0.1 SOL</div>
+                      <div className="ui-trade-btn">0.2 SOL</div>
+                      <div className="ui-trade-btn">0.5 SOL</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Auto-Sell */}
+                <div className="ui-autosell">
+                  <div className="ui-autosell-header">
+                    <div className="ui-autosell-title">Auto-Sell</div>
+                    <div className="ui-toggle"></div>
+                  </div>
+                  <div className="ui-autosell-groups">
+                    <div className="ui-autosell-group">
+                      <div className="ui-autosell-group-label">Take Profit</div>
+                      <div className="ui-autosell-options">
+                        <div className="ui-trade-btn active">+50%</div>
+                        <div className="ui-trade-btn">+100%</div>
+                        <div className="ui-trade-btn">+200%</div>
+                        <div className="ui-trade-btn">+500%</div>
+                      </div>
+                    </div>
+                    <div className="ui-autosell-group">
+                      <div className="ui-autosell-group-label">Stop Loss</div>
+                      <div className="ui-autosell-options">
+                        <div className="ui-trade-btn">-20%</div>
+                        <div className="ui-trade-btn active-red">-30%</div>
+                        <div className="ui-trade-btn">-50%</div>
+                        <div className="ui-trade-btn">-70%</div>
+                      </div>
+                    </div>
+                    <div className="ui-autosell-group">
+                      <div className="ui-autosell-group-label">Trailing Stop</div>
+                      <div className="ui-autosell-options">
+                        <div className="ui-trade-btn">Off</div>
+                        <div className="ui-trade-btn">-10%</div>
+                        <div className="ui-trade-btn">-20%</div>
+                        <div className="ui-trade-btn active-red">-30%</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Positions */}
+                <div className="ui-positions">
+                  <div className="ui-positions-header">
+                    <div className="ui-positions-title">
+                      Your Positions
+                      <span className="ui-positions-badge">1</span>
+                    </div>
+                    <div className="ui-positions-summary">
+                      <span>25 trades</span>
+                      <span className="ui-positions-pnl">-0.1706 SOL</span>
+                      <div className="ui-pos-actions">
+                        <div className="ui-pos-action-btn sell">Sell All</div>
+                        <div className="ui-pos-action-btn clear">Clear All</div>
+                      </div>
+                    </div>
+                  </div>
+                  <table className="ui-positions-table">
+                    <thead>
+                      <tr>
+                        <th>Token</th>
+                        <th>Entry</th>
+                        <th>Current</th>
+                        <th>P&L</th>
+                        <th>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td className="token-name">STARTUP</td>
+                        <td>0.0522 SOL</td>
+                        <td>0.0564 SOL</td>
+                        <td className="pnl-positive">+8.1%</td>
+                        <td><div className="ui-pos-sell-btn">Sell</div></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </div>
