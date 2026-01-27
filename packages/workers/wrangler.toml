@@ -26,6 +26,8 @@ cpu_ms = 50
 #    wrangler secret put TWITTER_API_SECRET
 #    wrangler secret put TWITTER_ACCESS_TOKEN
 #    wrangler secret put TWITTER_ACCESS_TOKEN_SECRET
+#    wrangler secret put TELEGRAM_BOT_TOKEN
+#    wrangler secret put TELEGRAM_CHANNEL_ID
 #
 # 4. For local development, create .dev.vars file:
 #    cp .dev.vars.example .dev.vars

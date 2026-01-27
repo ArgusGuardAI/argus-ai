@@ -3,6 +3,7 @@ import type { Bindings } from '../index';
 import { fetchHeliusTokenMetadata, analyzeTokenTransactions, analyzeDevSelling } from '../services/helius';
 import { fetchDexScreenerData } from '../services/dexscreener';
 import { postTweet, formatAlertTweet, canTweet, recordTweet, type TwitterConfig } from '../services/twitter';
+import { sendMessage, formatAlertHtml } from '../services/telegram';
 // Pump.fun API disabled (Cloudflare 1016 error)
 // import { fetchPumpFunData, isPumpFunToken } from '../services/pumpfun';
 
@@ -1457,6 +1458,59 @@ sentinelRoutes.post('/analyze', async (c) => {
             }
           } catch (err) {
             console.error('[Twitter] Auto-tweet error:', err);
+          }
+        })()
+      );
+    }
+
+    // ============================================
+    // AUTO-TELEGRAM: Alert on high-risk tokens
+    // Fire-and-forget to Telegram channel
+    // ============================================
+    if (analysis.riskScore >= 70 && c.env.TELEGRAM_BOT_TOKEN && c.env.TELEGRAM_CHANNEL_ID) {
+      c.executionCtx.waitUntil(
+        (async () => {
+          try {
+            // Check dedup (reuse Twitter KV prefix with telegram: prefix)
+            const tgKey = `telegram:${tokenAddress}`;
+            const existing = await c.env.SCAN_CACHE.get(tgKey);
+            if (existing) {
+              console.log(`[Telegram] Already alerted for ${tokenAddress}`);
+              return;
+            }
+
+            const html = formatAlertHtml({
+              tokenAddress,
+              name: tokenInfo.name,
+              symbol: tokenInfo.symbol,
+              riskScore: analysis.riskScore,
+              riskLevel: analysis.riskLevel,
+              liquidity: tokenInfo.liquidity || 0,
+              marketCap: tokenInfo.marketCap || 0,
+              ageHours: tokenInfo.ageHours || 0,
+              bundleDetected: bundleInfo?.detected || false,
+              bundleCount: bundleInfo?.count || 0,
+              bundleConfidence: bundleInfo?.confidence || 'NONE',
+              flags: analysis.flags || [],
+              summary: analysis.summary || '',
+            });
+
+            const result = await sendMessage(
+              c.env.TELEGRAM_BOT_TOKEN!,
+              c.env.TELEGRAM_CHANNEL_ID!,
+              html
+            );
+
+            if (result.ok) {
+              await c.env.SCAN_CACHE.put(tgKey, String(result.messageId), {
+                expirationTtl: 7 * 24 * 60 * 60,
+              });
+              console.log(`[Telegram] Alert posted to channel, msg ${result.messageId}`);
+            } else {
+              console.warn(`[Telegram] Failed to post: ${result.error}`);
+            }
+          } catch (err) {
+            console.error('[Telegram] Auto-alert error:', err);
           }
         })()
       );

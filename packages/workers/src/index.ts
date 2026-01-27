@@ -9,6 +9,7 @@ import scoresRoutes from './routes/scores';
 import { sentinelRoutes } from './routes/sentinel';
 import { jupiterRoutes } from './routes/jupiter';
 import { twitterRoutes } from './routes/twitter';
+import { telegramRoutes } from './routes/telegram';
 
 export type Bindings = {
   SCAN_CACHE: KVNamespace;
@@ -24,6 +25,8 @@ export type Bindings = {
   TWITTER_API_SECRET?: string;
   TWITTER_ACCESS_TOKEN?: string;
   TWITTER_ACCESS_TOKEN_SECRET?: string;
+  TELEGRAM_BOT_TOKEN?: string;
+  TELEGRAM_CHANNEL_ID?: string;
   ENVIRONMENT: string;
 };
 
@@ -167,6 +170,7 @@ app.route('/scores', scoresRoutes);
 app.route('/sentinel', sentinelRoutes);
 app.route('/jupiter', jupiterRoutes);
 app.route('/twitter', twitterRoutes);
+app.route('/telegram', telegramRoutes);
 
 // 404 handler
 app.notFound((c) => {
