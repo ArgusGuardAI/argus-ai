@@ -133,3 +133,36 @@ twitterRoutes.post('/test', async (c) => {
 
   return c.json({ success: false, error: result.error }, 500);
 });
+
+// ============================================
+// POST /twitter/post
+// Post a custom tweet (for announcements, etc.)
+// Body: { text: string }
+// ============================================
+twitterRoutes.post('/post', async (c) => {
+  const config = getTwitterConfig(c.env);
+  if (!config) {
+    return c.json({ error: 'Twitter API keys not configured' }, 500);
+  }
+
+  const body = await c.req.json() as { text?: string };
+  if (!body.text || body.text.length === 0) {
+    return c.json({ error: 'Missing text' }, 400);
+  }
+
+  if (body.text.length > 280) {
+    return c.json({ error: `Tweet too long (${body.text.length}/280)` }, 400);
+  }
+
+  const result = await postTweet(body.text, config);
+
+  if (result.success) {
+    return c.json({
+      success: true,
+      tweetId: result.tweetId,
+      tweetUrl: result.tweetUrl,
+    });
+  }
+
+  return c.json({ success: false, error: result.error }, 500);
+});
