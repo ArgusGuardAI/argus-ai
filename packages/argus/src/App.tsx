@@ -376,6 +376,7 @@ interface AnalysisResult {
     signal: SignalType;
     score: number;
     verdict: string;
+    flags: Array<{ type: string; severity: string; message: string }>;
   };
   links: {
     website?: string;
@@ -546,6 +547,7 @@ export default function App() {
 
       if (isLocal) {
         result = data;
+        if (!result.ai.flags) result.ai.flags = [];
       } else {
         // Calculate holder percentages
         const holders = data.holderDistribution || [];
@@ -628,6 +630,11 @@ export default function App() {
             signal,
             score,
             verdict: data.analysis?.summary || 'Analysis unavailable',
+            flags: (data.analysis?.flags || []).map((f: { type: string; severity: string; message: string }) => ({
+              type: f.type,
+              severity: f.severity?.toUpperCase() || 'MEDIUM',
+              message: f.message,
+            })),
           },
           links: {
             website: data.tokenInfo?.website,
@@ -771,6 +778,43 @@ export default function App() {
   const pctColor = (n?: number) => {
     if (n === undefined || n === null) return 'text-zinc-500';
     return n >= 0 ? 'text-green-500' : 'text-red-500';
+  };
+
+  // Derived risk variables for analysis results
+  const isDangerous = analysisResult?.ai.signal === 'AVOID';
+  const isSafe = analysisResult?.ai.signal === 'BUY' || analysisResult?.ai.signal === 'STRONG_BUY';
+  const cardBorder = isDangerous ? 'border-red-800/40' : 'border-zinc-800';
+  const cardBg = isDangerous ? 'bg-zinc-900/80' : 'bg-zinc-900';
+
+  const criticalIssueCount = analysisResult ? [
+    !analysisResult.security.mintAuthorityRevoked,
+    !analysisResult.security.freezeAuthorityRevoked,
+    analysisResult.security.lpLockedPercent < 10,
+  ].filter(Boolean).length : 0;
+
+  const securityIsDangerous = criticalIssueCount > 0;
+
+  const riskSubtitle = analysisResult ? (
+    analysisResult.ai.score < 20 ? 'EXTREME MANIPULATION RISK DETECTED'
+    : analysisResult.ai.score < 35 ? 'HIGH RISK \u2014 PROCEED WITH CAUTION'
+    : analysisResult.ai.score < 50 ? 'ELEVATED RISK \u2014 REVIEW CAREFULLY'
+    : analysisResult.ai.score < 70 ? 'MODERATE RISK'
+    : 'LOW RISK \u2014 FUNDAMENTALS LOOK SOLID'
+  ) : '';
+
+  const riskSubtitleColor = analysisResult ? (
+    analysisResult.ai.score < 35 ? 'text-red-300'
+    : analysisResult.ai.score < 50 ? 'text-amber-300'
+    : analysisResult.ai.score < 70 ? 'text-yellow-300'
+    : 'text-emerald-300'
+  ) : '';
+
+  const bannerColorMap: Record<SignalType, string> = {
+    AVOID: 'bg-red-900/60 border-red-700',
+    HOLD: 'bg-amber-900/40 border-amber-700',
+    WATCH: 'bg-yellow-900/40 border-yellow-700',
+    BUY: 'bg-emerald-900/40 border-emerald-700',
+    STRONG_BUY: 'bg-green-900/40 border-green-700',
   };
 
   return (
@@ -1194,11 +1238,60 @@ export default function App() {
         {/* Analysis Results */}
         {analysisResult && !isAnalyzing && (
           <div className="space-y-6">
+            {/* Risk Banner */}
+            <div className={`rounded-xl border p-4 sm:p-5 ${bannerColorMap[analysisResult.ai.signal]}`}>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  {isDangerous ? (
+                    <svg className="w-6 h-6 text-red-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  ) : isSafe ? (
+                    <svg className="w-6 h-6 text-emerald-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-6 h-6 text-amber-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  )}
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-white font-bold text-sm sm:text-base">{analysisResult.ai.signal.replace('_', ' ')}</span>
+                      <span className="text-zinc-300 text-sm">— Risk Score: {analysisResult.ai.score}/100</span>
+                    </div>
+                    <div className={`text-xs font-semibold tracking-wide mt-0.5 ${riskSubtitleColor}`}>{riskSubtitle}</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {analysisResult.bundles.detected && (
+                    <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-red-800/60 text-red-300 border border-red-700/50">
+                      {analysisResult.bundles.count} BUNDLE{analysisResult.bundles.count > 1 ? 'S' : ''}
+                    </span>
+                  )}
+                  {criticalIssueCount > 0 && (
+                    <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-red-800/60 text-red-300 border border-red-700/50">
+                      {criticalIssueCount} CRITICAL
+                    </span>
+                  )}
+                  <span className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${
+                    analysisResult.security.lpLockedPercent > 50
+                      ? 'bg-emerald-800/60 text-emerald-300 border-emerald-700/50'
+                      : analysisResult.security.lpLockedPercent < 10
+                      ? 'bg-red-800/60 text-red-300 border-red-700/50'
+                      : 'bg-amber-800/60 text-amber-300 border-amber-700/50'
+                  }`}>
+                    {analysisResult.security.lpLockedPercent.toFixed(0)}% LP LOCKED
+                  </span>
+                </div>
+              </div>
+            </div>
+
             {/* Token Header Card */}
-            <div className="bg-zinc-900 rounded-2xl border border-zinc-800 p-4 sm:p-6">
+            <div className={`${cardBg} rounded-2xl border ${cardBorder} p-4 sm:p-6`}>
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div className="flex items-center gap-4 sm:gap-5">
-                  <div className="w-12 h-12 sm:w-16 sm:h-16 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-xl sm:rounded-2xl flex items-center justify-center text-white text-lg sm:text-xl font-bold shadow-lg shadow-emerald-500/20 flex-shrink-0">
+                  <div className={`w-12 h-12 sm:w-16 sm:h-16 bg-gradient-to-br ${isDangerous ? 'from-red-500 to-red-600 shadow-red-500/20' : 'from-emerald-500 to-emerald-600 shadow-emerald-500/20'} rounded-xl sm:rounded-2xl flex items-center justify-center text-white text-lg sm:text-xl font-bold shadow-lg flex-shrink-0`}>
                     {analysisResult.token.symbol.slice(0, 2)}
                   </div>
                   <div className="min-w-0">
@@ -1241,14 +1334,21 @@ export default function App() {
             {/* Info Cards Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {/* Security Card */}
-              <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-5">
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="w-8 h-8 bg-emerald-500/10 rounded-lg flex items-center justify-center">
-                    <svg className="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                    </svg>
+              <div className={`${cardBg} rounded-xl border ${securityIsDangerous ? 'border-red-800/50' : cardBorder} p-5`}>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <div className={`w-8 h-8 ${securityIsDangerous ? 'bg-red-500/10' : 'bg-emerald-500/10'} rounded-lg flex items-center justify-center`}>
+                      <svg className={`w-4 h-4 ${securityIsDangerous ? 'text-red-500' : 'text-emerald-500'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                      </svg>
+                    </div>
+                    <h3 className={`font-semibold ${securityIsDangerous ? 'text-red-500' : 'text-emerald-500'}`}>Security</h3>
                   </div>
-                  <h3 className="font-semibold text-emerald-500">Security</h3>
+                  {securityIsDangerous && (
+                    <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-red-500/20 text-red-400 border border-red-500/30">
+                      DANGER
+                    </span>
+                  )}
                 </div>
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
@@ -1273,15 +1373,25 @@ export default function App() {
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-zinc-500">LP Locked</span>
-                    <span className={`text-sm font-semibold ${analysisResult.security.lpLockedPercent > 50 ? 'text-green-500' : 'text-amber-500'}`}>
+                    <span className={`text-sm font-semibold ${analysisResult.security.lpLockedPercent > 50 ? 'text-green-500' : analysisResult.security.lpLockedPercent < 10 ? 'text-red-500' : 'text-amber-500'}`}>
                       {analysisResult.security.lpLockedPercent.toFixed(0)}%
                     </span>
                   </div>
                 </div>
+                {analysisResult.security.lpLockedPercent < 10 && (
+                  <div className="mt-3 pt-3 border-t border-red-800/30">
+                    <p className="text-xs text-red-400 font-semibold flex items-center gap-1.5">
+                      <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                      RUG RISK: Liquidity can be pulled at any time
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Market Card */}
-              <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-5">
+              <div className={`${cardBg} rounded-xl border ${cardBorder} p-5`}>
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <div className="w-8 h-8 bg-emerald-500/10 rounded-lg flex items-center justify-center">
@@ -1323,7 +1433,7 @@ export default function App() {
               </div>
 
               {/* Trading Activity Card */}
-              <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-5">
+              <div className={`${cardBg} rounded-xl border ${cardBorder} p-5`}>
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <div className="w-8 h-8 bg-emerald-500/10 rounded-lg flex items-center justify-center">
@@ -1354,7 +1464,7 @@ export default function App() {
             {/* Holders & AI Analysis */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {/* Top Holders */}
-              <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-5">
+              <div className={`${cardBg} rounded-xl border ${cardBorder} p-5`}>
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <div className="w-8 h-8 bg-emerald-500/10 rounded-lg flex items-center justify-center">
@@ -1429,7 +1539,7 @@ export default function App() {
               </div>
 
               {/* AI Verdict */}
-              <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-5">
+              <div className={`${cardBg} rounded-xl border ${cardBorder} p-5`}>
                 <div className="flex items-center gap-2 mb-4">
                   <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-lg flex items-center justify-center">
                     <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1440,51 +1550,22 @@ export default function App() {
                 </div>
                 <p className="text-sm text-zinc-400 leading-relaxed mb-4">{analysisResult.ai.verdict}</p>
 
-                {/* Bundle Warning */}
-                {analysisResult.bundles.detected && (
-                  <div className="p-4 rounded-xl bg-red-900/30 border border-red-800">
-                    <div className="flex items-center gap-2 mb-2">
-                      <svg className="w-5 h-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                      </svg>
-                      <span className="text-sm font-bold text-red-400">Bundle Warning</span>
-                    </div>
-                    <p className="text-sm text-red-400/80">
-                      {analysisResult.bundles.description
-                        ? `${analysisResult.bundles.description}. This may indicate coordinated trading.`
-                        : `${analysisResult.bundles.count} coordinated wallet${analysisResult.bundles.count > 1 ? 's' : ''} detected. This may indicate coordinated trading.`
-                      }
-                    </p>
-                  </div>
-                )}
-
-                {/* Dev Activity */}
-                {analysisResult.devActivity && (
-                  <div className={`p-4 rounded-xl border mt-3 ${
-                    analysisResult.devActivity.severity === 'CRITICAL' || analysisResult.devActivity.severity === 'HIGH'
-                      ? 'bg-red-900/30 border-red-800'
-                      : analysisResult.devActivity.severity === 'MEDIUM'
-                      ? 'bg-amber-900/30 border-amber-800'
-                      : 'bg-zinc-800/50 border-zinc-700'
-                  }`}>
-                    <div className="flex items-center gap-2 mb-2">
-                      <svg className="w-5 h-5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                      </svg>
-                      <span className={`text-sm font-bold ${
-                        analysisResult.devActivity.severity === 'CRITICAL' || analysisResult.devActivity.severity === 'HIGH'
-                          ? 'text-red-400'
-                          : analysisResult.devActivity.severity === 'MEDIUM'
-                          ? 'text-amber-400'
-                          : 'text-zinc-300'
-                      }`}>Dev Wallet</span>
-                    </div>
-                    <p className="text-sm text-zinc-400">
-                      {analysisResult.devActivity.hasSold
-                        ? `Dev sold ${analysisResult.devActivity.percentSold.toFixed(0)}% of tokens${analysisResult.devActivity.currentHoldingsPercent > 0.1 ? ` but still holds ${analysisResult.devActivity.currentHoldingsPercent.toFixed(1)}%` : ' and fully exited'}.`
-                        : `Dev has not sold. Currently holds ${analysisResult.devActivity.currentHoldingsPercent.toFixed(1)}% of supply.`
-                      }
-                    </p>
+                {/* Risk Flags */}
+                {analysisResult.ai.flags.length > 0 && (
+                  <div className="space-y-2 mb-4">
+                    <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Risk Factors</h4>
+                    {analysisResult.ai.flags.map((flag, i) => (
+                      <div key={i} className="flex items-start gap-2">
+                        <span className={`mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold leading-none flex-shrink-0 ${
+                          flag.severity === 'CRITICAL' ? 'bg-red-500/20 text-red-400' :
+                          flag.severity === 'HIGH' ? 'bg-amber-500/20 text-amber-400' :
+                          'bg-yellow-500/15 text-yellow-400'
+                        }`}>
+                          {flag.severity === 'CRITICAL' ? 'CRIT' : flag.severity === 'HIGH' ? 'HIGH' : 'MED'}
+                        </span>
+                        <span className="text-xs text-zinc-400 leading-relaxed">{flag.message}</span>
+                      </div>
+                    ))}
                   </div>
                 )}
 
@@ -1517,8 +1598,67 @@ export default function App() {
               </div>
             </div>
 
+            {/* Standalone Warning Callouts */}
+            {analysisResult.bundles.detected && (
+              <div className="p-4 rounded-xl bg-red-900/30 border border-red-800">
+                <div className="flex items-center gap-2 mb-2">
+                  <svg className="w-5 h-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <span className="text-sm font-bold text-red-400">Bundle Warning</span>
+                  <span className="ml-auto px-2 py-0.5 rounded text-[10px] font-bold bg-red-800/60 text-red-300">
+                    {analysisResult.bundles.count} CLUSTER{analysisResult.bundles.count > 1 ? 'S' : ''} &middot; {analysisResult.bundles.totalPercent.toFixed(1)}% SUPPLY
+                  </span>
+                </div>
+                <p className="text-sm text-red-400/80">
+                  {analysisResult.bundles.description
+                    ? `${analysisResult.bundles.description}. This indicates coordinated wallet activity designed to manipulate price action.`
+                    : `${analysisResult.bundles.count} coordinated wallet cluster${analysisResult.bundles.count > 1 ? 's' : ''} detected holding ${analysisResult.bundles.totalPercent.toFixed(1)}% of supply. This indicates coordinated wallet activity designed to manipulate price action.`
+                  }
+                </p>
+              </div>
+            )}
+
+            {analysisResult.devActivity && analysisResult.devActivity.severity !== 'NONE' && (
+              <div className={`p-4 rounded-xl border ${
+                analysisResult.devActivity.severity === 'CRITICAL' || analysisResult.devActivity.severity === 'HIGH'
+                  ? 'bg-red-900/30 border-red-800'
+                  : analysisResult.devActivity.severity === 'MEDIUM'
+                  ? 'bg-amber-900/30 border-amber-800'
+                  : 'bg-zinc-800/50 border-zinc-700'
+              }`}>
+                <div className="flex items-center gap-2 mb-2">
+                  <svg className="w-5 h-5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  <span className={`text-sm font-bold ${
+                    analysisResult.devActivity.severity === 'CRITICAL' || analysisResult.devActivity.severity === 'HIGH'
+                      ? 'text-red-400'
+                      : analysisResult.devActivity.severity === 'MEDIUM'
+                      ? 'text-amber-400'
+                      : 'text-zinc-300'
+                  }`}>Dev Wallet Activity</span>
+                  <span className={`ml-auto px-2 py-0.5 rounded text-[10px] font-bold ${
+                    analysisResult.devActivity.severity === 'CRITICAL' || analysisResult.devActivity.severity === 'HIGH'
+                      ? 'bg-red-800/60 text-red-300'
+                      : analysisResult.devActivity.severity === 'MEDIUM'
+                      ? 'bg-amber-800/60 text-amber-300'
+                      : 'bg-zinc-700 text-zinc-400'
+                  }`}>
+                    {analysisResult.devActivity.severity}
+                  </span>
+                </div>
+                <p className="text-sm text-zinc-400">
+                  {analysisResult.devActivity.hasSold
+                    ? `Dev sold ${analysisResult.devActivity.percentSold.toFixed(0)}% of tokens${analysisResult.devActivity.currentHoldingsPercent > 0.1 ? ` but still holds ${analysisResult.devActivity.currentHoldingsPercent.toFixed(1)}%` : ' and fully exited'}.`
+                    : `Dev has not sold. Currently holds ${analysisResult.devActivity.currentHoldingsPercent.toFixed(1)}% of supply.`
+                  }
+                </p>
+              </div>
+            )}
+
             {/* Buy Controls */}
-            <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 sm:p-5 md:sticky md:bottom-4 z-20">
+            <div className={`${cardBg} rounded-xl border ${cardBorder} p-4 sm:p-5 md:sticky md:bottom-4 z-20`}>
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
                   <span className="text-sm font-medium text-zinc-500">Amount:</span>

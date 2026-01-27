@@ -656,6 +656,22 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
         aiFlags.push({ type: 'LIQUIDITY', severity: 'CRITICAL', message: '$0 reported liquidity — extremely high rug risk, may not be sellable' });
       }
 
+      // CRITICAL: Ultra-thin liquidity (<$1K) on very new token (<1h) = minimum 75
+      // Almost always a fresh pump.fun token in the pump phase before rug
+      if (tokenAgeHours !== undefined && tokenAgeHours < 1 && liquidityUsd > 0 && liquidityUsd < 1000 && score < 75) {
+        console.log(`[Sentinel] Enforcing minimum 75 for ultra-thin liquidity ($${liquidityUsd.toFixed(0)}) on <1h token (was ${score})`);
+        score = 75;
+        aiFlags.push({ type: 'STRUCTURAL', severity: 'CRITICAL', message: `Token is ${(tokenAgeHours * 60).toFixed(0)}m old with only $${liquidityUsd.toLocaleString()} liquidity — extreme rug risk` });
+      }
+
+      // Bundle detected + thin liquidity (<$2K) = minimum 70
+      // Coordinated wallets on a token with no real liquidity = classic rug setup
+      if (hasBundleDetection && liquidityUsd > 0 && liquidityUsd < 2000 && score < 70) {
+        console.log(`[Sentinel] Enforcing minimum 70 for bundles + thin liquidity ($${liquidityUsd.toFixed(0)}) (was ${score})`);
+        score = 70;
+        aiFlags.push({ type: 'STRUCTURAL', severity: 'HIGH', message: `Bundle activity detected with only $${liquidityUsd.toLocaleString()} liquidity — coordinated rug risk` });
+      }
+
       // Very new token (<6h) with thin liquidity (<$10K) = minimum 55
       if (tokenAgeHours !== undefined && tokenAgeHours < 6 && liquidityUsd < 10000 && score < 55) {
         console.log(`[Sentinel] Enforcing minimum 55 for new token (<6h) + thin liquidity (was ${score})`);
@@ -760,9 +776,13 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
       if (priceChange24h !== undefined && priceChange24h < -30) moderateFlags++;
       if (devActivity && devActivity.hasSold && devActivity.percentSold >= 20) moderateFlags++;
 
-      if (moderateFlags >= 4 && score < 65) {
-        console.log(`[Sentinel] Enforcing minimum 65 for ${moderateFlags} combined risk signals (was ${score})`);
-        score = 65;
+      if (moderateFlags >= 5 && score < 75) {
+        console.log(`[Sentinel] Enforcing minimum 75 for ${moderateFlags} combined risk signals (was ${score})`);
+        score = 75;
+        aiFlags.push({ type: 'COMBO_RISK', severity: 'CRITICAL', message: `${moderateFlags} risk signals detected simultaneously — extreme compounding risk` });
+      } else if (moderateFlags >= 4 && score < 70) {
+        console.log(`[Sentinel] Enforcing minimum 70 for ${moderateFlags} combined risk signals (was ${score})`);
+        score = 70;
         aiFlags.push({ type: 'COMBO_RISK', severity: 'HIGH', message: `${moderateFlags} risk signals detected simultaneously — compounding risk` });
       } else if (moderateFlags >= 3 && score < 60) {
         console.log(`[Sentinel] Enforcing minimum 60 for ${moderateFlags} combined risk signals (was ${score})`);
@@ -1031,6 +1051,20 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
     flags.push({ type: 'LIQUIDITY', severity: 'CRITICAL', message: '$0 reported liquidity — extremely high rug risk, may not be sellable' });
   }
 
+  // CRITICAL: Ultra-thin liquidity (<$1K) on very new token (<1h) = minimum 75
+  if (fallbackAgeHours !== undefined && fallbackAgeHours < 1 && fallbackLiquidity > 0 && fallbackLiquidity < 1000 && riskScore < 75) {
+    console.log(`[Sentinel] Enforcing minimum 75 for ultra-thin liquidity ($${fallbackLiquidity.toFixed(0)}) on <1h token (was ${riskScore})`);
+    riskScore = 75;
+    flags.push({ type: 'STRUCTURAL', severity: 'CRITICAL', message: `Token is ${(fallbackAgeHours * 60).toFixed(0)}m old with only $${fallbackLiquidity.toLocaleString()} liquidity — extreme rug risk` });
+  }
+
+  // Bundle detected + thin liquidity (<$2K) = minimum 70
+  if (hasBundleDetection && fallbackLiquidity > 0 && fallbackLiquidity < 2000 && riskScore < 70) {
+    console.log(`[Sentinel] Enforcing minimum 70 for bundles + thin liquidity ($${fallbackLiquidity.toFixed(0)}) (was ${riskScore})`);
+    riskScore = 70;
+    flags.push({ type: 'STRUCTURAL', severity: 'HIGH', message: `Bundle activity detected with only $${fallbackLiquidity.toLocaleString()} liquidity — coordinated rug risk` });
+  }
+
   // Structural minimums
   if (fallbackAgeHours !== undefined && fallbackAgeHours < 6 && fallbackLiquidity < 10000 && riskScore < 55) {
     riskScore = 55;
@@ -1108,9 +1142,13 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
   if (fallbackPriceChange !== undefined && fallbackPriceChange < -30) fbModerateFlags++;
   if (devActivity && devActivity.hasSold && devActivity.percentSold >= 20) fbModerateFlags++;
 
-  if (fbModerateFlags >= 4 && riskScore < 65) {
-    console.log(`[Sentinel] Enforcing minimum 65 for ${fbModerateFlags} combined risk signals (was ${riskScore})`);
-    riskScore = 65;
+  if (fbModerateFlags >= 5 && riskScore < 75) {
+    console.log(`[Sentinel] Enforcing minimum 75 for ${fbModerateFlags} combined risk signals (was ${riskScore})`);
+    riskScore = 75;
+    flags.push({ type: 'COMBO_RISK', severity: 'CRITICAL', message: `${fbModerateFlags} risk signals detected simultaneously — extreme compounding risk` });
+  } else if (fbModerateFlags >= 4 && riskScore < 70) {
+    console.log(`[Sentinel] Enforcing minimum 70 for ${fbModerateFlags} combined risk signals (was ${riskScore})`);
+    riskScore = 70;
     flags.push({ type: 'COMBO_RISK', severity: 'HIGH', message: `${fbModerateFlags} risk signals detected simultaneously — compounding risk` });
   } else if (fbModerateFlags >= 3 && riskScore < 60) {
     console.log(`[Sentinel] Enforcing minimum 60 for ${fbModerateFlags} combined risk signals (was ${riskScore})`);

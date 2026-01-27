@@ -64,6 +64,7 @@ export async function fetchDexScreenerData(tokenAddress: string): Promise<DexScr
         dexId: string;
         pairAddress: string;
         baseToken: { address: string; name: string; symbol: string };
+        quoteToken: { address: string; name: string; symbol: string };
         priceUsd: string;
         priceChange: { h24: number };
         liquidity: { usd: number };
@@ -83,7 +84,7 @@ export async function fetchDexScreenerData(tokenAddress: string): Promise<DexScr
       }>;
     };
 
-    // Get the most liquid Solana pair
+    // Get Solana pairs where the queried token is the BASE token (correct name/symbol/price)
     const solanaPairs = data.pairs?.filter(p => p.chainId === 'solana') || [];
 
     if (solanaPairs.length === 0) {
@@ -91,10 +92,20 @@ export async function fetchDexScreenerData(tokenAddress: string): Promise<DexScr
       return null;
     }
 
+    // Prefer pairs where the queried token is the baseToken — these have correct name/symbol
+    const basePairs = solanaPairs.filter(p =>
+      p.baseToken?.address?.toLowerCase() === tokenAddress.toLowerCase()
+    );
+
     // Sort by liquidity and get the best pair
-    const bestPair = solanaPairs.sort((a, b) =>
+    const bestPair = (basePairs.length > 0 ? basePairs : solanaPairs).sort((a, b) =>
       (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0)
     )[0];
+
+    // If we fell back to a pair where our token is the quoteToken, log a warning
+    if (basePairs.length === 0) {
+      console.warn(`[DexScreener] No base-token pairs found for ${tokenAddress.slice(0, 8)}... — using best available pair (token may be quoteToken)`);
+    }
 
     const pairCreatedAt = bestPair.pairCreatedAt || 0;
     const ageInMs = Date.now() - pairCreatedAt;
@@ -127,8 +138,12 @@ export async function fetchDexScreenerData(tokenAddress: string): Promise<DexScr
         sells: bestPair.txns?.h24?.sells || 0,
       },
 
-      name: bestPair.baseToken?.name,
-      symbol: bestPair.baseToken?.symbol,
+      name: bestPair.baseToken?.address?.toLowerCase() === tokenAddress.toLowerCase()
+        ? bestPair.baseToken?.name
+        : bestPair.quoteToken?.name || bestPair.baseToken?.name,
+      symbol: bestPair.baseToken?.address?.toLowerCase() === tokenAddress.toLowerCase()
+        ? bestPair.baseToken?.symbol
+        : bestPair.quoteToken?.symbol || bestPair.baseToken?.symbol,
 
       pairCreatedAt,
       ageInDays,
