@@ -96,7 +96,7 @@ Argus AI mitigates these threats through a unified platform with four integrated
 
 ### 3.1 Layer 1: AI Sentinel (Analysis)
 
-Powered by **Groq** (primary, free) and **Together AI** (fallback) with on-chain data from Helius.
+Powered by **Together AI** (production) and **Groq** (local development, free) with on-chain data from Helius RPC.
 
 **What It Does:**
 - Generates a risk score from 0-100 for any Solana token
@@ -124,10 +124,11 @@ Instant on-chain security checks:
 
 Proprietary algorithm that exposes coordinated wallet clusters:
 
-- Analyzes top 10 token holders
-- Groups wallets with similar holdings (within 1% threshold)
-- Flags clusters of 3+ wallets as "bundles"
-- Displays total bundle percentage and wallet count
+- Fetches top 20 holders and transaction history via Helius RPC
+- Detects same-block transactions (wallets buying in the same block = HIGH confidence)
+- Analyzes holder percentage patterns for additional coordination signals
+- Assigns confidence levels: HIGH, MEDIUM, LOW, NONE
+- Displays total bundle percentage, wallet count, and confidence level
 - Red highlighting in holder distribution chart
 
 ### 3.4 Layer 4: One-Click Trading
@@ -153,22 +154,61 @@ Execute directly from the research interface:
 | **CONTRACT** | Bonding curve status, program verification |
 | **SOCIAL** | Website, Twitter, Telegram presence |
 | **DEPLOYER** | Wallet age, deployment history, rug count |
-| **BUNDLE** | Coordinated holder clusters |
-| **HOLDERS** | Concentration risk, whale distribution |
+| **BUNDLE** | Same-block transactions, coordinated holder clusters |
+| **HOLDERS** | Concentration risk, whale distribution, holder count |
 | **TRADING** | Buy/sell ratio, wash trading indicators |
 | **STRUCTURAL** | Token age, liquidity depth, volume/liquidity ratio |
+| **PRICE_CRASH** | 24h price drops indicating dumps or rugs |
+| **SELL_PRESSURE** | Sell-heavy trading patterns on new tokens |
+| **COMBO_RISK** | Multiple moderate flags compounding simultaneously |
 
-### 4.2 Structural Risk Guardrails
+### 4.2 Risk Guardrails
 
-Hard-coded minimum scores that override AI analysis:
+Hard-coded minimum scores that override AI analysis, applied deterministically after the AI generates its base score:
+
+#### Price Crash Guardrails (Highest Priority)
 
 | Condition | Minimum Score |
 |-----------|---------------|
-| Token < 6h old AND liquidity < $10K | 50 (WATCH) |
-| Token < 24h old AND liquidity < $5K | 50 (WATCH) |
-| Token < 6h old (any liquidity) | 35 (HOLD) |
-| Liquidity < $5K (any age) | 40 (HOLD) |
-| Volume/Liquidity > 8x on token < 24h | 45 (WATCH) |
+| Price crashed >80% in 24h | 75 (SCAM) |
+| Price dropped >50% in 24h | 65 (DANGEROUS) |
+| Price dropped >30% in 24h | 55 (SUSPICIOUS) |
+
+#### Structural Guardrails
+
+| Condition | Minimum Score |
+|-----------|---------------|
+| $0 liquidity | 70 (DANGEROUS) |
+| Token < 6h old AND liquidity < $10K | 55 (SUSPICIOUS) |
+| Token < 24h old AND liquidity < $5K | 55 (SUSPICIOUS) |
+| Token < 6h old (any liquidity) | 50 (SUSPICIOUS) |
+| Token < 24h old (any liquidity) | 40 (SAFE) |
+| Liquidity < $5K (any age) | 50 (SUSPICIOUS) |
+| Volume/Liquidity > 8x on token < 24h | 50 (SUSPICIOUS) |
+
+#### Sell Pressure Guardrails
+
+| Condition | Minimum Score |
+|-----------|---------------|
+| Buy ratio < 0.7, >100 sells, token < 24h | 60 (DANGEROUS) |
+| Buy ratio < 0.5, >50 sells | 55 (SUSPICIOUS) |
+
+#### Low Holder Count
+
+| Condition | Minimum Score |
+|-----------|---------------|
+| < 25 holders on < 6h token | 55 (SUSPICIOUS) |
+
+#### Combo Signal Escalation
+
+When multiple moderate risk signals are detected simultaneously, compound risk is enforced:
+
+| Condition | Minimum Score |
+|-----------|---------------|
+| 4+ combined risk signals | 65 (DANGEROUS) |
+| 3+ combined risk signals | 60 (DANGEROUS) |
+
+Risk signals counted: token age < 6h, liquidity < $10K, sells > buys, low holders, bundles detected, new/unknown creator wallet, price crash > 30%.
 
 ### 4.3 Score Caps (Established Tokens)
 
@@ -178,13 +218,42 @@ Established tokens receive lower maximum risk scores:
 - $50M+ market cap, 14+ days old: Max score 45
 - $10M+ market cap, 7+ days old: Max score 55
 
-### 4.4 Anti-Hallucination Safeguards
+### 4.4 Price Crash Detection
+
+Tokens that have already crashed are flagged regardless of other signals:
+
+| Price Drop (24h) | Minimum Score | Severity |
+|------------------|---------------|----------|
+| > 80% | 75 (SCAM) | CRITICAL |
+| > 50% | 65 (DANGEROUS) | HIGH |
+| > 30% | 55 (SUSPICIOUS) | MEDIUM |
+
+A revoked mint authority does not offset a price crash — the rug has already happened.
+
+### 4.5 Sell Pressure Detection
+
+Abnormal sell-to-buy ratios on new tokens indicate dump risk:
+
+- Buy ratio < 0.7 with >100 sells on a <24h token: minimum score 60
+- Buy ratio < 0.5 with >50 sells: minimum score 55
+
+### 4.6 Combo Signal Escalation
+
+When multiple moderate risk signals appear simultaneously, compound risk is enforced. Seven signals are tracked: token age < 6h, liquidity < $10K, sells > buys, low holders (< 30), bundles detected, new/unknown creator wallet, and price crash > 30%.
+
+- 4+ signals: minimum score 65 (DANGEROUS)
+- 3+ signals: minimum score 60 (DANGEROUS)
+
+This prevents tokens with several "yellow flags" from receiving a clean score.
+
+### 4.7 Anti-Hallucination Safeguards
 
 The AI engine includes strict guardrails:
 - Only cites data explicitly present in context
 - Reports "UNKNOWN" for missing data instead of inventing values
-- Structural risk is enforced deterministically (not AI-dependent)
+- All guardrails are enforced deterministically (not AI-dependent)
 - Validated against actual on-chain data
+- Fallback heuristic scoring activates when AI API fails, applying the same guardrails
 
 ---
 
@@ -196,19 +265,20 @@ Coordinated wallet networks are invisible to standard tools. A token can appear 
 
 ### 5.2 Detection Algorithm
 
-1. Fetch top 10 holder addresses and percentages
-2. Exclude known LP/bonding curve addresses
-3. Compare remaining holder percentages pairwise
-4. Group wallets with holdings within 1% of each other
-5. Flag groups of 3+ wallets as a "bundle"
-6. Calculate total bundle percentage of supply
+1. Fetch top 20 holder addresses and balances via Helius RPC
+2. Resolve token account owners and exclude known LP/bonding curve addresses
+3. Fetch transaction signatures for non-LP holders
+4. **Same-block detection:** Identify wallets that purchased tokens in the same block (HIGH confidence)
+5. **Holder pattern analysis:** Group wallets with similar holdings for additional pattern matching
+6. Assign confidence levels: HIGH (same-block transactions), MEDIUM (holder pattern), LOW, NONE
+7. Calculate total bundle percentage of supply and wallet count
 
 ### 5.3 Bundle Scoring Impact
 
-- Bundle detected: +10 to risk score
-- Bundle holding > 20% supply: +20 to risk score
-- Multiple bundles: Additional +5 per extra bundle
-- AI verdict explicitly warns about detected bundles
+- HIGH confidence bundle: minimum risk score 55
+- MEDIUM confidence bundle: minimum risk score 50
+- Bundle + active mint/freeze authority + new wallet ("triple threat"): minimum risk score 60
+- AI verdict explicitly warns about detected bundles with confidence level
 
 ---
 
@@ -221,10 +291,10 @@ Coordinated wallet networks are invisible to standard tools. A token can appear 
 | **Dashboard** | React + Vite | Token research UI, position tracking |
 | **Scanner** | Node.js + Hono | Token detection, WebSocket server |
 | **API** | Cloudflare Workers | Production analysis endpoint |
-| **AI Engine** | Groq (free) / Together AI | Risk scoring, written analysis |
+| **AI Engine** | Together AI / Groq | Risk scoring, written analysis |
 | **Token Discovery** | Helius WebSocket | Real-time pool creation (Raydium, Meteora) |
 | **Market Data** | DexScreener API | Price, volume, liquidity, trending |
-| **Security Data** | RugCheck API | Holder distribution, authorities |
+| **On-Chain Data** | Helius RPC | Holders, authorities, transaction history |
 | **Trading** | Jupiter API | Swap execution, best price routing |
 
 ### 6.2 Data Flow
@@ -241,9 +311,9 @@ User pastes token address
        v
 +-------------+
 | Workers API | --> DexScreener (price, volume, txns)
-|  /sentinel  | --> RugCheck (holders, security)
-|   /analyze  | --> Groq/Together AI (risk analysis)
-+------+------+ --> Bundle detection (coordinated wallets)
+|  /sentinel  | --> Helius RPC (holders, security, txns)
+|   /analyze  | --> Together AI (risk analysis)
++------+------+ --> Bundle detection (same-block analysis)
        |
        v
 +-------------+
@@ -305,14 +375,15 @@ Automated position protection runs in a 10-second monitoring loop:
 ## 8. Roadmap
 
 ### Phase 1: Foundation (Q1 2026) -- COMPLETE
-- Bundle detection system
-- AI-powered risk analysis (Groq + Together AI)
+- Bundle detection with same-block transaction analysis (HIGH/MEDIUM confidence)
+- AI-powered risk analysis (Together AI + Groq)
 - Security analysis (mint/freeze authority, LP lock)
 - One-click trading via Jupiter
 - Auto-sell protection (take profit, stop loss, trailing stop)
 - Position tracking with P&L
 - Dedicated trading wallet
-- Structural risk guardrails
+- Deterministic risk guardrails (price crash, sell pressure, combo signals)
+- Creator wallet tracking and blacklisting
 
 ### Phase 2: Token Launch (Q1 2026) -- CURRENT
 - $ARGUS token launch
@@ -347,16 +418,16 @@ By combining AI analysis, bundle detection, security checks, and one-click tradi
 
 ---
 
-## Data Sources (All FREE)
+## Data Sources
 
 | Data | Source | Cost |
 |------|--------|------|
 | Price, Volume, Liquidity, Market Cap | DexScreener API | FREE |
 | Buy/Sell Counts, Trading Activity | DexScreener API | FREE |
-| Mint/Freeze Authority, LP Lock | RugCheck API | FREE |
-| Top 10 Holders | RugCheck API | FREE |
-| AI Risk Analysis | Groq API | FREE |
-| AI Risk Analysis (fallback) | Together AI | Paid |
+| Top Holders, Mint/Freeze Authority | Helius RPC | Free tier |
+| Transaction History (bundle detection) | Helius RPC | Free tier |
+| AI Risk Analysis | Together AI | Paid |
+| AI Risk Analysis (local dev) | Groq API | FREE |
 | Swap Execution | Jupiter API | FREE |
 | Real-time Pool Detection | Helius WebSocket | Free tier |
 | SOL Price | Jupiter / CoinGecko | FREE |

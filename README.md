@@ -17,7 +17,10 @@ Argus AI is a comprehensive token research tool that provides instant AI analysi
 ### Token Research Tool
 - **Manual Analysis**: Paste any token address for comprehensive research
 - **AI Risk Scoring**: 0-100 score with STRONG_BUY, BUY, WATCH, HOLD, AVOID signals
-- **Bundle Detection**: Identifies coordinated wallet clusters holding tokens
+- **Bundle Detection**: Same-block transaction analysis with HIGH/MEDIUM/LOW confidence levels
+- **Price Crash Detection**: Automatic flagging of tokens with >30%, >50%, or >80% price drops
+- **Sell Pressure Analysis**: Detects sell-heavy trading patterns on new tokens
+- **Dev Activity Tracking**: Creator wallet history and deployment pattern analysis
 - **24h Sparkline**: Visual price chart in the Market card
 - **One-Click Trading**: Buy tokens directly with configurable amounts
 
@@ -116,11 +119,12 @@ pnpm dev
 ### Analysis Flow
 
 1. **Paste Token Address** → Enter any Solana token mint
-2. **Fetch Data** → DexScreener (market) + RugCheck (security)
-3. **Detect Bundles** → Algorithm finds coordinated wallets
-4. **AI Analysis** → Groq/Together generates verdict
-5. **Display Results** → All panels update with comprehensive data
-6. **Trade** → One-click buy with Jupiter aggregator
+2. **Fetch Data** → DexScreener (market) + Helius RPC (holders, security)
+3. **Detect Bundles** → Transaction analysis finds coordinated wallets
+4. **AI Analysis** → Together AI generates risk score and verdict
+5. **Guardrails** → Deterministic checks enforce minimum risk floors
+6. **Display Results** → All panels update with comprehensive data
+7. **Trade** → One-click buy with Jupiter aggregator
 
 ---
 
@@ -132,10 +136,18 @@ Argus detects coordinated wallet clusters that may indicate:
 - Potential dump risk
 
 **How it works:**
-- Analyzes top 10 holders
-- Groups wallets with similar holdings (within 1% difference)
-- Flags clusters of 3+ wallets as "bundles"
-- Displays total bundle percentage and wallet count
+- Fetches top holders and their transaction history via Helius RPC
+- Detects same-block transactions (wallets buying in the same block = HIGH confidence)
+- Analyzes holder percentage patterns for coordinated accumulation
+- Assigns confidence levels: HIGH, MEDIUM, LOW, NONE
+- Displays total bundle percentage, wallet count, and confidence level
+- Red highlighting in holder distribution chart
+
+**Scoring Impact:**
+- HIGH confidence bundle: minimum risk score 55
+- MEDIUM confidence bundle: minimum risk score 50
+- Bundle holding > 20% supply: additional risk penalty
+- AI verdict explicitly warns about detected bundles
 
 ---
 
@@ -237,16 +249,39 @@ Comprehensive token analysis endpoint.
 
 ---
 
+## Risk Guardrails
+
+Deterministic checks that enforce minimum risk scores regardless of AI output:
+
+| Guardrail | Minimum Score |
+|-----------|---------------|
+| Price crashed >80% | 75 (SCAM) |
+| Price dropped >50% | 65 (DANGEROUS) |
+| Price dropped >30% | 55 (SUSPICIOUS) |
+| $0 liquidity | 70 (DANGEROUS) |
+| Token <6h + liquidity <$10K | 55 (SUSPICIOUS) |
+| Token <24h + liquidity <$5K | 55 (SUSPICIOUS) |
+| Token <6h old | 50 (SUSPICIOUS) |
+| Token <24h old | 40 (SAFE) |
+| Liquidity <$5K | 50 (SUSPICIOUS) |
+| Sell-heavy trading on <24h token | 60 (DANGEROUS) |
+| <25 holders on <6h token | 55 (SUSPICIOUS) |
+| 4+ combined risk signals | 65 (DANGEROUS) |
+| 3+ combined risk signals | 60 (DANGEROUS) |
+
+---
+
 ## Data Sources (All FREE)
 
 | Data | Source | Cost |
 |------|--------|------|
-| Price, Volume, Liquidity | DexScreener | FREE |
-| Buy/Sell Counts | DexScreener | FREE |
-| Mint/Freeze Authority | RugCheck | FREE |
-| Top 10 Holders | RugCheck | FREE |
-| AI Analysis | Groq | FREE |
-| AI Analysis (fallback) | Together AI | Paid |
+| Price, Volume, Liquidity | DexScreener API | FREE |
+| Buy/Sell Counts | DexScreener API | FREE |
+| Top Holders, Mint/Freeze Authority | Helius RPC | Free tier |
+| Transaction History (bundles) | Helius RPC | Free tier |
+| AI Risk Analysis | Together AI | Paid |
+| Swap Execution | Jupiter API | FREE |
+| Real-time Pool Detection | Helius WebSocket | Free tier |
 
 ---
 

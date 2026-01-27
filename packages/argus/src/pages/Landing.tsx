@@ -1618,6 +1618,22 @@ export default function Landing() {
                 <div className="card-title">Position Tracking</div>
                 <div className="card-desc">Monitor all your positions with real-time P&L, entry/exit prices, and easy sell controls. Everything in one dashboard.</div>
               </div>
+
+              <div className="feature-card">
+                <div className="icon-bg">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                </div>
+                <div className="card-title">Price Crash Detection</div>
+                <div className="card-desc">Automatically flags tokens that have crashed 30%, 50%, or 80%+. Deterministic guardrails override AI scores to protect you from already-rugged tokens.</div>
+              </div>
+
+              <div className="feature-card">
+                <div className="icon-bg">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                </div>
+                <div className="card-title">Dev Wallet Tracking</div>
+                <div className="card-desc">Analyzes creator wallet age, deployment history, and activity patterns. Unknown or brand-new deployer wallets trigger automatic risk escalation.</div>
+              </div>
             </div>
           </div>
         </section>
@@ -1694,7 +1710,15 @@ export default function Landing() {
                     <td className="highlight"><span className="check"><i className="fa-solid fa-check"></i></span></td>
                   </tr>
                   <tr>
-                    <td><i className="fa-solid fa-users-between-lines" style={{ marginRight: 8, color: 'var(--text-muted)' }}></i>Bundle Detection</td>
+                    <td><i className="fa-solid fa-users-between-lines" style={{ marginRight: 8, color: 'var(--text-muted)' }}></i>Same-Block Bundle Detection</td>
+                    <td><span className="dash">&mdash;</span></td>
+                    <td><span className="dash">&mdash;</span></td>
+                    <td><span className="dash">&mdash;</span></td>
+                    <td><span className="dash">&mdash;</span></td>
+                    <td className="highlight"><span className="exclusive">ONLY ARGUS</span></td>
+                  </tr>
+                  <tr>
+                    <td><i className="fa-solid fa-chart-line" style={{ marginRight: 8, color: 'var(--text-muted)' }}></i>Price Crash Guardrails</td>
                     <td><span className="dash">&mdash;</span></td>
                     <td><span className="dash">&mdash;</span></td>
                     <td><span className="dash">&mdash;</span></td>
@@ -1882,6 +1906,10 @@ export default function Landing() {
                   <div className="roadmap-item">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>
                     <span>One-click trading</span>
+                  </div>
+                  <div className="roadmap-item">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>
+                    <span>Price crash &amp; sell pressure guardrails</span>
                   </div>
                 </div>
               </div>
