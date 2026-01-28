@@ -14,13 +14,18 @@ const SIGNAL_BG: Record<SignalType, string> = {
   AVOID: 'bg-red-500 text-white',
 };
 
-const SIGNAL_COLORS: Record<SignalType, string> = {
-  STRONG_BUY: '#22c55e',
-  BUY: '#10b981',
-  WATCH: '#eab308',
-  HOLD: '#9ca3af',
-  AVOID: '#ef4444',
-};
+// Gradient color function: score 0-100 maps to red → yellow → green
+// Uses HSL interpolation for smooth transitions
+function getScoreColor(score: number): string {
+  // Clamp score to 0-100
+  const s = Math.max(0, Math.min(100, score));
+  // Map score to hue: 0 (red) → 60 (yellow) → 120 (green)
+  const hue = (s / 100) * 120;
+  // Adjust saturation and lightness for better visibility
+  const saturation = 75;
+  const lightness = s < 30 ? 45 : s > 70 ? 40 : 50; // Slightly darker at extremes
+  return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+}
 
 // Loading skeleton component
 function Skeleton({ className = '' }: { className?: string }) {
@@ -159,7 +164,7 @@ function Sparkline({ data, color, height = 40 }: { data: number[]; color: string
 }
 
 // Score gauge component
-function ScoreGauge({ score, signal }: { score: number; signal: SignalType }) {
+function ScoreGauge({ score, aiScore, rulesOverride }: { score: number; aiScore?: number; rulesOverride?: boolean }) {
   const size = 100;
   const strokeWidth = 8;
   const radius = (size - strokeWidth) / 2;
@@ -167,7 +172,8 @@ function ScoreGauge({ score, signal }: { score: number; signal: SignalType }) {
   const progress = Math.max(0, Math.min(100, score)) / 100;
   const dashOffset = circumference * (1 - progress);
 
-  const color = SIGNAL_COLORS[signal];
+  // Use gradient color based on score
+  const color = getScoreColor(score);
   const bgColor = '#27272a';
 
   return (
@@ -206,6 +212,15 @@ function ScoreGauge({ score, signal }: { score: number; signal: SignalType }) {
         </text>
       </svg>
       <span className="text-[10px] text-zinc-500 uppercase tracking-wider -mt-1">AI Score</span>
+      {/* Show override indicator if guardrails adjusted the score */}
+      {rulesOverride && aiScore !== undefined && (
+        <div className="text-[9px] text-orange-400 mt-1 flex items-center gap-1" title={`AI rated ${aiScore}, guardrails adjusted to ${score}`}>
+          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          {aiScore} → {score}
+        </div>
+      )}
     </div>
   );
 }
@@ -384,6 +399,8 @@ interface AnalysisResult {
   ai: {
     signal: SignalType;
     score: number;
+    aiScore?: number; // Original AI score before guardrails
+    rulesOverride?: boolean; // Whether guardrails adjusted the score
     verdict: string;
     flags: Array<{ type: string; severity: string; message: string }>;
   };
@@ -670,6 +687,9 @@ export default function App() {
           ai: {
             signal,
             score,
+            // Include original AI score (inverted same as final score) and override flag
+            aiScore: data.aiScore !== undefined ? Math.max(0, 100 - data.aiScore) : undefined,
+            rulesOverride: data.rulesOverride || false,
             verdict: data.analysis?.summary || 'Analysis unavailable',
             flags: (data.analysis?.flags || []).map((f: { type: string; severity: string; message: string }) => ({
               type: f.type,
@@ -837,7 +857,6 @@ export default function App() {
 
   // Derived risk variables for analysis results
   const isDangerous = analysisResult?.ai.signal === 'AVOID';
-  const isSafe = analysisResult?.ai.signal === 'BUY' || analysisResult?.ai.signal === 'STRONG_BUY';
   const cardBorder = isDangerous ? 'border-red-800/40' : 'border-zinc-800';
   const cardBg = isDangerous ? 'bg-zinc-900/80' : 'bg-zinc-900';
 
@@ -877,6 +896,7 @@ export default function App() {
     : 'text-emerald-300'
   ) : '';
 
+  // Categorical banner colors for clear visual signals
   const bannerColorMap: Record<SignalType, string> = {
     AVOID: 'bg-red-900/60 border-red-700',
     HOLD: 'bg-amber-900/40 border-amber-700',
@@ -1335,11 +1355,12 @@ export default function App() {
             <div className={`rounded-xl border p-4 sm:p-5 ${bannerColorMap[analysisResult.ai.signal]}`}>
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  {isDangerous ? (
+                  {/* Categorical icons: warning for AVOID, shield for safe, info for middle */}
+                  {analysisResult.ai.signal === 'AVOID' ? (
                     <svg className="w-6 h-6 text-red-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                     </svg>
-                  ) : isSafe ? (
+                  ) : analysisResult.ai.signal === 'BUY' || analysisResult.ai.signal === 'STRONG_BUY' ? (
                     <svg className="w-6 h-6 text-emerald-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                     </svg>
@@ -1351,7 +1372,7 @@ export default function App() {
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="text-white font-bold text-sm sm:text-base">{analysisResult.ai.signal.replace('_', ' ')}</span>
-                      <span className="text-zinc-300 text-sm">— Risk Score: {analysisResult.ai.score}/100</span>
+                      <span className="text-zinc-300 text-sm">— Risk Score: <span className="font-bold" style={{ color: getScoreColor(analysisResult.ai.score) }}>{analysisResult.ai.score}</span>/100</span>
                     </div>
                     <div className={`text-xs font-semibold tracking-wide mt-0.5 ${riskSubtitleColor}`}>{riskSubtitle}</div>
                   </div>
@@ -1422,7 +1443,7 @@ export default function App() {
                     </div>
                   </div>
                 </div>
-                <ScoreGauge score={analysisResult.ai.score} signal={analysisResult.ai.signal} />
+                <ScoreGauge score={analysisResult.ai.score} aiScore={analysisResult.ai.aiScore} rulesOverride={analysisResult.ai.rulesOverride} />
               </div>
             </div>
 
@@ -1649,26 +1670,78 @@ export default function App() {
                   </div>
                   <h3 className="font-semibold text-emerald-500">AI Analysis</h3>
                 </div>
-                <p className="text-sm text-zinc-400 leading-relaxed mb-4">{analysisResult.ai.verdict}</p>
 
-                {/* Risk Flags */}
-                {analysisResult.ai.flags.length > 0 && (
-                  <div className="space-y-2 mb-4">
-                    <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Risk Factors</h4>
-                    {analysisResult.ai.flags.map((flag, i) => (
-                      <div key={i} className="flex items-start gap-2">
-                        <span className={`mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold leading-none flex-shrink-0 ${
-                          flag.severity === 'CRITICAL' ? 'bg-red-500/20 text-red-400' :
-                          flag.severity === 'HIGH' ? 'bg-amber-500/20 text-amber-400' :
-                          'bg-yellow-500/15 text-yellow-400'
-                        }`}>
-                          {flag.severity === 'CRITICAL' ? 'CRIT' : flag.severity === 'HIGH' ? 'HIGH' : 'MED'}
-                        </span>
-                        <span className="text-xs text-zinc-400 leading-relaxed">{flag.message}</span>
-                      </div>
-                    ))}
+                {/* Sentinel Override Banner */}
+                {analysisResult.ai.rulesOverride && analysisResult.ai.aiScore !== undefined && (
+                  <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-3 mb-4">
+                    <div className="flex items-center gap-2 mb-1">
+                      <svg className="w-4 h-4 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                      <span className="text-sm font-semibold text-orange-400">Guardrails Adjusted Score</span>
+                    </div>
+                    <p className="text-xs text-orange-300/80">
+                      AI rated this token <span className="font-mono font-bold" style={{ color: getScoreColor(analysisResult.ai.aiScore) }}>{analysisResult.ai.aiScore}</span>,
+                      but structural risk factors adjusted it to <span className="font-mono font-bold" style={{ color: getScoreColor(analysisResult.ai.score) }}>{analysisResult.ai.score}</span>.
+                      {analysisResult.ai.score < analysisResult.ai.aiScore && ' The guardrails detected risks the AI underweighted.'}
+                      {analysisResult.ai.score > analysisResult.ai.aiScore && ' Security fundamentals limited the downside risk assessment.'}
+                    </p>
                   </div>
                 )}
+
+                <p className="text-sm text-zinc-400 leading-relaxed mb-4">{analysisResult.ai.verdict}</p>
+
+                {/* Split flags into Risk Factors and Protective Factors */}
+                {analysisResult.ai.flags.length > 0 && (() => {
+                  // Identify protective flags by type or message content
+                  const isProtective = (flag: { type: string; message: string }) => {
+                    const protectiveTypes = ['SECURITY', 'CONTRACT'];
+                    const protectiveKeywords = ['revoked', 'locked', 'protection', 'limit downside', 'community-owned', 'exited', 'safe'];
+                    return protectiveTypes.includes(flag.type) ||
+                           protectiveKeywords.some(kw => flag.message.toLowerCase().includes(kw));
+                  };
+
+                  const riskFlags = analysisResult.ai.flags.filter(f => !isProtective(f));
+                  const protectiveFlags = analysisResult.ai.flags.filter(f => isProtective(f));
+
+                  return (
+                    <>
+                      {/* Risk Factors */}
+                      {riskFlags.length > 0 && (
+                        <div className="space-y-2 mb-4">
+                          <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Risk Factors</h4>
+                          {riskFlags.map((flag, i) => (
+                            <div key={i} className="flex items-start gap-2">
+                              <span className={`mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold leading-none flex-shrink-0 ${
+                                flag.severity === 'CRITICAL' ? 'bg-red-500/20 text-red-400' :
+                                flag.severity === 'HIGH' ? 'bg-amber-500/20 text-amber-400' :
+                                'bg-yellow-500/15 text-yellow-400'
+                              }`}>
+                                {flag.severity === 'CRITICAL' ? 'CRIT' : flag.severity === 'HIGH' ? 'HIGH' : 'MED'}
+                              </span>
+                              <span className="text-xs text-zinc-400 leading-relaxed">{flag.message}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Protective Factors */}
+                      {protectiveFlags.length > 0 && (
+                        <div className="space-y-2 mb-4">
+                          <h4 className="text-xs font-semibold text-emerald-600 uppercase tracking-wider">Protective Factors</h4>
+                          {protectiveFlags.map((flag, i) => (
+                            <div key={i} className="flex items-start gap-2">
+                              <span className="mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold leading-none flex-shrink-0 bg-emerald-500/20 text-emerald-400">
+                                SAFE
+                              </span>
+                              <span className="text-xs text-zinc-400 leading-relaxed">{flag.message}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
 
                 {/* Links */}
                 <div className="mt-4 pt-4 border-t border-zinc-800 flex items-center gap-2 flex-wrap">

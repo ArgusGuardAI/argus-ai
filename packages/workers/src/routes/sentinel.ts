@@ -2088,6 +2088,9 @@ sentinelRoutes.post('/analyze', async (c) => {
       s.type === 'twitter' || s.url?.includes('twitter.com') || s.url?.includes('x.com')
     ));
 
+    // Capture AI score before rules are applied
+    const aiScore = aiAnalysis.riskScore;
+
     const analysis = applyHardcodedRules(aiAnalysis, {
       tokenInfo: {
         marketCap: tokenInfo.marketCap,
@@ -2108,7 +2111,14 @@ sentinelRoutes.post('/analyze', async (c) => {
       hasTwitter,
       creatorAddress,
     });
-    console.log(`[Sentinel] Final score after rules: ${analysis.riskScore} (${analysis.riskLevel})`);
+
+    // Track if rules overrode the AI score
+    const rulesOverride = aiScore !== analysis.riskScore;
+    if (rulesOverride) {
+      console.log(`[Sentinel] Rules override: AI=${aiScore} → Final=${analysis.riskScore} (${analysis.riskLevel})`);
+    } else {
+      console.log(`[Sentinel] Final score: ${analysis.riskScore} (${analysis.riskLevel})`);
+    }
 
     // ============================================
     // AUTO-TWEET: Alert on high-risk tokens
@@ -2231,6 +2241,8 @@ sentinelRoutes.post('/analyze', async (c) => {
       },
       network,
       analysis,
+      aiScore, // Original AI score before rules applied
+      rulesOverride, // Whether guardrails adjusted the score
       creatorInfo,
       holderDistribution,
       bundleInfo,
