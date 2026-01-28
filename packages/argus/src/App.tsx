@@ -837,8 +837,13 @@ export default function App() {
   const lpLockedValue = analysisResult
     ? (analysisResult.market.liquidity * analysisResult.security.lpLockedPercent / 100)
     : 0;
-  // LP lock only meaningful when there's real value locked (>$1K)
-  const hasRealLockedValue = lpLockedValue >= 1000;
+  // Mature tokens (high mcap/liquidity) may not have LP lock data from RugCheck
+  // Don't penalize them - the data is simply unavailable for CEX-listed tokens
+  const isMatureToken = analysisResult
+    ? (analysisResult.market.marketCap > 50_000_000 || analysisResult.market.liquidity > 1_000_000)
+    : false;
+  // LP lock only meaningful when there's real value locked (>$1K), skip check for mature tokens
+  const hasRealLockedValue = isMatureToken || lpLockedValue >= 1000;
 
   const criticalIssueCount = analysisResult ? [
     !analysisResult.security.mintAuthorityRevoked,
@@ -1335,13 +1340,16 @@ export default function App() {
                     </span>
                   )}
                   {/* Show LP locked value - color based on actual value locked */}
-                  <span className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${
-                    hasRealLockedValue
-                      ? 'bg-emerald-800/60 text-emerald-300 border-emerald-700/50'
-                      : 'bg-red-800/60 text-red-300 border-red-700/50'
-                  }`}>
-                    {fmt(lpLockedValue)} LOCKED
-                  </span>
+                  {/* Hide LP badge for mature tokens with no data (shows N/A in security card) */}
+                  {!(isMatureToken && lpLockedValue === 0) && (
+                    <span className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${
+                      hasRealLockedValue
+                        ? 'bg-emerald-800/60 text-emerald-300 border-emerald-700/50'
+                        : 'bg-red-800/60 text-red-300 border-red-700/50'
+                    }`}>
+                      {fmt(lpLockedValue)} LOCKED
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -1433,8 +1441,12 @@ export default function App() {
                   {/* Show LP locked value */}
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-zinc-500">LP Locked</span>
-                    <span className={`text-sm font-semibold ${hasRealLockedValue ? 'text-green-500' : 'text-red-500'}`}>
-                      {fmt(lpLockedValue)}
+                    <span className={`text-sm font-semibold ${
+                      isMatureToken && lpLockedValue === 0
+                        ? 'text-zinc-400'
+                        : hasRealLockedValue ? 'text-green-500' : 'text-red-500'
+                    }`}>
+                      {isMatureToken && lpLockedValue === 0 ? 'N/A' : fmt(lpLockedValue)}
                     </span>
                   </div>
                 </div>
