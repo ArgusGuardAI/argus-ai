@@ -8,7 +8,19 @@
 
 Argus AI is a comprehensive token research tool that provides instant AI analysis, security checks, bundle detection, and one-click trading for Solana tokens.
 
-**Live**: [app.argusguard.io](https://app.argusguard.io) | **Landing**: [argusguard.io](https://argusguard.io) | **X**: [@ArgusPanoptes7z](https://x.com/ArgusPanoptes7z)
+**Live**: [app.argusguard.io](https://app.argusguard.io) | **Landing**: [argusguard.io](https://argusguard.io) | **X**: [@ArgusPanoptes7z](https://x.com/ArgusPanoptes7z) | **Telegram**: [@ArgusAIAlerts](https://t.me/ArgusAIAlerts)
+
+---
+
+## Pricing
+
+| Tier | Requirement | Scans | Features |
+|------|-------------|-------|----------|
+| **Free** | None | 10/day | Full analysis, trading, bundle detection |
+| **Holder** | 1,000+ $ARGUS | Unlimited | All features + priority support |
+| **Pro** | 10,000+ $ARGUS | Unlimited | All features + early access |
+
+**No subscriptions.** Just hold $ARGUS tokens in your wallet to unlock unlimited access.
 
 ---
 
@@ -174,6 +186,22 @@ packages/
 ---
 
 ## API Reference
+
+### Rate Limiting
+
+The API enforces rate limits based on user tier:
+
+| Tier | Daily Limit | Identified By |
+|------|-------------|---------------|
+| Free | 10 scans | IP address or wallet |
+| Holder (1K+ $ARGUS) | Unlimited | Wallet address |
+| Pro (10K+ $ARGUS) | Unlimited | Wallet address |
+
+**Response Headers:**
+- `X-RateLimit-Limit`: Maximum scans allowed
+- `X-RateLimit-Remaining`: Scans remaining today
+- `X-RateLimit-Reset`: UTC timestamp when limit resets
+- `X-User-Tier`: Current user tier (free/holder/pro)
 
 ### POST /api/analyze-full
 

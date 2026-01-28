@@ -31,6 +31,7 @@ Development guidance for AI assistants working on the Solana Safeguard AI codeba
 - Dedicated trading wallet with backup safety
 - Watchlist and recent searches
 - Dark theme UI
+- Rate limiting (10 free scans/day, unlimited for $ARGUS holders)
 
 ---
 
@@ -130,10 +131,11 @@ pnpm dev                  # Start workers at localhost:8787
 
 | File | Purpose |
 |------|---------|
-| `src/index.ts` | Main worker entry, route handling |
+| `src/index.ts` | Main worker entry, route handling, CORS config |
 | `src/routes/sentinel.ts` | `/sentinel/analyze` endpoint (production) with structural risk guardrails |
 | `src/routes/analyze.ts` | Token analysis logic |
 | `src/routes/jupiter.ts` | Jupiter swap proxy |
+| `src/services/rate-limit.ts` | Rate limiting logic (10/day free, unlimited for holders) |
 
 ---
 
@@ -154,6 +156,37 @@ Returns: { tokenInfo, analysis, holderDistribution, bundleInfo, network, creator
 ```
 
 The App.tsx `analyzeToken()` function maps the Workers API response to the local `AnalysisResult` interface format.
+
+---
+
+## Rate Limiting
+
+The `/sentinel/analyze` endpoint enforces rate limits:
+
+| Tier | Daily Limit | How to Unlock |
+|------|-------------|---------------|
+| Free | 10 scans | Default for all users |
+| Holder | Unlimited | Hold 1,000+ $ARGUS tokens |
+| Pro | Unlimited | Hold 10,000+ $ARGUS tokens |
+
+**Implementation:**
+- `packages/workers/src/services/rate-limit.ts` - Rate limit logic
+- Users identified by `X-Wallet-Address` header (if connected) or IP address
+- Limits stored in Cloudflare KV (`SCAN_CACHE` namespace)
+- Resets daily at midnight UTC
+
+**Response Headers:**
+```
+X-RateLimit-Limit: 10
+X-RateLimit-Remaining: 7
+X-RateLimit-Reset: 1706486400000
+X-User-Tier: free
+```
+
+**Frontend handling:**
+- `App.tsx` sends `X-Wallet-Address` header when trading wallet is loaded
+- Shows "X scans left today" when under 10 remaining
+- Deep links from Telegram show confirmation dialog before using a scan
 
 ---
 
