@@ -778,6 +778,18 @@ export default function App() {
     }
   };
 
+  // Handle ?token= URL parameter for deep linking from Telegram/X
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tokenParam = params.get('token');
+    if (tokenParam && tokenParam.trim()) {
+      setTokenInput(tokenParam.trim());
+      analyzeToken(tokenParam.trim());
+      // Clear the URL parameter after reading it
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const fmt = (n?: number) => {
     if (n === undefined || n === null) return '--';
     if (n >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
@@ -803,10 +815,18 @@ export default function App() {
   const cardBorder = isDangerous ? 'border-red-800/40' : 'border-zinc-800';
   const cardBg = isDangerous ? 'bg-zinc-900/80' : 'bg-zinc-900';
 
+  // Calculate actual LP locked value (more meaningful than percentage)
+  const lpLockedValue = analysisResult
+    ? (analysisResult.market.liquidity * analysisResult.security.lpLockedPercent / 100)
+    : 0;
+  // LP lock only meaningful when there's real value locked (>$1K)
+  const hasRealLockedValue = lpLockedValue >= 1000;
+
   const criticalIssueCount = analysisResult ? [
     !analysisResult.security.mintAuthorityRevoked,
     !analysisResult.security.freezeAuthorityRevoked,
-    analysisResult.security.lpLockedPercent < 10,
+    // Only count LP lock as critical when there's real value at risk
+    !hasRealLockedValue,
   ].filter(Boolean).length : 0;
 
   const securityIsDangerous = criticalIssueCount > 0;
@@ -1291,14 +1311,13 @@ export default function App() {
                       {criticalIssueCount} CRITICAL
                     </span>
                   )}
+                  {/* Show LP locked value - color based on actual value locked */}
                   <span className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${
-                    analysisResult.security.lpLockedPercent > 50
+                    hasRealLockedValue
                       ? 'bg-emerald-800/60 text-emerald-300 border-emerald-700/50'
-                      : analysisResult.security.lpLockedPercent < 10
-                      ? 'bg-red-800/60 text-red-300 border-red-700/50'
-                      : 'bg-amber-800/60 text-amber-300 border-amber-700/50'
+                      : 'bg-red-800/60 text-red-300 border-red-700/50'
                   }`}>
-                    {analysisResult.security.lpLockedPercent.toFixed(0)}% LP LOCKED
+                    {fmt(lpLockedValue)} LOCKED
                   </span>
                 </div>
               </div>
@@ -1388,20 +1407,22 @@ export default function App() {
                       )}
                     </span>
                   </div>
+                  {/* Show LP locked value */}
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-zinc-500">LP Locked</span>
-                    <span className={`text-sm font-semibold ${analysisResult.security.lpLockedPercent > 50 ? 'text-green-500' : analysisResult.security.lpLockedPercent < 10 ? 'text-red-500' : 'text-amber-500'}`}>
-                      {analysisResult.security.lpLockedPercent.toFixed(0)}%
+                    <span className={`text-sm font-semibold ${hasRealLockedValue ? 'text-green-500' : 'text-red-500'}`}>
+                      {fmt(lpLockedValue)}
                     </span>
                   </div>
                 </div>
-                {analysisResult.security.lpLockedPercent < 10 && (
+                {/* Show RUG RISK warning when locked value is insignificant */}
+                {!hasRealLockedValue && (
                   <div className="mt-3 pt-3 border-t border-red-800/30">
                     <p className="text-xs text-red-400 font-semibold flex items-center gap-1.5">
                       <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                       </svg>
-                      RUG RISK: Liquidity can be pulled at any time
+                      RUG RISK: Less than $1K liquidity locked
                     </p>
                   </div>
                 )}
