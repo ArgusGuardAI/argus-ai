@@ -1066,8 +1066,8 @@ export default function App() {
                             Refresh
                           </button>
                           <button
-                            onClick={() => {
-                              const k = autoTrade.exportPrivateKey();
+                            onClick={async () => {
+                              const k = await autoTrade.exportPrivateKey();
                               if (k) {
                                 navigator.clipboard.writeText(k);
                                 setExportKeyCopied(true);
@@ -1099,8 +1099,8 @@ export default function App() {
                   {!showImport ? (
                     <>
                       <button
-                        onClick={() => {
-                          const { privateKey } = autoTrade.generateWallet();
+                        onClick={async () => {
+                          const { privateKey } = await autoTrade.generateWallet();
                           setNewWalletKey(privateKey);
                           setShowBackupModal(true);
                           setShowKey(false);
@@ -1128,7 +1128,7 @@ export default function App() {
                         className="px-3 py-2 rounded-lg text-sm border border-zinc-700 bg-zinc-800 text-white w-64 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                       />
                       <button
-                        onClick={() => { autoTrade.importWallet(importKey); setImportKey(''); setShowImport(false); }}
+                        onClick={async () => { await autoTrade.importWallet(importKey); setImportKey(''); setShowImport(false); }}
                         className="px-4 py-2 rounded-lg text-sm font-medium bg-emerald-500 text-white"
                       >
                         Import
@@ -1161,8 +1161,8 @@ export default function App() {
               </p>
             </div>
             <button
-              onClick={() => {
-                const key = autoTrade.exportPrivateKey();
+              onClick={async () => {
+                const key = await autoTrade.exportPrivateKey();
                 if (key) {
                   setNewWalletKey(key);
                   setShowBackupModal(true);
@@ -2433,8 +2433,8 @@ export default function App() {
                 Cancel
               </button>
               <button
-                onClick={() => {
-                  autoTrade.deleteWallet();
+                onClick={async () => {
+                  await autoTrade.deleteWallet();
                   setShowDeleteModal(false);
                   setShowWalletMenu(false);
                   localStorage.removeItem('argus_backup_confirmed');

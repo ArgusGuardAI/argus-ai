@@ -1,0 +1,19 @@
+/*
+  # Content Security Policy - STRICT
+  # Only allow scripts from this origin, block everything else
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; object-src 'none'; frame-ancestors https://app.argusguard.io https://argusguard.io http://localhost:3000;
+
+  # Prevent clickjacking
+  X-Frame-Options: ALLOW-FROM https://app.argusguard.io
+
+  # Prevent MIME type sniffing
+  X-Content-Type-Options: nosniff
+
+  # Enable XSS protection
+  X-XSS-Protection: 1; mode=block
+
+  # Referrer policy - don't leak information
+  Referrer-Policy: no-referrer
+
+  # Permissions policy - disable all features we don't need
+  Permissions-Policy: accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()

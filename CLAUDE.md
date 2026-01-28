@@ -44,8 +44,11 @@ packages/
 │   ├── src/main.tsx     # Subdomain-aware routing
 │   ├── src/pages/       # Landing page
 │   ├── src/hooks/       # useAutoTrade hook (trading logic)
-│   ├── src/lib/         # Jupiter swap, trading wallet
+│   ├── src/lib/         # Jupiter swap, trading wallet (vault client)
 │   └── src/contexts/    # Wallet auth context
+├── vault/           # Secure Key Vault (secure.argusguard.io)
+│   ├── src/vault.ts     # Isolated key management, signing
+│   └── public/_headers  # Strict CSP for origin isolation
 ├── sniper/          # Token Scanner Backend (local dev)
 │   ├── src/server.ts    # HTTP + WebSocket server
 │   ├── src/engine/      # Analyzer, pre-filter, launch-filter
@@ -61,15 +64,20 @@ packages/
 ## Deployment
 
 ```bash
-# Argus Dashboard (app.argusguard.io)
+# 1. Vault (secure.argusguard.io) - deploy first for new installs
+cd packages/vault
+pnpm build
+npx wrangler pages deploy dist --project-name argusguard-vault
+
+# 2. Argus Dashboard (app.argusguard.io)
 cd packages/argus
 pnpm build
 npx wrangler pages deploy dist --project-name argusguard-app
 
-# Landing Page (argusguard.io) - same build, separate project
+# 3. Landing Page (argusguard.io) - same build, separate project
 npx wrangler pages deploy dist --project-name argusguard-website
 
-# Workers API
+# 4. Workers API
 cd packages/workers
 npx wrangler deploy
 ```
@@ -79,6 +87,7 @@ npx wrangler deploy
 |---------|--------|---------|
 | `argusguard-app` | app.argusguard.io | Dashboard app |
 | `argusguard-website` | argusguard.io | Landing page |
+| `argusguard-vault` | secure.argusguard.io | Key vault (isolated origin) |
 | Workers | (see wrangler.toml) | API |
 
 ---
@@ -92,6 +101,10 @@ pnpm install              # Install dependencies
 # Argus (Dashboard)
 cd packages/argus
 pnpm dev                  # Start dashboard at localhost:3000
+
+# Vault (Key Management) - required for trading wallet to work
+cd packages/vault
+pnpm dev                  # Start vault at localhost:3001
 
 # Sniper (Local Backend)
 cd packages/sniper
@@ -115,8 +128,15 @@ pnpm dev                  # Start workers at localhost:8787
 | `src/pages/Landing.tsx` | Marketing landing page with feature showcase, live $ARGUS token ticker |
 | `src/hooks/useAutoTrade.ts` | Trading logic: buy, sell, position tracking, wallet management |
 | `src/lib/jupiter.ts` | Jupiter swap integration for buys/sells, parseSwapError for human-readable errors |
-| `src/lib/tradingWallet.ts` | Dedicated trading wallet (encrypted localStorage) |
+| `src/lib/tradingWallet.ts` | VaultClient - communicates with vault via postMessage for key operations |
 | `src/contexts/AuthContext.tsx` | Wallet connection and auth tier management |
+
+### Vault Package (`packages/vault/`)
+
+| File | Purpose |
+|------|---------|
+| `src/vault.ts` | Isolated key management: stores encrypted keys, handles signing via postMessage |
+| `public/_headers` | Strict CSP headers for Cloudflare Pages (script-src 'self' only) |
 
 ### Sniper Package (`packages/sniper/`)
 
@@ -253,6 +273,90 @@ These are applied **only on the backend** to avoid double-counting with AI promp
 
 ---
 
+## Vault Security Architecture
+
+The trading wallet uses **Origin Isolation** (the "Vault Pattern") to protect private keys from malicious browser extensions and XSS attacks.
+
+### How It Works
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  app.argusguard.io (Main App)                                   │
+│                                                                 │
+│  ┌───────────────────┐     postMessage      ┌─────────────────┐│
+│  │  tradingWallet.ts │ ◄──────────────────► │  Hidden iframe  ││
+│  │  (VaultClient)    │                      │  to vault       ││
+│  └───────────────────┘                      └─────────────────┘│
+│                                                      │          │
+│  - Creates unsigned transactions                     │          │
+│  - Manages UI, positions, settings                   │          │
+│  - Makes API calls                                   │          │
+│  - NEVER sees private key                            │          │
+└─────────────────────────────────────────────────────────────────┘
+                                                       │
+                                               Cross-Origin
+                                                       │
+┌─────────────────────────────────────────────────────────────────┐
+│  secure.argusguard.io (Vault)                                   │
+│                                                                 │
+│  - Stores encrypted private key in localStorage                 │
+│  - Decrypts key in memory when needed                          │
+│  - Signs transactions, returns signature                        │
+│  - Strict CSP: script-src 'self' only                          │
+│  - No third-party scripts, no analytics                        │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Security Benefits
+
+| Attack Vector | Protection |
+|---------------|------------|
+| Malicious browser extension on app | Cannot access vault iframe's memory (cross-origin) |
+| XSS on main app | Cannot execute code in vault context |
+| Supply chain attack (npm package) | Vault has no dependencies to compromise |
+| Content script injection | Blocked by strict CSP headers |
+
+### Packages
+
+```
+packages/
+├── argus/           # Main app (app.argusguard.io)
+│   └── src/lib/tradingWallet.ts  # VaultClient - communicates via postMessage
+└── vault/           # Key vault (secure.argusguard.io)
+    ├── src/vault.ts              # Message handler, signing logic
+    └── public/_headers           # CSP headers for Cloudflare Pages
+```
+
+### Deployment
+
+```bash
+# Deploy vault (must be done first for new installs)
+cd packages/vault
+pnpm build
+npx wrangler pages deploy dist --project-name argusguard-vault
+
+# Then deploy main app
+cd packages/argus
+pnpm build
+npx wrangler pages deploy dist --project-name argusguard-app
+```
+
+### Local Development
+
+Run both the app and vault dev servers:
+
+```bash
+# Terminal 1: Main app (port 3000)
+cd packages/argus && pnpm dev
+
+# Terminal 2: Vault (port 3001)
+cd packages/vault && pnpm dev
+```
+
+The tradingWallet.ts automatically connects to `localhost:3001` in development.
+
+---
+
 ## Dashboard UI
 
 Single-page dark theme layout:
@@ -312,14 +416,20 @@ SUPABASE_ANON_KEY=       # Optional
 
 ## LocalStorage Keys
 
+### Main App (app.argusguard.io)
 | Key | Purpose |
 |-----|---------|
-| `argus_trading_wallet` | Encrypted trading wallet keypair |
+| `argus_trading_wallet_name` | Custom name for trading wallet |
 | `argus_trading_state` | Positions, P&L, trade history |
 | `argus_recent_searches` | Last 10 analyzed tokens |
 | `argus_watchlist` | Saved tokens to watch |
 | `argus_wallet_backup_confirmed` | Whether user confirmed wallet backup |
-| `argus_wallet_name` | Custom name for trading wallet |
+
+### Vault (secure.argusguard.io)
+| Key | Purpose |
+|-----|---------|
+| `argus_vault_key` | Encrypted trading wallet keypair (isolated origin) |
+| `argus_vault_name` | Wallet name (synced with main app) |
 
 ---
 

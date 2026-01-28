@@ -244,50 +244,64 @@ export function useAutoTrade(
   // Load trading wallet on mount and recover untracked positions
   const hasRecoveredRef = useRef(false);
   useEffect(() => {
-    if (tradingWallet.exists()) {
-      const loaded = tradingWallet.load();
-      if (loaded) {
-        setWallet({
-          isLoaded: true,
-          address: tradingWallet.getAddress(),
-          balance: 0,
-        });
-        refreshBalance();
+    // Initialize vault and load wallet asynchronously
+    const initWallet = async () => {
+      try {
+        // Initialize vault connection first
+        await tradingWallet.init();
 
-        // Auto-recover untracked positions on first load
-        if (!hasRecoveredRef.current) {
-          hasRecoveredRef.current = true;
-          // Delay recovery to allow state to settle
-          setTimeout(async () => {
-            const walletAddress = tradingWallet.getAddress();
-            if (walletAddress) {
-              console.log('[AutoTrade] Starting recovery scan...');
-              try {
-                const tokenBalances = await getAllTokenBalances(walletAddress);
-                if (tokenBalances.length > 0) {
-                  // Check against current positions from localStorage
-                  const persisted = loadPersistedState();
-                  const trackedAddresses = new Set([
-                    ...(persisted?.positions?.map(p => p.tokenAddress) || []),
-                    ...(persisted?.soldPositions?.map(p => p.tokenAddress) || []),
-                  ]);
+        // Check if wallet exists in vault
+        const exists = await tradingWallet.existsAsync();
+        if (exists) {
+          const loaded = await tradingWallet.loadAsync();
+          if (loaded) {
+            setWallet({
+              isLoaded: true,
+              address: tradingWallet.getAddress(),
+              balance: 0,
+            });
+            refreshBalance();
 
-                  const untrackedCount = tokenBalances.filter(t => !trackedAddresses.has(t.mint)).length;
-                  if (untrackedCount > 0) {
-                    console.log(`[AutoTrade] Found ${untrackedCount} untracked tokens, triggering recovery...`);
-                    // The actual recovery will be done via recoverUntrackedPositions called from UI
-                    // or we can trigger it here. For now, just log to console.
-                    // The UI will have a button to manually trigger recovery if needed.
+            // Auto-recover untracked positions on first load
+            if (!hasRecoveredRef.current) {
+              hasRecoveredRef.current = true;
+              // Delay recovery to allow state to settle
+              setTimeout(async () => {
+                const walletAddress = tradingWallet.getAddress();
+                if (walletAddress) {
+                  console.log('[AutoTrade] Starting recovery scan...');
+                  try {
+                    const tokenBalances = await getAllTokenBalances(walletAddress);
+                    if (tokenBalances.length > 0) {
+                      // Check against current positions from localStorage
+                      const persisted = loadPersistedState();
+                      const trackedAddresses = new Set([
+                        ...(persisted?.positions?.map(p => p.tokenAddress) || []),
+                        ...(persisted?.soldPositions?.map(p => p.tokenAddress) || []),
+                      ]);
+
+                      const untrackedCount = tokenBalances.filter(t => !trackedAddresses.has(t.mint)).length;
+                      if (untrackedCount > 0) {
+                        console.log(`[AutoTrade] Found ${untrackedCount} untracked tokens, triggering recovery...`);
+                        // The actual recovery will be done via recoverUntrackedPositions called from UI
+                        // or we can trigger it here. For now, just log to console.
+                        // The UI will have a button to manually trigger recovery if needed.
+                      }
+                    }
+                  } catch (e) {
+                    console.error('[AutoTrade] Recovery scan failed:', e);
                   }
                 }
-              } catch (e) {
-                console.error('[AutoTrade] Recovery scan failed:', e);
-              }
+              }, 2000);
             }
-          }, 2000);
+          }
         }
+      } catch (error) {
+        console.error('[AutoTrade] Failed to initialize vault:', error);
       }
-    }
+    };
+
+    initWallet();
   }, []);
 
   // Refresh balance periodically when enabled
@@ -390,7 +404,7 @@ export function useAutoTrade(
         position.tokenAddress,
         balanceInfo.balance, // Sell entire balance
         publicKey,
-        (tx: VersionedTransaction) => Promise.resolve(tradingWallet.signTransaction(tx)),
+        (tx: VersionedTransaction) => tradingWallet.signTransaction(tx),
         currentConfig.maxSlippageBps,
         true // withAiFee
       );
@@ -627,9 +641,9 @@ export function useAutoTrade(
    * Generate a new trading wallet
    * Returns both address and private key for backup prompt
    */
-  const generateWallet = useCallback((): { address: string; privateKey: string } => {
-    const address = tradingWallet.generate();
-    const privateKey = tradingWallet.exportPrivateKey() || '';
+  const generateWallet = useCallback(async (): Promise<{ address: string; privateKey: string }> => {
+    const address = await tradingWallet.generate();
+    const privateKey = await tradingWallet.exportPrivateKey() || '';
     setWallet({
       isLoaded: true,
       address,
@@ -642,9 +656,9 @@ export function useAutoTrade(
   /**
    * Import trading wallet from private key
    */
-  const importWallet = useCallback((privateKey: string) => {
+  const importWallet = useCallback(async (privateKey: string): Promise<string> => {
     try {
-      const address = tradingWallet.import(privateKey);
+      const address = await tradingWallet.import(privateKey);
       setWallet({
         isLoaded: true,
         address,
@@ -662,8 +676,8 @@ export function useAutoTrade(
   /**
    * Delete trading wallet
    */
-  const deleteWallet = useCallback(() => {
-    tradingWallet.delete();
+  const deleteWallet = useCallback(async (): Promise<void> => {
+    await tradingWallet.delete();
     setWallet({
       isLoaded: false,
       address: null,
@@ -676,7 +690,7 @@ export function useAutoTrade(
   /**
    * Export private key (for backup)
    */
-  const exportPrivateKey = useCallback((): string | null => {
+  const exportPrivateKey = useCallback(async (): Promise<string | null> => {
     return tradingWallet.exportPrivateKey();
   }, []);
 
@@ -823,7 +837,7 @@ export function useAutoTrade(
         currentConfig.buyAmountSol,
         publicKey,
         // This is the key difference - trading wallet signs INSTANTLY
-        (tx: VersionedTransaction) => Promise.resolve(tradingWallet.signTransaction(tx)),
+        (tx: VersionedTransaction) => tradingWallet.signTransaction(tx),
         currentConfig.maxSlippageBps,
         true // withAiFee - support platform fee if configured
       );
