@@ -174,6 +174,7 @@ export function formatAlertHtml(data: AlertData): string {
 
   lines.push('');
   lines.push(`\u{1F50D} <a href="https://app.argusguard.io/?token=${data.tokenAddress}">View Full Analysis</a>`);
+  lines.push(`<i>(Uses 1 of your 10 daily scans)</i>`);
   lines.push('');
   lines.push('#Solana #RugPull #DYOR');
 
@@ -279,6 +280,7 @@ export function formatAnalysisHtml(result: AnalysisResult): string {
 
   // Link
   lines.push(`\u{1F50D} <a href="https://app.argusguard.io/?token=${tokenInfo.address}">View on Argus</a>`);
+  lines.push(`<i>(Uses 1 of your 10 daily scans)</i>`);
 
   return lines.join('\n');
 }

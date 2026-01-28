@@ -450,6 +450,9 @@ export default function App() {
   // Buy warning modal state
   const [buyWarning, setBuyWarning] = useState<{ message: string; symbol: string } | null>(null);
 
+  // Deep link confirmation modal (from Telegram/X)
+  const [pendingDeepLink, setPendingDeepLink] = useState<string | null>(null);
+
   const log = useCallback((msg: string, type = 'info') => {
     setLogs(prev => [...prev.slice(-49), { time: new Date(), msg, type }]);
   }, []);
@@ -798,7 +801,8 @@ export default function App() {
     const tokenParam = params.get('token');
     if (tokenParam && tokenParam.trim()) {
       setTokenInput(tokenParam.trim());
-      analyzeToken(tokenParam.trim());
+      // Show confirmation modal instead of auto-analyzing
+      setPendingDeepLink(tokenParam.trim());
       // Clear the URL parameter after reading it
       window.history.replaceState({}, '', window.location.pathname);
     }
@@ -2475,6 +2479,68 @@ export default function App() {
                 className="flex-1 py-3 rounded-lg font-semibold bg-amber-500 text-black hover:bg-amber-400 transition-colors"
               >
                 Buy Anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Deep Link Confirmation Modal (from Telegram/X) */}
+      {pendingDeepLink && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl max-w-md w-full p-6 shadow-2xl">
+            {/* Header */}
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 bg-emerald-500/20 rounded-xl flex items-center justify-center">
+                <svg className="w-6 h-6 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white">Analyze Token?</h3>
+                <p className="text-sm text-zinc-400">From Telegram/X link</p>
+              </div>
+            </div>
+
+            {/* Token Address */}
+            <div className="bg-zinc-800 border border-zinc-700 rounded-lg p-3 mb-4">
+              <p className="text-xs text-zinc-500 mb-1">Token Address</p>
+              <p className="text-sm text-white font-mono break-all">{pendingDeepLink}</p>
+            </div>
+
+            {/* Warning */}
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 mb-4">
+              <p className="text-sm text-amber-400">
+                <span className="font-semibold">This will use 1 of your daily scans.</span>
+                {scansRemaining !== null && (
+                  <span className="block mt-1 text-amber-400/80">
+                    You have {scansRemaining} scan{scansRemaining !== 1 ? 's' : ''} remaining today.
+                  </span>
+                )}
+              </p>
+            </div>
+
+            <p className="text-sm text-zinc-400 mb-4">
+              Hold 1K+ $ARGUS tokens for unlimited scans.
+            </p>
+
+            {/* Buttons */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setPendingDeepLink(null)}
+                className="flex-1 py-3 rounded-lg font-medium bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  const token = pendingDeepLink;
+                  setPendingDeepLink(null);
+                  analyzeToken(token);
+                }}
+                className="flex-1 py-3 rounded-lg font-semibold bg-emerald-500 text-white hover:bg-emerald-400 transition-colors"
+              >
+                Analyze
               </button>
             </div>
           </div>
