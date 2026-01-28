@@ -7,15 +7,18 @@
 import { Hono } from 'hono';
 import type { Bindings } from '../index';
 
-// Jupiter paid API with authentication (from sol-bot)
+// Jupiter paid API with authentication
 const JUPITER_API = 'https://api.jup.ag';
-const JUPITER_API_KEY = '057a176a-d2af-4ff6-a35d-84ed54fcd4b4';
 
 export const jupiterRoutes = new Hono<{ Bindings: Bindings }>();
 
 // Proxy quote requests - uses /swap/v1/quote endpoint
 jupiterRoutes.get('/quote', async (c) => {
   try {
+    if (!c.env.JUPITER_API_KEY) {
+      return c.json({ error: 'Jupiter API key not configured' }, 500);
+    }
+
     const inputMint = c.req.query('inputMint');
     const outputMint = c.req.query('outputMint');
     const amount = c.req.query('amount');
@@ -33,8 +36,8 @@ jupiterRoutes.get('/quote', async (c) => {
       method: 'GET',
       headers: {
         'Accept': 'application/json',
-        'x-api-key': JUPITER_API_KEY,
-        'User-Agent': 'WhaleShield/1.0',
+        'x-api-key': c.env.JUPITER_API_KEY,
+        'User-Agent': 'ArgusGuard/1.0',
       },
     });
 
@@ -61,6 +64,10 @@ jupiterRoutes.get('/quote', async (c) => {
 // Proxy swap requests - uses /swap/v1/swap endpoint
 jupiterRoutes.post('/swap', async (c) => {
   try {
+    if (!c.env.JUPITER_API_KEY) {
+      return c.json({ error: 'Jupiter API key not configured' }, 500);
+    }
+
     const body = await c.req.json();
     console.log('[Jupiter Proxy] Building swap transaction for:', body.userPublicKey);
 
@@ -81,8 +88,8 @@ jupiterRoutes.post('/swap', async (c) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': JUPITER_API_KEY,
-        'User-Agent': 'WhaleShield/1.0',
+        'x-api-key': c.env.JUPITER_API_KEY,
+        'User-Agent': 'ArgusGuard/1.0',
       },
       body: JSON.stringify(swapRequest),
     });

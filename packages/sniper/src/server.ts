@@ -512,7 +512,7 @@ app.post('/api/analyze', async (c) => {
 });
 
 // Jupiter API key (from sol-bot config)
-const JUPITER_API_KEY = process.env.JUPITER_API_KEY || '057a176a-d2af-4ff6-a35d-84ed54fcd4b4';
+const JUPITER_API_KEY = process.env.JUPITER_API_KEY || '';
 const JUPITER_API_URL = 'https://api.jup.ag';
 
 // Jupiter API proxy (using api.jup.ag v1 with API key)

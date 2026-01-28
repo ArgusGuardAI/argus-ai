@@ -18,6 +18,7 @@ export type Bindings = {
   SUPABASE_URL: string;
   SUPABASE_ANON_KEY: string;
   HELIUS_API_KEY?: string;
+  JUPITER_API_KEY?: string;
   ARGUSGUARD_MINT?: string; // Token mint address for token gating (optional until launch)
   STRIPE_SECRET_KEY: string;
   STRIPE_WEBHOOK_SECRET: string;
