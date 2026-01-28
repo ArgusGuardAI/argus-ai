@@ -29,7 +29,8 @@ jupiterRoutes.get('/quote', async (c) => {
     }
 
     // Use /swap/v1/quote endpoint (paid API)
-    const jupiterUrl = `${JUPITER_API}/swap/v1/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=${slippageBps}`;
+    // onlyDirectRoutes=true restricts to 2 hops max for faster, more reliable execution
+    const jupiterUrl = `${JUPITER_API}/swap/v1/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=${slippageBps}&onlyDirectRoutes=true`;
     console.log('[Jupiter Proxy] Fetching quote:', jupiterUrl);
 
     const response = await fetch(jupiterUrl, {
@@ -72,13 +73,29 @@ jupiterRoutes.post('/swap', async (c) => {
     console.log('[Jupiter Proxy] Building swap transaction for:', body.userPublicKey);
 
     // Build the swap request with correct parameters for v1 API
+    // CRITICAL: Convert total fee (lamports) to price-per-compute-unit (micro-lamports)
+    // Helius returns total fee for transaction, Jupiter expects price per CU
+    // Typical swap uses ~1,400,000 compute units
+    const ESTIMATED_COMPUTE_UNITS = 1_400_000;
+    const DEFAULT_FEE_MICRO_LAMPORTS = 50; // ~0.07 SOL total at 1.4M CU
+
+    let computeUnitPrice = DEFAULT_FEE_MICRO_LAMPORTS;
+    if (body.prioritizationFeeLamports && body.prioritizationFeeLamports > 0) {
+      // Convert: total lamports → lamports per CU → micro-lamports per CU
+      const feePerUnit = body.prioritizationFeeLamports / ESTIMATED_COMPUTE_UNITS;
+      computeUnitPrice = Math.ceil(feePerUnit * 1_000_000);
+      // Clamp to reasonable bounds (1 to 10,000 micro-lamports)
+      computeUnitPrice = Math.max(1, Math.min(computeUnitPrice, 10_000));
+    }
+
+    console.log(`[Jupiter Proxy] Fee: ${body.prioritizationFeeLamports || 0} lamports → ${computeUnitPrice} micro-lamports/CU`);
+
     const swapRequest = {
       quoteResponse: body.quoteResponse,
       userPublicKey: body.userPublicKey,
       wrapAndUnwrapSol: body.wrapAndUnwrapSol ?? true,
       dynamicComputeUnitLimit: true,
-      // Use computeUnitPriceMicroLamports instead of prioritizationFeeLamports for v1
-      computeUnitPriceMicroLamports: body.prioritizationFeeLamports ? body.prioritizationFeeLamports * 1000 : 50000,
+      computeUnitPriceMicroLamports: computeUnitPrice,
     };
 
     console.log('[Jupiter Proxy] Swap request:', JSON.stringify(swapRequest).slice(0, 200));
