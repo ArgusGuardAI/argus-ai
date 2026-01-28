@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import * as d3 from 'd3';
 import { useWallet } from '@solana/wallet-adapter-react';
+import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { useAutoTrade } from './hooks/useAutoTrade';
 
 type SignalType = 'STRONG_BUY' | 'BUY' | 'WATCH' | 'HOLD' | 'AVOID';
@@ -411,7 +412,8 @@ interface WatchlistItem {
 }
 
 export default function App() {
-  const { publicKey: connectedWallet } = useWallet();
+  const { publicKey: connectedWallet, disconnect: disconnectWallet, connected: isWalletConnected } = useWallet();
+  const { setVisible: setWalletModalVisible } = useWalletModal();
   const [tokenInput, setTokenInput] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
@@ -448,6 +450,7 @@ export default function App() {
   // Export key and delete modal state
   const [exportKeyCopied, setExportKeyCopied] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showExportKeyModal, setShowExportKeyModal] = useState(false);
 
   // Buy warning modal state
   const [buyWarning, setBuyWarning] = useState<{ message: string; symbol: string } | null>(null);
@@ -906,9 +909,37 @@ export default function App() {
               </div>
             </div>
 
-            {/* Right Side - Wallet */}
+            {/* Right Side - Wallets */}
             <div className="flex items-center gap-3">
-              {/* Wallet */}
+              {/* Phantom/External Wallet Connection */}
+              {isWalletConnected && connectedWallet ? (
+                <div className="flex items-center gap-2 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-xl">
+                  <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+                  <span className="text-xs text-zinc-400 hidden sm:inline">Connected:</span>
+                  <code className="text-xs text-zinc-300">{connectedWallet.toBase58().slice(0, 4)}...{connectedWallet.toBase58().slice(-4)}</code>
+                  <button
+                    onClick={() => disconnectWallet()}
+                    className="ml-1 p-1 text-zinc-500 hover:text-red-400 hover:bg-zinc-700 rounded transition-colors"
+                    title="Disconnect wallet"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    </svg>
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setWalletModalVisible(true)}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-zinc-800 border border-zinc-700 text-zinc-300 rounded-xl hover:bg-zinc-700 hover:border-zinc-600 transition-all"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                  </svg>
+                  <span className="text-sm font-medium">Connect</span>
+                </button>
+              )}
+
+              {/* Trading Wallet */}
               {autoTrade.wallet.isLoaded ? (
                 <div className="relative">
                   <div className="flex items-center gap-1">
@@ -1071,15 +1102,7 @@ export default function App() {
                             Refresh
                           </button>
                           <button
-                            onClick={async () => {
-                              const k = await autoTrade.exportPrivateKey();
-                              if (k) {
-                                navigator.clipboard.writeText(k);
-                                setExportKeyCopied(true);
-                                setTimeout(() => setExportKeyCopied(false), 2000);
-                                log('Key copied!', 'success');
-                              }
-                            }}
+                            onClick={() => setShowExportKeyModal(true)}
                             className={`flex-1 px-3 py-2 text-xs font-medium rounded-lg transition-all ${
                               exportKeyCopied
                                 ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
@@ -2393,6 +2416,72 @@ export default function App() {
             >
               Continue to Dashboard
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Export Key Warning Modal */}
+      {showExportKeyModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl max-w-md w-full p-6 shadow-2xl">
+            {/* Header */}
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 bg-amber-500/20 rounded-xl flex items-center justify-center">
+                <svg className="w-6 h-6 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white">Export Private Key</h3>
+                <p className="text-sm text-zinc-400">Danger Zone</p>
+              </div>
+            </div>
+
+            {/* Warning */}
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 mb-4">
+              <p className="text-sm text-amber-300 font-medium mb-2">
+                Your private key gives FULL control of this wallet.
+              </p>
+              <ul className="text-xs text-amber-400/80 space-y-1">
+                <li>Never share it with anyone</li>
+                <li>Never paste it on any website</li>
+                <li>Never send it via email or chat</li>
+                <li>Store it in a secure, offline location</li>
+              </ul>
+            </div>
+
+            {/* Info */}
+            <div className="bg-zinc-800 rounded-lg p-3 mb-4">
+              <div className="text-xs text-zinc-500 mb-1">Wallet Address</div>
+              <div className="text-sm font-mono text-zinc-300 truncate">{autoTrade.wallet.address}</div>
+              <div className="text-xs text-zinc-500 mt-2">Balance</div>
+              <div className="text-sm font-semibold text-white">{autoTrade.wallet.balance.toFixed(4)} SOL</div>
+            </div>
+
+            {/* Buttons */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowExportKeyModal(false)}
+                className="flex-1 py-3 rounded-lg font-medium bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  const k = await autoTrade.exportPrivateKey();
+                  if (k) {
+                    navigator.clipboard.writeText(k);
+                    setExportKeyCopied(true);
+                    setTimeout(() => setExportKeyCopied(false), 2000);
+                    log('Private key copied to clipboard', 'success');
+                  }
+                  setShowExportKeyModal(false);
+                }}
+                className="flex-1 py-3 rounded-lg font-semibold bg-amber-600 text-white hover:bg-amber-500 transition-colors"
+              >
+                I Understand, Copy Key
+              </button>
+            </div>
           </div>
         </div>
       )}

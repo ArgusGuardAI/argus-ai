@@ -98,6 +98,7 @@ interface RulesInputData {
     txns24h?: { buys: number; sells: number };
     mintAuthorityActive: boolean;
     freezeAuthorityActive: boolean;
+    lpLockedPct?: number;
   };
   holders: HolderInfo[];
   creatorInfo: {
@@ -416,7 +417,37 @@ function applyHardcodedRules(
   }
 
   // ============================================
-  // RULE 11: COMMUNITY-OWNED TOKEN CAP
+  // RULE 11: SECURITY FUNDAMENTALS CAP
+  // ============================================
+  // Tokens with revoked authorities and locked LP can't be as risky
+  // as tokens that can be rug-pulled via mint/freeze/LP drain
+  const hasRevokedAuth = !tokenInfo.mintAuthorityActive && !tokenInfo.freezeAuthorityActive;
+  const hasLockedLP = liquidityUsd > 0 && tokenInfo.lpLockedPct !== undefined && tokenInfo.lpLockedPct > 50;
+  const hasGoodLPAmount = liquidityUsd >= 25_000;
+
+  // If authorities are revoked AND LP is locked/good amount, cap max risk
+  if (hasRevokedAuth && (hasLockedLP || hasGoodLPAmount)) {
+    // Can't be worse than 75 (WATCH territory on frontend = 25)
+    // Bundles are still risky but can't drain liquidity with these protections
+    if (adjustedScore > 75) {
+      console.log(`[Rules] Security cap: revoked auth + LP protection caps score at 75 (was ${adjustedScore})`);
+      adjustedScore = 75;
+      additionalFlags.push({
+        type: 'SECURITY',
+        severity: 'LOW',
+        message: 'Revoked authorities and LP protection limit downside risk',
+      });
+    }
+  } else if (hasRevokedAuth && liquidityUsd >= 10_000) {
+    // Just revoked auth with decent liquidity = cap at 80
+    if (adjustedScore > 80) {
+      console.log(`[Rules] Security cap: revoked auth caps score at 80 (was ${adjustedScore})`);
+      adjustedScore = 80;
+    }
+  }
+
+  // ============================================
+  // RULE 12: COMMUNITY-OWNED TOKEN CAP
   // ============================================
   if (isCommunityOwned) {
     let positiveSignals = 0;
@@ -1927,6 +1958,7 @@ sentinelRoutes.post('/analyze', async (c) => {
       txns24h: dexData?.txns24h,
       mintAuthorityActive,
       freezeAuthorityActive,
+      lpLockedPct,
     };
 
     // Build holder distribution for chart
@@ -2065,6 +2097,7 @@ sentinelRoutes.post('/analyze', async (c) => {
         txns24h: tokenInfo.txns24h,
         mintAuthorityActive: tokenInfo.mintAuthorityActive,
         freezeAuthorityActive: tokenInfo.freezeAuthorityActive,
+        lpLockedPct: tokenInfo.lpLockedPct,
       },
       holders,
       creatorInfo,
