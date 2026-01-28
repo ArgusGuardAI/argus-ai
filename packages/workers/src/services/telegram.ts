@@ -132,7 +132,10 @@ export function formatAlertHtml(data: AlertData): string {
   const signal = getSignalLabel(data.riskScore);
 
   let alertType = 'RISK ALERT';
-  if (data.bundleDetected) alertType = 'BUNDLE ALERT';
+  if (data.bundleDetected) {
+    const hasSyndicate = data.flags.some((f) => f.type === 'BUNDLE_DOMINANCE');
+    alertType = hasSyndicate ? 'SYNDICATE ALERT' : 'BUNDLE ALERT';
+  }
   if (data.riskScore >= 80) alertType = 'SCAM ALERT';
 
   const lines: string[] = [];
@@ -144,7 +147,12 @@ export function formatAlertHtml(data: AlertData): string {
   lines.push(`\u{26A0}\u{FE0F} <b>Safety: ${displayScore}/100 (${signal})</b>`);
 
   if (data.bundleDetected) {
-    lines.push(`\u{1F578}\u{FE0F} ${data.bundleCount} coordinated wallets (${data.bundleConfidence})`);
+    const syndicateFlag = data.flags.find((f) => f.type === 'BUNDLE_DOMINANCE');
+    if (syndicateFlag && data.bundleConfidence === 'HIGH') {
+      lines.push(`\u{1F578}\u{FE0F} ${data.bundleCount} syndicate wallets (same-block snipe)`);
+    } else {
+      lines.push(`\u{1F578}\u{FE0F} ${data.bundleCount} coordinated wallets (${data.bundleConfidence})`);
+    }
   }
 
   const marketParts: string[] = [];
@@ -231,10 +239,16 @@ export function formatAnalysisHtml(result: AnalysisResult): string {
   if (tokenInfo.holderCount) lines.push(`Holders: ${tokenInfo.holderCount}`);
   lines.push('');
 
-  // Bundle info
+  // Bundle / syndicate info
   if (bundleInfo?.detected) {
-    lines.push(`\u{1F578}\u{FE0F} <b>Bundle Detected</b>`);
-    lines.push(`${bundleInfo.count} coordinated wallets (${bundleInfo.confidence} confidence)`);
+    const syndicateFlag = analysis.flags.find((f) => f.type === 'BUNDLE_DOMINANCE');
+    if (syndicateFlag && bundleInfo.confidence === 'HIGH') {
+      lines.push(`\u{1F578}\u{FE0F} <b>Pump Syndicate Detected</b>`);
+      lines.push(`${bundleInfo.count} syndicate wallets confirmed via same-block sniping`);
+    } else {
+      lines.push(`\u{1F578}\u{FE0F} <b>Bundle Detected</b>`);
+      lines.push(`${bundleInfo.count} coordinated wallets (${bundleInfo.confidence} confidence)`);
+    }
     lines.push('');
   }
 
@@ -275,11 +289,11 @@ export function formatAnalysisHtml(result: AnalysisResult): string {
 
 export function formatHelpHtml(): string {
   return [
-    `\u{1F6E1}\u{FE0F} <b>Argus AI — Token Security Scanner</b>`,
+    `\u{1F6E1}\u{FE0F} <b>Argus AI — The Hundred-Eyed Guardian</b>`,
     '',
     'Send me any Solana token address and I\'ll analyze it for:',
     '',
-    '\u{1F578}\u{FE0F} Bundle attacks (coordinated wallets)',
+    '\u{1F578}\u{FE0F} Pump syndicates &amp; coordinated wallets',
     '\u{1F4C9} Rug pull risk',
     '\u{1F464} Developer selling activity',
     '\u{1F4CA} Market data &amp; liquidity',

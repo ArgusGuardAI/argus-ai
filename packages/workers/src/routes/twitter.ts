@@ -119,7 +119,7 @@ twitterRoutes.post('/test', async (c) => {
     return c.json({ error: 'Twitter API keys not configured' }, 500);
   }
 
-  const testText = `\u{1F6E1}\u{FE0F} Argus AI is online.\n\nScanning Solana tokens for rug pulls, bundle attacks, and insider trading.\n\nProtect your capital. DYOR.\n\nhttps://argusguard.io\n\n#Solana #CryptoSecurity`;
+  const testText = `\u{1F6E1}\u{FE0F} Argus AI is online.\n\nThe hundred-eyed guardian scanning Solana for pump syndicates, insider wallets, and coordinated dumps.\n\nNothing hides from Argus.\n\nhttps://argusguard.io\n\n#Solana #CryptoSecurity`;
 
   const result = await postTweet(testText, config);
 

@@ -248,9 +248,9 @@ telegramRoutes.post('/test', async (c) => {
   const testMessage = [
     '\u{1F6E1}\u{FE0F} <b>Argus AI is online.</b>',
     '',
-    'Scanning Solana tokens for rug pulls, bundle attacks, and insider trading.',
+    'The hundred-eyed guardian scanning Solana for pump syndicates, insider wallets, and coordinated dumps.',
     '',
-    'Protect your capital. DYOR.',
+    'Nothing hides from Argus.',
     '',
     `\u{1F310} <a href="https://argusguard.io">Website</a> | <a href="https://x.com/ArgusPanoptes7z">Twitter</a>`,
   ].join('\n');

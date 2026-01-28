@@ -291,6 +291,7 @@ async function generateNetworkAnalysis(
     txns1h?: { buys: number; sells: number };
     mintAuthorityActive?: boolean;
     freezeAuthorityActive?: boolean;
+    holderCount?: number;
   },
   network: NetworkData,
   creatorInfo: {
@@ -597,7 +598,7 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
       const hasWhale = whales.length > 0;
       const topWhalePercent = whales[0]?.holdingsPercent || 0;
 
-      console.log(`[Sentinel] Post-AI guardrails: newWallet=${isNewWallet}, bundle=${hasBundleDetection} (${bundleInfo.confidence}), whale=${hasWhale} (${topWhalePercent.toFixed(1)}%), aiScore=${score}`);
+      console.log(`[Sentinel] Post-AI guardrails: newWallet=${isNewWallet}, bundle=${hasBundleDetection} (${bundleInfo.confidence}), whale=${hasWhale} (${topWhalePercent.toFixed(1)}%), mature=${isMatureToken}, aiScore=${score}`);
 
       // Enforce floor scores as safety nets (not additive)
       // HIGH confidence bundle = minimum 55 (SUSPICIOUS)
@@ -645,7 +646,13 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
       // is the pump phase of a pump-and-dump.
       // ============================================
       const liquidityUsd = tokenInfo.liquidity || 0;
+      const marketCapUsd = tokenInfo.marketCap || 0;
       const tokenAgeHours = tokenInfo.ageHours;
+
+      // MATURITY GATE: Established tokens (>$100K liquidity OR >$10M market cap)
+      // shouldn't be penalized for bundle detection — those "bundles" are likely
+      // exchanges, market makers, or early investors, not malicious actors.
+      const isMatureToken = liquidityUsd > 100_000 || marketCapUsd > 10_000_000;
 
       // CRITICAL: $0 liquidity = cannot sell = minimum 80
       // PumpFun bonding curve tokens already have estimated liquidity from market cap,
@@ -675,9 +682,10 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
       // ============================================
       // BUNDLE DOMINANCE GUARDRAIL
       // When coordinated wallets make up a large % of holders, it's a syndicate pump
+      // Skipped for mature tokens — bundles on established tokens are benign
       // ============================================
       const holderCountForBundle = tokenInfo.holderCount || 0;
-      if (bundleInfo.count > 0 && holderCountForBundle > 0) {
+      if (!isMatureToken && bundleInfo.count > 0 && holderCountForBundle > 0) {
         const bundleRatio = bundleInfo.count / holderCountForBundle;
         if (bundleInfo.confidence === 'HIGH' && bundleRatio > 0.4 && score < 75) {
           console.log(`[Sentinel] Enforcing minimum 75 for bundle dominance: ${bundleInfo.count}/${holderCountForBundle} holders (${(bundleRatio * 100).toFixed(0)}%) are coordinated (was ${score})`);
@@ -789,7 +797,7 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
       if (liquidityUsd < 10000) moderateFlags++;
       if (sells24h > buys24h && sells24h > 50) moderateFlags++;
       if (holderCount > 0 && holderCount < 30) moderateFlags++;
-      if (hasBundleDetection) moderateFlags++;
+      if (hasBundleDetection && !isMatureToken) moderateFlags++;
       if (isNewWallet) moderateFlags++;
       if (priceChange24h !== undefined && priceChange24h < -30) moderateFlags++;
       if (devActivity && devActivity.hasSold && devActivity.percentSold >= 20) moderateFlags++;
@@ -802,8 +810,8 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
       //   - Bundle wallets dominate holder base (>40% = syndicate)
       //   - Ultra-thin liquidity <$2K (price trivially manipulable)
       //   - Token < 1h old (too early to trust any momentum)
-      const isHighBundle = bundleInfo?.confidence === 'HIGH';
-      const bundleDominant = holderCountForBundle > 0 && bundleInfo.count > 0 && (bundleInfo.count / holderCountForBundle) > 0.4;
+      const isHighBundle = bundleInfo?.confidence === 'HIGH' && !isMatureToken;
+      const bundleDominant = !isMatureToken && holderCountForBundle > 0 && bundleInfo.count > 0 && (bundleInfo.count / holderCountForBundle) > 0.4;
       const tooThinForOffset = liquidityUsd < 2000;
       const tooNewForOffset = tokenAgeHours !== undefined && tokenAgeHours < 1;
       const offsetBlocked = isHighBundle || bundleDominant || tooThinForOffset || tooNewForOffset;
@@ -840,6 +848,24 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
         console.log(`[Sentinel] Enforcing minimum 60 for ${moderateFlags} combined risk signals (was ${score})`);
         score = 60;
         aiFlags.push({ type: 'COMBO_RISK', severity: 'MEDIUM', message: `${moderateFlags} risk signals detected — elevated compound risk` });
+      }
+
+      // ============================================
+      // MATURITY OFFSET
+      // Established tokens carry less rug risk — reduce score proportionally.
+      // A $300M+ market cap token simply cannot rug the same way a pump.fun coin can.
+      // ============================================
+      if (isMatureToken) {
+        let maturityReduction = 0;
+        if (marketCapUsd > 100_000_000) maturityReduction += 15;
+        else if (marketCapUsd > 10_000_000) maturityReduction += 10;
+        if (liquidityUsd > 1_000_000) maturityReduction += 10;
+        else if (liquidityUsd > 100_000) maturityReduction += 5;
+        if (maturityReduction > 0) {
+          const before = score;
+          score = Math.max(20, score - maturityReduction);
+          console.log(`[Sentinel] Maturity offset -${maturityReduction}: mcap=$${(marketCapUsd/1e6).toFixed(1)}M, liq=$${(liquidityUsd/1e3).toFixed(0)}K — score ${before} → ${score}`);
+        }
       }
 
       score = Math.min(100, score);
@@ -980,7 +1006,11 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
   // STRUCTURAL RISK SCORING (fallback)
   // ============================================
   const fallbackLiquidity = tokenInfo.liquidity || 0;
+  const fallbackMarketCap = tokenInfo.marketCap || 0;
   const fallbackAgeHours = tokenInfo.ageHours;
+
+  // MATURITY GATE (fallback): Established tokens exempt from bundle penalties
+  const fbIsMatureToken = fallbackLiquidity > 100_000 || fallbackMarketCap > 10_000_000;
 
   if (fallbackAgeHours !== undefined && fallbackAgeHours < 6) {
     riskScore += 20;
@@ -1058,7 +1088,7 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
   const hasWhale = whales.length > 0;
   const topWhalePercent = whales[0]?.holdingsPercent || 0;
 
-  console.log(`[Sentinel] Fallback guardrails: newWallet=${isNewWallet}, bundle=${hasBundleDetection} (${bundleInfo.confidence}), whale=${hasWhale} (${topWhalePercent.toFixed(1)}%), age=${fallbackAgeHours?.toFixed(1)}h, liq=$${fallbackLiquidity}`);
+  console.log(`[Sentinel] Fallback guardrails: newWallet=${isNewWallet}, bundle=${hasBundleDetection} (${bundleInfo.confidence}), whale=${hasWhale} (${topWhalePercent.toFixed(1)}%), mature=${fbIsMatureToken}, age=${fallbackAgeHours?.toFixed(1)}h, liq=$${fallbackLiquidity}`);
 
   // HIGH confidence bundle = minimum 55
   if (bundleInfo.confidence === 'HIGH' && riskScore < 55) {
@@ -1122,7 +1152,7 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
   // When coordinated wallets make up a large % of holders, it's a syndicate pump
   // ============================================
   const fbHolderCountForBundle = tokenInfo.holderCount || 0;
-  if (bundleInfo.count > 0 && fbHolderCountForBundle > 0) {
+  if (!fbIsMatureToken && bundleInfo.count > 0 && fbHolderCountForBundle > 0) {
     const fbBundleRatio = bundleInfo.count / fbHolderCountForBundle;
     if (bundleInfo.confidence === 'HIGH' && fbBundleRatio > 0.4 && riskScore < 75) {
       console.log(`[Sentinel] Enforcing minimum 75 for bundle dominance: ${bundleInfo.count}/${fbHolderCountForBundle} holders (${(fbBundleRatio * 100).toFixed(0)}%) are coordinated (was ${riskScore})`);
@@ -1207,15 +1237,15 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
   if (fallbackLiquidity < 10000) fbModerateFlags++;
   if (fbSells24h > fbBuys24h && fbSells24h > 50) fbModerateFlags++;
   if (fbHolderCount > 0 && fbHolderCount < 30) fbModerateFlags++;
-  if (hasBundleDetection) fbModerateFlags++;
+  if (hasBundleDetection && !fbIsMatureToken) fbModerateFlags++;
   if (isNewWallet) fbModerateFlags++;
   if (fallbackPriceChange !== undefined && fallbackPriceChange < -30) fbModerateFlags++;
   if (devActivity && devActivity.hasSold && devActivity.percentSold >= 20) fbModerateFlags++;
 
   // POSITIVE SIGNAL OFFSET (fallback)
   // SAFETY: Blocked when signals are likely a coordinated pump
-  const fbIsHighBundle = bundleInfo?.confidence === 'HIGH';
-  const fbBundleDominant = fbHolderCountForBundle > 0 && bundleInfo.count > 0 && (bundleInfo.count / fbHolderCountForBundle) > 0.4;
+  const fbIsHighBundle = bundleInfo?.confidence === 'HIGH' && !fbIsMatureToken;
+  const fbBundleDominant = !fbIsMatureToken && fbHolderCountForBundle > 0 && bundleInfo.count > 0 && (bundleInfo.count / fbHolderCountForBundle) > 0.4;
   const fbTooThin = fallbackLiquidity < 2000;
   const fbTooNew = fallbackAgeHours !== undefined && fallbackAgeHours < 1;
   const fbOffsetBlocked = fbIsHighBundle || fbBundleDominant || fbTooThin || fbTooNew;
@@ -1252,6 +1282,22 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
     console.log(`[Sentinel] Enforcing minimum 60 for ${fbModerateFlags} combined risk signals (was ${riskScore})`);
     riskScore = 60;
     flags.push({ type: 'COMBO_RISK', severity: 'MEDIUM', message: `${fbModerateFlags} risk signals detected — elevated compound risk` });
+  }
+
+  // ============================================
+  // MATURITY OFFSET (fallback)
+  // ============================================
+  if (fbIsMatureToken) {
+    let fbMaturityReduction = 0;
+    if (fallbackMarketCap > 100_000_000) fbMaturityReduction += 15;
+    else if (fallbackMarketCap > 10_000_000) fbMaturityReduction += 10;
+    if (fallbackLiquidity > 1_000_000) fbMaturityReduction += 10;
+    else if (fallbackLiquidity > 100_000) fbMaturityReduction += 5;
+    if (fbMaturityReduction > 0) {
+      const before = riskScore;
+      riskScore = Math.max(20, riskScore - fbMaturityReduction);
+      console.log(`[Sentinel] Maturity offset -${fbMaturityReduction}: mcap=$${(fallbackMarketCap/1e6).toFixed(1)}M, liq=$${(fallbackLiquidity/1e3).toFixed(0)}K — score ${before} → ${riskScore}`);
+    }
   }
 
   riskScore = Math.min(100, riskScore);

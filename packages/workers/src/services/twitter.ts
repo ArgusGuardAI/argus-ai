@@ -185,7 +185,10 @@ export function formatAlertTweet(data: AlertData): string {
 
   // Determine alert type
   let alertType = 'RISK ALERT';
-  if (data.bundleDetected) alertType = 'BUNDLE ALERT';
+  if (data.bundleDetected) {
+    const hasSyndicate = data.flags.some((f) => f.type === 'BUNDLE_DOMINANCE');
+    alertType = hasSyndicate ? 'SYNDICATE ALERT' : 'BUNDLE ALERT';
+  }
   if (data.riskScore >= 80) alertType = 'SCAM ALERT';
 
   // Signal label (matches frontend)
@@ -204,9 +207,14 @@ export function formatAlertTweet(data: AlertData): string {
   // Risk info
   lines.push(`\u{26A0}\u{FE0F} Safety: ${displayScore}/100 (${signal})`);
 
-  // Bundle info
+  // Bundle / syndicate info
   if (data.bundleDetected) {
-    lines.push(`\u{1F578}\u{FE0F} ${data.bundleCount} coordinated wallets (${data.bundleConfidence})`);
+    const syndicateFlag = data.flags.find((f) => f.type === 'BUNDLE_DOMINANCE');
+    if (syndicateFlag && data.bundleConfidence === 'HIGH') {
+      lines.push(`\u{1F578}\u{FE0F} ${data.bundleCount} syndicate wallets (same-block snipe)`);
+    } else {
+      lines.push(`\u{1F578}\u{FE0F} ${data.bundleCount} coordinated wallets (${data.bundleConfidence})`);
+    }
   }
 
   // Market data
