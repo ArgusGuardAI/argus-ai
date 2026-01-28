@@ -8,7 +8,7 @@ import { checkTokenBalance } from './auth';
 // Rate limit configuration by tier
 const RATE_LIMITS = {
   free: {
-    daily: 3,
+    daily: 10,
     window: 24 * 60 * 60 * 1000, // 24 hours in ms
   },
   holder: {

@@ -414,6 +414,7 @@ export default function App() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [scansRemaining, setScansRemaining] = useState<number | null>(null);
   const [recentSearches, setRecentSearches] = useState<Array<{ address: string; symbol: string }>>([]);
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [buyAmount, setBuyAmount] = useState(0.1);
@@ -538,9 +539,21 @@ export default function App() {
 
       const response = await fetch(`${API_URL}${endpoint}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(autoTrade.wallet.address ? { 'X-Wallet-Address': autoTrade.wallet.address } : {}),
+        },
         body: JSON.stringify(payload),
       });
+
+      // Extract rate limit info from headers
+      const remainingHeader = response.headers.get('X-RateLimit-Remaining');
+      if (remainingHeader !== null) {
+        const remaining = parseInt(remainingHeader, 10);
+        if (!isNaN(remaining)) {
+          setScansRemaining(remaining);
+        }
+      }
 
       if (!response.ok) {
         const error = await response.json();
@@ -705,8 +718,9 @@ export default function App() {
         msg = 'Network error — check your connection and try again.';
       } else if (raw.includes('404') || raw.includes('not found')) {
         msg = 'Token not found. It may not be listed on any DEX yet.';
-      } else if (raw.includes('429') || raw.includes('rate limit')) {
-        msg = 'Too many requests. Please wait a moment and try again.';
+      } else if (raw.includes('429') || raw.includes('rate limit') || raw.includes('Daily limit')) {
+        msg = 'Daily scan limit reached. Limits reset at midnight UTC.';
+        setScansRemaining(0);
       }
       setAnalysisError(msg);
       log(`Analysis failed: ${raw}`, 'error');
@@ -1191,6 +1205,11 @@ export default function App() {
                 </span>
               ) : 'Analyze'}
             </button>
+            {scansRemaining !== null && scansRemaining < 10 && (
+              <span className={`text-xs px-2 py-1 rounded ${scansRemaining <= 3 ? 'text-red-400 bg-red-500/10' : 'text-zinc-400 bg-zinc-800'}`}>
+                {scansRemaining} scan{scansRemaining !== 1 ? 's' : ''} left today
+              </span>
+            )}
           </div>
 
           {/* Recent Searches */}

@@ -4,6 +4,7 @@ import { fetchHeliusTokenMetadata, analyzeTokenTransactions, analyzeDevSelling }
 import { fetchDexScreenerData } from '../services/dexscreener';
 import { postTweet, formatAlertTweet, canTweet, recordTweet, type TwitterConfig } from '../services/twitter';
 import { sendMessage, formatAlertHtml } from '../services/telegram';
+import { checkRateLimit, getUserTier, getClientIP } from '../services/rate-limit';
 // Pump.fun API disabled (Cloudflare 1016 error)
 // import { fetchPumpFunData, isPumpFunToken } from '../services/pumpfun';
 
@@ -1371,6 +1372,32 @@ sentinelRoutes.post('/analyze', async (c) => {
       return c.json({ error: 'Invalid token address' }, 400);
     }
 
+    // Rate limiting
+    const clientIP = getClientIP(c.req.raw);
+    const walletAddress = c.req.header('X-Wallet-Address') || null;
+    const rateLimitIdentifier = walletAddress || clientIP;
+
+    // Get user tier (based on token holdings or subscription)
+    const { tier } = await getUserTier(
+      walletAddress,
+      c.env.ARGUSGUARD_MINT,
+      c.env.HELIUS_API_KEY,
+      c.env.SUPABASE_URL || '',
+      c.env.SUPABASE_ANON_KEY || ''
+    );
+
+    // Check rate limit
+    const rateLimitResult = await checkRateLimit(c.env.SCAN_CACHE, rateLimitIdentifier, tier);
+
+    if (!rateLimitResult.allowed) {
+      return c.json({
+        error: rateLimitResult.error,
+        remaining: 0,
+        limit: rateLimitResult.limit,
+        resetAt: rateLimitResult.resetAt,
+      }, 429);
+    }
+
     const heliusKey = c.env.HELIUS_API_KEY;
     const togetherKey = c.env.TOGETHER_AI_API_KEY;
     const model = c.env.TOGETHER_AI_MODEL || 'meta-llama/Llama-3.3-70B-Instruct-Turbo';
@@ -1742,6 +1769,12 @@ sentinelRoutes.post('/analyze', async (c) => {
         })()
       );
     }
+
+    // Add rate limit headers to response
+    c.header('X-RateLimit-Limit', String(rateLimitResult.limit));
+    c.header('X-RateLimit-Remaining', String(rateLimitResult.remaining));
+    c.header('X-RateLimit-Reset', String(rateLimitResult.resetAt));
+    c.header('X-User-Tier', tier);
 
     return c.json({
       tokenInfo,
