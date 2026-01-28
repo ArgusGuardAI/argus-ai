@@ -11,9 +11,15 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { VersionedTransaction } from '@solana/web3.js';
+import { VersionedTransaction, Connection } from '@solana/web3.js';
 import { tradingWallet } from '../lib/tradingWallet';
 import { buyToken, sellToken, getTokenBalance, getAllTokenBalances, getTokenValueInSol, getTokenPrice, type SwapResult } from '../lib/jupiter';
+
+// Helius RPC for transaction verification
+const HELIUS_API_KEY = import.meta.env.VITE_HELIUS_API_KEY || '';
+const HELIUS_RPC = HELIUS_API_KEY
+  ? `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`
+  : 'https://api.mainnet-beta.solana.com';
 
 export interface AutoTradeConfig {
   enabled: boolean;
@@ -39,7 +45,7 @@ export interface PendingTrade {
   tokenAddress: string;
   tokenSymbol: string;
   riskScore: number;
-  status: 'pending' | 'executing' | 'success' | 'failed';
+  status: 'pending' | 'executing' | 'confirming' | 'success' | 'failed';
   error?: string;
   txSignature?: string;
   timestamp: number;
@@ -61,6 +67,7 @@ export interface Position {
   sellReason?: 'take_profit' | 'stop_loss' | 'trailing_stop' | 'manual';
   sellTxSignature?: string;
   sellFailCount?: number;        // Track consecutive sell failures
+  lastPriceCheck?: number;       // Timestamp of last price check (rate limit protection)
 }
 
 export interface AutoTradeState {
@@ -241,6 +248,57 @@ export function useAutoTrade(
     onLog?.(message, type);
   }, [onLog]);
 
+  // Ref for refreshBalance to use in event listeners (avoids hook ordering issues)
+  const refreshBalanceRef = useRef<() => Promise<void>>();
+
+  // Listen for background trade confirmation events (optimistic execution)
+  useEffect(() => {
+    const handleTradeConfirmed = (event: CustomEvent<{ signature: string }>) => {
+      console.log('[AutoTrade] Trade confirmed in background:', event.detail.signature);
+      const signature = event.detail.signature;
+
+      // Update any confirming trades to success
+      setState(prev => ({
+        ...prev,
+        completedTrades: prev.completedTrades.map(t =>
+          t.txSignature === signature && t.status === 'confirming'
+            ? { ...t, status: 'success' as const }
+            : t
+        ),
+      }));
+
+      // Refresh balance now that transaction is confirmed
+      refreshBalanceRef.current?.();
+    };
+
+    const handleTradeConfirmationFailed = (event: CustomEvent<{ signature: string; error: string }>) => {
+      console.error('[AutoTrade] Trade confirmation failed:', event.detail.error);
+      const { signature, error } = event.detail;
+
+      // Update any confirming trades to show warning (not failed - tx was sent)
+      setState(prev => ({
+        ...prev,
+        completedTrades: prev.completedTrades.map(t =>
+          t.txSignature === signature && t.status === 'confirming'
+            ? { ...t, status: 'success' as const, error: `Confirmation: ${error}` }
+            : t
+        ),
+      }));
+
+      log(`Trade may need verification: ${error}`, 'warning');
+      // Still refresh balance to show current state
+      refreshBalanceRef.current?.();
+    };
+
+    window.addEventListener('trade-confirmed', handleTradeConfirmed as EventListener);
+    window.addEventListener('trade-confirmation-failed', handleTradeConfirmationFailed as EventListener);
+
+    return () => {
+      window.removeEventListener('trade-confirmed', handleTradeConfirmed as EventListener);
+      window.removeEventListener('trade-confirmation-failed', handleTradeConfirmationFailed as EventListener);
+    };
+  }, [log]);
+
   // Load trading wallet on mount and recover untracked positions
   const hasRecoveredRef = useRef(false);
   useEffect(() => {
@@ -326,6 +384,11 @@ export function useAutoTrade(
     setWallet(prev => ({ ...prev, balance }));
   }, []);
 
+  // Keep ref in sync for event listeners
+  useEffect(() => {
+    refreshBalanceRef.current = refreshBalance;
+  }, [refreshBalance]);
+
   /**
    * Execute a sell for a position
    */
@@ -410,8 +473,9 @@ export function useAutoTrade(
       );
 
       if (result.success) {
-        // Wait a moment for balance to update
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Wait for transaction to confirm (optimistic execution returns instantly)
+        // 4 seconds allows time for network confirmation before checking balance
+        await new Promise(resolve => setTimeout(resolve, 4000));
 
         // Get ACTUAL SOL received by checking balance difference
         const solBalanceAfter = await tradingWallet.getBalance();
@@ -515,8 +579,19 @@ export function useAutoTrade(
     const updatesMap = new Map<string, Partial<Position>>();
     const sellsToExecute: Array<{ position: Position; reason: 'take_profit' | 'stop_loss' | 'trailing_stop' }> = [];
 
+    // Rate limit: minimum 15 seconds between price checks per token
+    // Prevents hitting DexScreener rate limits with many positions
+    const PRICE_CHECK_COOLDOWN_MS = 15000;
+    const now = Date.now();
+
     for (const position of state.positions) {
       if (position.status !== 'active') continue;
+
+      // RATE LIMIT: Skip if this token was checked recently
+      const lastCheck = position.lastPriceCheck || 0;
+      if (now - lastCheck < PRICE_CHECK_COOLDOWN_MS) {
+        continue; // Skip this token this cycle, will be checked next time
+      }
 
       try {
         // Get current value in SOL
@@ -533,7 +608,7 @@ export function useAutoTrade(
           // Only log it, user can manually clear if needed
           log(`${position.tokenSymbol}: Balance is 0 (may be sold externally)`, 'warning');
           // Update the position to show 0 value but DON'T delete
-          updatesMap.set(position.tokenAddress, { currentValueSol: 0, pnlPercent: -100 });
+          updatesMap.set(position.tokenAddress, { currentValueSol: 0, pnlPercent: -100, lastPriceCheck: now });
           continue;
         }
 
@@ -550,11 +625,12 @@ export function useAutoTrade(
         const newHighest = Math.max(position.highestValueSol, currentValueSol);
         const dropFromPeak = newHighest > 0 ? ((newHighest - currentValueSol) / newHighest) * 100 : 0;
 
-        // Store update
+        // Store update (including lastPriceCheck for rate limiting)
         updatesMap.set(position.tokenAddress, {
           currentValueSol,
           highestValueSol: newHighest,
-          pnlPercent
+          pnlPercent,
+          lastPriceCheck: now, // Track when we last checked this token
         });
 
         // Construct a temporary object with latest values for condition checking
@@ -844,7 +920,8 @@ export function useAutoTrade(
 
       const completedTrade: PendingTrade = {
         ...trade,
-        status: result.success ? 'success' : 'failed',
+        // Use 'confirming' for optimistic execution - will update to 'success' when confirmed
+        status: result.success ? 'confirming' : 'failed',
         error: result.error,
         txSignature: result.signature,
       };
@@ -860,7 +937,7 @@ export function useAutoTrade(
       }));
 
       if (result.success) {
-        log(`BOUGHT ${tokenSymbol}! TX: ${result.signature?.slice(0, 8)}...`, 'success');
+        log(`BOUGHT ${tokenSymbol}! TX: ${result.signature?.slice(0, 8)}... (confirming)`, 'success');
 
         // ALWAYS create position for tracking (regardless of autoSellEnabled)
         // This ensures we always know what we bought
@@ -906,28 +983,59 @@ export function useAutoTrade(
               log(`No balance yet for ${tokenSymbol}, retrying...`, 'warning');
               await createPosition(retryCount + 1);
             } else {
-              // Create position with estimated values after retries exhausted
-              // ALWAYS create position even without balance - we can recover later
-              log(`Creating ${tokenSymbol} position with estimated values (balance check failed)`, 'warning');
-              const newPosition: Position = {
-                tokenAddress,
-                tokenSymbol,
-                entryTimestamp: Date.now(),
-                entrySolAmount: entrySol,
-                tokenAmount: 0, // Unknown - will be recovered on next scan
-                tokenDecimals: 6,
-                currentValueSol: entrySol,
-                highestValueSol: entrySol,
-                pnlPercent: 0,
-                txSignature: result.signature || '',
-                status: 'active',
-              };
+              // CRITICAL: Verify transaction actually succeeded on-chain before creating fallback position
+              // This prevents "phantom positions" where optimistic execution returned success but tx failed
+              log(`Verifying transaction ${result.signature?.slice(0, 8)}... on-chain before fallback`, 'warning');
 
-              setState(prev => ({
-                ...prev,
-                positions: [...prev.positions, newPosition],
-              }));
-              log(`POSITION CREATED (estimated): ${tokenSymbol}`, 'warning');
+              try {
+                const connection = new Connection(HELIUS_RPC, 'confirmed');
+                const txStatus = await connection.getSignatureStatus(result.signature || '');
+
+                if (!txStatus.value || txStatus.value.err) {
+                  // Transaction failed on-chain - DO NOT create position
+                  console.error(`[AutoTrade] Transaction ${result.signature} failed on-chain:`, txStatus.value?.err);
+                  log(`${tokenSymbol}: Transaction failed on-chain (likely slippage) - no position created`, 'error');
+
+                  // Update trade status to failed
+                  setState(prev => ({
+                    ...prev,
+                    completedTrades: prev.completedTrades.map(t =>
+                      t.txSignature === result.signature
+                        ? { ...t, status: 'failed' as const, error: 'Transaction failed on-chain (likely slippage)' }
+                        : t
+                    ),
+                    totalSuccessful: prev.totalSuccessful - 1,
+                    totalFailed: prev.totalFailed + 1,
+                  }));
+                  return; // Stop - no position to create
+                }
+
+                // Transaction confirmed but balance still 0 - create estimated position
+                log(`TX confirmed but no balance yet for ${tokenSymbol}, creating estimated position`, 'warning');
+                const newPosition: Position = {
+                  tokenAddress,
+                  tokenSymbol,
+                  entryTimestamp: Date.now(),
+                  entrySolAmount: entrySol,
+                  tokenAmount: 0, // Unknown - will be recovered on next scan
+                  tokenDecimals: 6,
+                  currentValueSol: entrySol,
+                  highestValueSol: entrySol,
+                  pnlPercent: 0,
+                  txSignature: result.signature || '',
+                  status: 'active',
+                };
+
+                setState(prev => ({
+                  ...prev,
+                  positions: [...prev.positions, newPosition],
+                }));
+                log(`POSITION CREATED (estimated): ${tokenSymbol}`, 'warning');
+              } catch (verifyError) {
+                // Verification failed - be conservative, don't create phantom position
+                console.error('[AutoTrade] TX verification failed:', verifyError);
+                log(`${tokenSymbol}: Could not verify transaction - position not created`, 'error');
+              }
             }
           } catch (e) {
             console.error('[AutoTrade] Position creation error:', e);
@@ -935,26 +1043,56 @@ export function useAutoTrade(
             if (retryCount < maxRetries) {
               await createPosition(retryCount + 1);
             } else {
-              // LAST RESORT: Create position anyway with defaults
-              log(`FORCE creating position for ${tokenSymbol} after all retries failed`, 'error');
-              const newPosition: Position = {
-                tokenAddress,
-                tokenSymbol,
-                entryTimestamp: Date.now(),
-                entrySolAmount: currentConfig.buyAmountSol,
-                tokenAmount: 0,
-                tokenDecimals: 6,
-                currentValueSol: currentConfig.buyAmountSol,
-                highestValueSol: currentConfig.buyAmountSol,
-                pnlPercent: 0,
-                txSignature: result.signature || '',
-                status: 'active',
-              };
+              // LAST RESORT: Verify transaction before creating fallback position
+              log(`Verifying transaction before last resort for ${tokenSymbol}...`, 'error');
 
-              setState(prev => ({
-                ...prev,
-                positions: [...prev.positions, newPosition],
-              }));
+              try {
+                const connection = new Connection(HELIUS_RPC, 'confirmed');
+                const txStatus = await connection.getSignatureStatus(result.signature || '');
+
+                if (!txStatus.value || txStatus.value.err) {
+                  // Transaction failed - don't create phantom position
+                  console.error(`[AutoTrade] Transaction ${result.signature} failed on-chain`);
+                  log(`${tokenSymbol}: Transaction failed - no phantom position created`, 'error');
+
+                  setState(prev => ({
+                    ...prev,
+                    completedTrades: prev.completedTrades.map(t =>
+                      t.txSignature === result.signature
+                        ? { ...t, status: 'failed' as const, error: 'Transaction failed on-chain' }
+                        : t
+                    ),
+                    totalSuccessful: prev.totalSuccessful - 1,
+                    totalFailed: prev.totalFailed + 1,
+                  }));
+                  return;
+                }
+
+                // TX verified, create position with defaults
+                log(`TX verified, creating position for ${tokenSymbol} with defaults`, 'warning');
+                const newPosition: Position = {
+                  tokenAddress,
+                  tokenSymbol,
+                  entryTimestamp: Date.now(),
+                  entrySolAmount: currentConfig.buyAmountSol,
+                  tokenAmount: 0,
+                  tokenDecimals: 6,
+                  currentValueSol: currentConfig.buyAmountSol,
+                  highestValueSol: currentConfig.buyAmountSol,
+                  pnlPercent: 0,
+                  txSignature: result.signature || '',
+                  status: 'active',
+                };
+
+                setState(prev => ({
+                  ...prev,
+                  positions: [...prev.positions, newPosition],
+                }));
+              } catch (verifyError) {
+                // Can't verify - be safe, don't create
+                console.error('[AutoTrade] Last resort verification failed:', verifyError);
+                log(`${tokenSymbol}: Verification failed - no position created (check explorer)`, 'error');
+              }
             }
           }
         };
@@ -968,7 +1106,10 @@ export function useAutoTrade(
         }
 
         buyMutexRef.current = false; // Release buy mutex after position created
-        refreshBalance(); // Update balance after trade
+        // Don't refresh balance immediately - optimistic execution returns before confirmation
+        // Balance will be refreshed by the trade-confirmed event listener
+        // Fallback: refresh after 5 seconds if event doesn't fire
+        setTimeout(() => refreshBalance(), 5000);
       } else {
         buyMutexRef.current = false; // Release buy mutex on trade failure
         log(`FAILED: ${tokenSymbol} - ${result.error}`, 'error');

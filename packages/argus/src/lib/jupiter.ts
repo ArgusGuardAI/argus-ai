@@ -60,9 +60,48 @@ export interface SwapResult {
 }
 
 /**
+ * Get dynamic priority fee estimate from Helius
+ * Adds a 20% buffer to ensure transaction lands during congestion
+ */
+async function getPriorityFee(accounts: PublicKey[]): Promise<number> {
+  try {
+    const response = await fetch(`https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: '1',
+        method: 'getPriorityFeeEstimate',
+        params: [
+          {
+            accountKeys: accounts.map(k => k.toString()),
+            options: { priorityLevel: 'high' }
+          }
+        ]
+      })
+    });
+
+    if (!response.ok) throw new Error('Failed to fetch fee estimate');
+
+    const data = await response.json();
+    const estimatedFee = data.result?.priorityFeeEstimate || 50000;
+
+    // Add 20% buffer for safety, minimum 50k lamports
+    const bufferedFee = Math.ceil(estimatedFee * 1.2);
+    const finalFee = Math.max(50000, bufferedFee);
+
+    console.log(`[Jupiter] Priority fee estimate: ${estimatedFee}, using: ${finalFee} lamports`);
+    return finalFee;
+  } catch (error) {
+    console.warn('[Jupiter] Fee estimate failed, using fallback:', error);
+    return 50000; // Fallback to hardcoded safe minimum
+  }
+}
+
+/**
  * Parse Solana/Jupiter transaction errors into human-readable messages
  */
-function parseSwapError(error: unknown): string {
+export function parseSwapError(error: unknown): string {
   const raw = typeof error === 'string' ? error : JSON.stringify(error);
 
   // Custom program error codes (common across Jupiter route programs)
@@ -154,6 +193,10 @@ export async function getSwapQuote(
 
 /**
  * Execute a swap transaction via backend proxy
+ *
+ * OPTIMISTIC EXECUTION: Returns success immediately after send.
+ * Confirmation happens in the background to avoid blocking the UI.
+ * This provides instant feedback while the transaction confirms.
  */
 export async function executeSwap(
   quote: SwapQuote,
@@ -163,7 +206,40 @@ export async function executeSwap(
   try {
     console.log('[Jupiter] Building swap transaction via proxy...');
 
-    // Get swap transaction from Jupiter via our backend proxy
+    // Create connection for RPC calls
+    const connection = new Connection(HELIUS_RPC, {
+      commitment: 'confirmed',
+      confirmTransactionInitialTimeout: 60000,
+    });
+
+    // Step 1: Get initial swap transaction to extract accounts for fee estimation
+    const initialResponse = await fetch(`${JUPITER_API}/swap`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        quoteResponse: quote,
+        userPublicKey: userPublicKey.toString(),
+        wrapAndUnwrapSol: true,
+        dynamicComputeUnitLimit: true,
+        prioritizationFeeLamports: 50000, // Placeholder, will be replaced
+      }),
+    });
+
+    if (!initialResponse.ok) {
+      const error = await initialResponse.text();
+      console.error('[Jupiter] Initial swap build error:', error);
+      return { success: false, error: `Failed to build swap: ${error}` };
+    }
+
+    const initialData = await initialResponse.json();
+    const initialTx = VersionedTransaction.deserialize(Buffer.from(initialData.swapTransaction, 'base64'));
+
+    // Step 2: Get dynamic priority fee based on accounts in the transaction
+    const accounts = initialTx.message.staticAccountKeys;
+    const dynamicFee = await getPriorityFee(accounts);
+
+    // Step 3: Re-fetch swap transaction with dynamic fee
+    console.log('[Jupiter] Rebuilding transaction with dynamic fee:', dynamicFee);
     const swapResponse = await fetch(`${JUPITER_API}/swap`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -172,7 +248,7 @@ export async function executeSwap(
         userPublicKey: userPublicKey.toString(),
         wrapAndUnwrapSol: true,
         dynamicComputeUnitLimit: true,
-        prioritizationFeeLamports: 50000, // 0.00005 SOL priority fee
+        prioritizationFeeLamports: dynamicFee,
       }),
     });
 
@@ -183,55 +259,60 @@ export async function executeSwap(
     }
 
     const swapData = await swapResponse.json();
-    console.log('[Jupiter] Swap transaction built successfully');
+    console.log('[Jupiter] Swap transaction built with dynamic fee');
 
-    // Deserialize the transaction
+    // Step 4: Deserialize and sign the transaction
     const swapTransactionBuf = Buffer.from(swapData.swapTransaction, 'base64');
     const transaction = VersionedTransaction.deserialize(swapTransactionBuf);
 
-    // Sign the transaction with user's wallet
     console.log('[Jupiter] Signing transaction...');
     const signedTransaction = await signTransaction(transaction);
 
-    // Send the transaction via Helius RPC
-    console.log('[Jupiter] Sending transaction via Helius RPC...');
-    const connection = new Connection(HELIUS_RPC, {
-      commitment: 'confirmed',
-      confirmTransactionInitialTimeout: 60000,
-    });
-    const rawTransaction = signedTransaction.serialize();
-
-    const signature = await connection.sendRawTransaction(rawTransaction, {
-      skipPreflight: false,
-      maxRetries: 3,
-      preflightCommitment: 'confirmed',
+    // Step 5: OPTIMISTIC EXECUTION - Send immediately
+    console.log('[Jupiter] Sending transaction (optimistic)...');
+    const signature = await connection.sendRawTransaction(signedTransaction.serialize(), {
+      skipPreflight: false, // Still check basic validity
+      maxRetries: 2, // Quick retries for network hiccups
+      preflightCommitment: 'processed', // Fastest preflight check
     });
 
     console.log('[Jupiter] Transaction sent:', signature);
 
-    // Wait for confirmation
+    // Step 6: FIRE AND FORGET - Confirm in background, don't block UI
+    // We do NOT await this - user gets instant feedback
     const latestBlockHash = await connection.getLatestBlockhash('confirmed');
-    const confirmation = await connection.confirmTransaction({
+    connection.confirmTransaction({
       signature,
       blockhash: latestBlockHash.blockhash,
       lastValidBlockHeight: latestBlockHash.lastValidBlockHeight,
-    }, 'confirmed');
+    }, 'confirmed').then(confirmation => {
+      if (confirmation.value.err) {
+        const errMsg = parseSwapError(confirmation.value.err);
+        console.error('[Jupiter] Background confirmation failed:', errMsg, confirmation.value.err);
+        // Dispatch event so UI can update if needed
+        window.dispatchEvent(new CustomEvent('trade-confirmation-failed', {
+          detail: { signature, error: errMsg }
+        }));
+      } else {
+        console.log('[Jupiter] Transaction confirmed in background:', signature);
+        window.dispatchEvent(new CustomEvent('trade-confirmed', {
+          detail: { signature }
+        }));
+      }
+    }).catch(err => {
+      console.error('[Jupiter] Confirmation promise rejection:', err);
+      window.dispatchEvent(new CustomEvent('trade-confirmation-failed', {
+        detail: { signature, error: 'Confirmation timeout - check explorer' }
+      }));
+    });
 
-    if (confirmation.value.err) {
-      const errMsg = parseSwapError(confirmation.value.err);
-      console.error('[Jupiter] Transaction failed:', errMsg, confirmation.value.err);
-      return {
-        success: false,
-        signature,
-        error: errMsg
-      };
-    }
-
-    console.log('[Jupiter] Transaction confirmed:', signature);
+    // Return SUCCESS immediately - user sees instant feedback
     return { success: true, signature };
   } catch (error) {
+    // Critical errors (network down, invalid signature, etc.)
+    // These happen BEFORE we return success, so user gets real error
     const errMsg = parseSwapError(error);
-    console.error('[Jupiter] Swap execution error:', errMsg, error);
+    console.error('[Jupiter] Swap execution error (critical):', errMsg, error);
     return {
       success: false,
       error: errMsg
