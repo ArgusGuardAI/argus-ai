@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import * as d3 from 'd3';
+import { useWallet } from '@solana/wallet-adapter-react';
 import { useAutoTrade } from './hooks/useAutoTrade';
 
 type SignalType = 'STRONG_BUY' | 'BUY' | 'WATCH' | 'HOLD' | 'AVOID';
@@ -410,6 +411,7 @@ interface WatchlistItem {
 }
 
 export default function App() {
+  const { publicKey: connectedWallet } = useWallet();
   const [tokenInput, setTokenInput] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
@@ -540,11 +542,14 @@ export default function App() {
         ? { address: address.trim() }
         : { tokenAddress: address.trim() };
 
+      // Prefer connected wallet for rate limiting, fallback to trading wallet
+      const walletForRateLimit = connectedWallet?.toBase58() || autoTrade.wallet.address;
+
       const response = await fetch(`${API_URL}${endpoint}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(autoTrade.wallet.address ? { 'X-Wallet-Address': autoTrade.wallet.address } : {}),
+          ...(walletForRateLimit ? { 'X-Wallet-Address': walletForRateLimit } : {}),
         },
         body: JSON.stringify(payload),
       });

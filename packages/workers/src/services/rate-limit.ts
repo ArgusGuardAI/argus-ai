@@ -21,6 +21,11 @@ const RATE_LIMITS = {
   },
 };
 
+// Whitelisted IPs/wallets that bypass rate limiting (admin/dev accounts)
+const WHITELIST = new Set([
+  'DvQzNPwaVAC2sKvyAkermrmvhnfGftxYdr3tTchB3NEv', // Jessie - founder
+]);
+
 // Token thresholds
 const HOLDER_THRESHOLD = 1000;
 const PRO_THRESHOLD = 10000;
@@ -122,6 +127,17 @@ export async function checkRateLimit(
   const limits = RATE_LIMITS[tier];
   const dayKey = getDayKey();
   const kvKey = `ratelimit:${identifier}:${dayKey}`;
+
+  // Whitelisted identifiers always pass
+  if (WHITELIST.has(identifier)) {
+    return {
+      allowed: true,
+      tier: 'pro',
+      remaining: Infinity,
+      limit: Infinity,
+      resetAt: getResetTimestamp(),
+    };
+  }
 
   // Unlimited tiers always pass
   if (limits.daily === Infinity) {
