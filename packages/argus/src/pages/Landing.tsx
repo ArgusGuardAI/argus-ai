@@ -1826,6 +1826,162 @@ const styles = `
     color: var(--text-main);
   }
 
+  /* --- PRICING SECTION --- */
+  .landing-page .pricing {
+    padding: 100px 0;
+    border-top: 1px solid var(--border);
+  }
+
+  .landing-page .pricing-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+    margin-top: 48px;
+  }
+
+  .landing-page .pricing-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 32px;
+    position: relative;
+    transition: all 0.3s ease;
+  }
+
+  .landing-page .pricing-card:hover {
+    transform: translateY(-4px);
+    border-color: var(--border-light);
+  }
+
+  .landing-page .pricing-card.featured {
+    border-color: var(--accent);
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(16, 185, 129, 0.02) 100%);
+  }
+
+  .landing-page .pricing-card.featured::before {
+    content: 'BEST VALUE';
+    position: absolute;
+    top: -12px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+    color: white;
+    padding: 4px 16px;
+    border-radius: 20px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+  }
+
+  .landing-page .pricing-tier {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 8px;
+  }
+
+  .landing-page .pricing-card.featured .pricing-tier {
+    color: var(--accent);
+  }
+
+  .landing-page .pricing-price {
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: var(--text-main);
+    margin-bottom: 8px;
+    letter-spacing: -0.02em;
+  }
+
+  .landing-page .pricing-price span {
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+
+  .landing-page .pricing-desc {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    margin-bottom: 24px;
+    min-height: 44px;
+  }
+
+  .landing-page .pricing-features {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 24px 0;
+  }
+
+  .landing-page .pricing-features li {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border-light);
+  }
+
+  .landing-page .pricing-features li:last-child {
+    border-bottom: none;
+  }
+
+  .landing-page .pricing-features .check {
+    color: var(--accent);
+    font-size: 1rem;
+  }
+
+  .landing-page .pricing-features .limit {
+    color: #EAB308;
+  }
+
+  .landing-page .pricing-cta {
+    width: 100%;
+    padding: 14px 24px;
+    border-radius: var(--radius-md);
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: center;
+    display: block;
+  }
+
+  .landing-page .pricing-cta-primary {
+    background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+    color: white;
+    border: none;
+    box-shadow: 0 4px 20px rgba(16, 185, 129, 0.3);
+  }
+
+  .landing-page .pricing-cta-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 30px rgba(16, 185, 129, 0.4);
+  }
+
+  .landing-page .pricing-cta-outline {
+    background: transparent;
+    color: var(--text-main);
+    border: 1px solid var(--border);
+  }
+
+  .landing-page .pricing-cta-outline:hover {
+    border-color: var(--accent);
+    background: var(--accent-glow);
+  }
+
+  .landing-page .pricing-note {
+    text-align: center;
+    margin-top: 32px;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+
+  .landing-page .pricing-note strong {
+    color: var(--accent);
+  }
+
   /* --- RESPONSIVE --- */
   @media (max-width: 900px) {
     .landing-page .hero h1 { font-size: 2.5rem; }
@@ -1845,6 +2001,8 @@ const styles = `
     .landing-page .roadmap-node-label { position: static; margin-left: 16px; display: inline-block; }
     .landing-page .team-grid { grid-template-columns: 1fr; }
     .landing-page .teaser-benefits { grid-template-columns: 1fr; }
+    .landing-page .pricing-grid { grid-template-columns: 1fr; }
+    .landing-page .pricing-card.featured { order: -1; }
     .landing-page .comparison-callout { flex-direction: column; gap: 12px; padding: 20px; }
     .landing-page .comparison-table { font-size: 0.8rem; }
     .landing-page .comparison-table th,
@@ -2465,6 +2623,7 @@ export default function Landing() {
                 <a href="#features">Features</a>
                 <a href="#how-it-works">How It Works</a>
                 <a href="#compare">Compare</a>
+                <a href="#pricing">Pricing</a>
                 <a href="#token">Token</a>
                 <a href="#roadmap">Roadmap</a>
               </div>
@@ -2481,6 +2640,7 @@ export default function Landing() {
           <a href="#features" onClick={() => setMenuOpen(false)}>Features</a>
           <a href="#how-it-works" onClick={() => setMenuOpen(false)}>How It Works</a>
           <a href="#compare" onClick={() => setMenuOpen(false)}>Compare</a>
+          <a href="#pricing" onClick={() => setMenuOpen(false)}>Pricing</a>
           <a href="#token" onClick={() => setMenuOpen(false)}>Token</a>
           <a href="#roadmap" onClick={() => setMenuOpen(false)}>Roadmap</a>
           <a href="https://app.argusguard.io" className="btn btn-primary" style={{ marginTop: 16 }}>Launch App</a>
@@ -3091,6 +3251,67 @@ export default function Landing() {
           </div>
         </section>
 
+        {/* PRICING */}
+        <section id="pricing" className="pricing reveal">
+          <div className="container">
+            <div className="section-header">
+              <h2>Simple, Transparent Pricing</h2>
+              <p>Start free. Unlock unlimited with $ARGUS tokens.</p>
+            </div>
+
+            <div className="pricing-grid">
+              {/* FREE TIER */}
+              <div className="pricing-card">
+                <div className="pricing-tier">Free</div>
+                <div className="pricing-price">$0 <span>/month</span></div>
+                <div className="pricing-desc">Perfect for trying out Argus and casual research</div>
+                <ul className="pricing-features">
+                  <li><span className="check"><i className="fa-solid fa-check"></i></span> 10 token scans per day</li>
+                  <li><span className="check"><i className="fa-solid fa-check"></i></span> AI risk analysis</li>
+                  <li><span className="check"><i className="fa-solid fa-check"></i></span> Bundle detection</li>
+                  <li><span className="check"><i className="fa-solid fa-check"></i></span> One-click trading</li>
+                  <li><span className="limit"><i className="fa-solid fa-minus"></i></span> Basic support</li>
+                </ul>
+                <a href="https://app.argusguard.io" className="pricing-cta pricing-cta-outline">Get Started Free</a>
+              </div>
+
+              {/* HOLDER TIER */}
+              <div className="pricing-card featured">
+                <div className="pricing-tier">Holder</div>
+                <div className="pricing-price">1K+ <span>$ARGUS</span></div>
+                <div className="pricing-desc">For active traders who need unlimited access</div>
+                <ul className="pricing-features">
+                  <li><span className="check"><i className="fa-solid fa-check"></i></span> <strong>Unlimited</strong> token scans</li>
+                  <li><span className="check"><i className="fa-solid fa-check"></i></span> AI risk analysis</li>
+                  <li><span className="check"><i className="fa-solid fa-check"></i></span> Bundle detection</li>
+                  <li><span className="check"><i className="fa-solid fa-check"></i></span> One-click trading</li>
+                  <li><span className="check"><i className="fa-solid fa-check"></i></span> Priority support</li>
+                </ul>
+                <a href="#token" className="pricing-cta pricing-cta-primary">Get $ARGUS</a>
+              </div>
+
+              {/* PRO TIER */}
+              <div className="pricing-card">
+                <div className="pricing-tier">Pro</div>
+                <div className="pricing-price">10K+ <span>$ARGUS</span></div>
+                <div className="pricing-desc">For power users and professional traders</div>
+                <ul className="pricing-features">
+                  <li><span className="check"><i className="fa-solid fa-check"></i></span> <strong>Unlimited</strong> token scans</li>
+                  <li><span className="check"><i className="fa-solid fa-check"></i></span> AI risk analysis</li>
+                  <li><span className="check"><i className="fa-solid fa-check"></i></span> Bundle detection</li>
+                  <li><span className="check"><i className="fa-solid fa-check"></i></span> One-click trading</li>
+                  <li><span className="check"><i className="fa-solid fa-check"></i></span> Early feature access</li>
+                </ul>
+                <a href="#token" className="pricing-cta pricing-cta-outline">Get $ARGUS</a>
+              </div>
+            </div>
+
+            <p className="pricing-note">
+              <strong>No subscriptions required.</strong> Hold $ARGUS tokens in your wallet to unlock premium features instantly. Your tokens, your access.
+            </p>
+          </div>
+        </section>
+
         {/* TOKEN TEASER */}
         <section id="token" className="token-teaser reveal">
           <div className="container">
@@ -3430,6 +3651,7 @@ export default function Landing() {
             </div>
             <div className="footer-links">
               <a href="#features">Features</a>
+              <a href="#pricing">Pricing</a>
               <a href="#token">Token</a>
               <a href="#roadmap">Roadmap</a>
               <a href="https://github.com/ArgusGuardAI/argus-ai" target="_blank" rel="noopener noreferrer">GitHub</a>
