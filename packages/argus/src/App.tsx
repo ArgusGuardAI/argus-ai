@@ -587,7 +587,7 @@ export default function App() {
           security: {
             mintAuthorityRevoked: data.security?.mintRevoked ?? true,
             freezeAuthorityRevoked: data.security?.freezeRevoked ?? true,
-            lpLockedPercent: 0,
+            lpLockedPercent: data.security?.lpLockedPct ?? 0,
           },
           market: {
             price: data.tokenInfo?.price || 0,

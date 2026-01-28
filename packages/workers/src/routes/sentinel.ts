@@ -8,6 +8,47 @@ import { sendMessage, formatAlertHtml } from '../services/telegram';
 // import { fetchPumpFunData, isPumpFunToken } from '../services/pumpfun';
 
 const HELIUS_RPC_BASE = 'https://mainnet.helius-rpc.com';
+const RUGCHECK_API = 'https://api.rugcheck.xyz/v1';
+
+interface RugCheckReport {
+  markets?: Array<{
+    pubkey: string;
+    marketType: string;
+    lpLockedPct?: number;
+    lp?: {
+      lpLockedPct: number;
+    };
+  }>;
+}
+
+/**
+ * Fetch LP lock data from RugCheck API (free, no API key needed)
+ */
+async function fetchRugCheckData(tokenAddress: string): Promise<{ lpLockedPct: number } | null> {
+  try {
+    const response = await fetch(`${RUGCHECK_API}/tokens/${tokenAddress}/report`, {
+      headers: { 'Accept': 'application/json' },
+    });
+
+    if (!response.ok) {
+      console.log(`[RugCheck] Failed to fetch for ${tokenAddress.slice(0, 8)}... - ${response.status}`);
+      return null;
+    }
+
+    const data = await response.json() as RugCheckReport;
+
+    // LP locked percentage can be in markets[0].lp.lpLockedPct or markets[0].lpLockedPct
+    const market = data.markets?.[0];
+    const lpLockedPct = market?.lp?.lpLockedPct ?? market?.lpLockedPct ?? 0;
+
+    console.log(`[RugCheck] ${tokenAddress.slice(0, 8)}... - LP Locked: ${lpLockedPct.toFixed(1)}%`);
+
+    return { lpLockedPct };
+  } catch (error) {
+    console.error('[RugCheck] Error:', error instanceof Error ? error.message : 'Unknown error');
+    return null;
+  }
+}
 
 interface WalletNode {
   id: string;
@@ -598,7 +639,7 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
       const hasWhale = whales.length > 0;
       const topWhalePercent = whales[0]?.holdingsPercent || 0;
 
-      console.log(`[Sentinel] Post-AI guardrails: newWallet=${isNewWallet}, bundle=${hasBundleDetection} (${bundleInfo.confidence}), whale=${hasWhale} (${topWhalePercent.toFixed(1)}%), mature=${isMatureToken}, aiScore=${score}`);
+      console.log(`[Sentinel] Post-AI guardrails: newWallet=${isNewWallet}, bundle=${hasBundleDetection} (${bundleInfo.confidence}), whale=${hasWhale} (${topWhalePercent.toFixed(1)}%), aiScore=${score}`);
 
       // Enforce floor scores as safety nets (not additive)
       // HIGH confidence bundle = minimum 55 (SUSPICIOUS)
@@ -1357,12 +1398,16 @@ sentinelRoutes.post('/analyze', async (c) => {
     }
 
     // Now fetch remaining data with known LPs
-    const [metadata, holders, txAnalysis] = await Promise.all([
+    const [metadata, holders, txAnalysis, rugCheckData] = await Promise.all([
       fetchHeliusTokenMetadata(tokenAddress, heliusKey),
       fetchTopHolders(tokenAddress, heliusKey, 20, knownLpAddresses),
       analyzeTokenTransactions(tokenAddress, heliusKey),
+      fetchRugCheckData(tokenAddress),
     ]);
     console.log(`[Sentinel] Parallel fetch took ${Date.now() - fetchStart}ms`);
+
+    // Extract LP locked percentage from RugCheck
+    const lpLockedPct = rugCheckData?.lpLockedPct ?? 0;
 
     // Get creator info - try multiple fast methods
     let creatorAddress: string | null = null;
@@ -1704,6 +1749,7 @@ sentinelRoutes.post('/analyze', async (c) => {
       security: {
         mintRevoked: !mintAuthorityActive,
         freezeRevoked: !freezeAuthorityActive,
+        lpLockedPct,
       },
       network,
       analysis,
