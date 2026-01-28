@@ -83,6 +83,388 @@ interface HolderInfo {
 // Known LP pool authority prefixes (Raydium, Pumpswap, Meteora, etc.)
 const LP_PREFIXES = ['5Q544', 'HWy1', 'Gnt2', 'BVCh', 'DQyr', 'BDc8', '39azU', 'FoSD'];
 
+// ============================================
+// HARDCODED RULES ENGINE
+// Applies structural guardrails that OVERRIDE AI hallucinations
+// Migrated from analyze.ts for unified sentinel brain
+// ============================================
+
+interface RulesInputData {
+  tokenInfo: {
+    marketCap?: number;
+    liquidity?: number;
+    ageHours?: number;
+    volume24h?: number;
+    txns24h?: { buys: number; sells: number };
+    mintAuthorityActive: boolean;
+    freezeAuthorityActive: boolean;
+  };
+  holders: HolderInfo[];
+  creatorInfo: {
+    address: string;
+    walletAge: number;
+    tokensCreated: number;
+    ruggedTokens: number;
+    currentHoldings: number;
+  } | null;
+  bundleInfo: {
+    detected: boolean;
+    confidence: 'HIGH' | 'MEDIUM' | 'LOW' | 'NONE';
+    count: number;
+    txBundlePercent: number;
+  };
+  devActivity: {
+    hasSold: boolean;
+    percentSold: number;
+    currentHoldingsPercent: number;
+  } | null;
+  isPumpFun: boolean;
+  hasWebsite: boolean;
+  hasTwitter: boolean;
+  creatorAddress: string | null;
+}
+
+interface AnalysisFlag {
+  type: string;
+  severity: string;
+  message: string;
+}
+
+interface AnalysisResult {
+  riskScore: number;
+  riskLevel: string;
+  summary: string;
+  flags: AnalysisFlag[];
+  networkInsights: string[];
+  prediction?: string;
+  recommendation?: string;
+}
+
+/**
+ * Apply hardcoded minimum score rules for critical red flags
+ * These rules OVERRIDE the AI score when specific conditions are met
+ */
+function applyHardcodedRules(
+  result: AnalysisResult,
+  data: RulesInputData
+): AnalysisResult {
+  let adjustedScore = result.riskScore;
+  const additionalFlags: AnalysisFlag[] = [];
+
+  const { tokenInfo, holders, creatorInfo, bundleInfo, devActivity, isPumpFun } = data;
+  const ageInDays = tokenInfo.ageHours !== undefined ? tokenInfo.ageHours / 24 : 0;
+  const liquidityUsd = tokenInfo.liquidity || 0;
+  const marketCapUsd = tokenInfo.marketCap || 0;
+
+  // Calculate holder metrics from raw data
+  const nonLpHolders = holders.filter(h => !h.isLp);
+  const top1NonLpPercent = nonLpHolders[0]?.percent || 0;
+  const top10NonLpPercent = nonLpHolders.slice(0, 10).reduce((sum, h) => sum + h.percent, 0);
+
+  // Track if dev has exited (community-owned)
+  let isCommunityOwned = false;
+  const hasKnownRugs = creatorInfo && creatorInfo.ruggedTokens > 0;
+
+  // ============================================
+  // RULE 1: CREATOR/DEPLOYER RISK (CRITICAL)
+  // ============================================
+  if (creatorInfo) {
+    // Previous rugs = immediate high risk
+    if (creatorInfo.ruggedTokens > 0) {
+      const penalty = Math.min(creatorInfo.ruggedTokens * 20, 50);
+      if (adjustedScore < 70 + penalty / 2) {
+        adjustedScore = Math.min(95, 70 + penalty / 2);
+        additionalFlags.push({
+          type: 'DEPLOYER',
+          severity: 'CRITICAL',
+          message: `CRITICAL: Creator has ${creatorInfo.ruggedTokens} previous dead/rugged tokens`,
+        });
+      }
+    }
+
+    // Brand new wallet (only apply if we actually checked - walletAge >= 0)
+    if (creatorInfo.walletAge >= 0) {
+      if (creatorInfo.walletAge === 0) {
+        if (adjustedScore < 65) adjustedScore = 65;
+      } else if (creatorInfo.walletAge < 7) {
+        if (adjustedScore < 55) adjustedScore = 55;
+      }
+    }
+
+    // Serial token creator - VERY suspicious
+    if (creatorInfo.tokensCreated >= 20) {
+      if (adjustedScore < 85) adjustedScore = 85;
+      additionalFlags.push({
+        type: 'DEPLOYER',
+        severity: 'CRITICAL',
+        message: `SERIAL RUG FARMER: Creator deployed ${creatorInfo.tokensCreated} tokens`,
+      });
+    } else if (creatorInfo.tokensCreated >= 10) {
+      if (adjustedScore < 80) adjustedScore = 80;
+      additionalFlags.push({
+        type: 'DEPLOYER',
+        severity: 'CRITICAL',
+        message: `Serial token creator: ${creatorInfo.tokensCreated} tokens deployed`,
+      });
+    } else if (creatorInfo.tokensCreated >= 5) {
+      if (adjustedScore < 75) adjustedScore = 75;
+      additionalFlags.push({
+        type: 'DEPLOYER',
+        severity: 'HIGH',
+        message: `Serial token creator: ${creatorInfo.tokensCreated} tokens deployed`,
+      });
+    }
+  }
+
+  // Unknown deployer = significant risk
+  if (!data.creatorAddress) {
+    if (adjustedScore < 60) {
+      adjustedScore = 60;
+      additionalFlags.push({
+        type: 'DEPLOYER',
+        severity: 'HIGH',
+        message: 'Deployer/creator could not be identified',
+      });
+    }
+  }
+
+  // ============================================
+  // RULE 2: TOKEN AGE RISK
+  // ============================================
+  if (ageInDays < 1) {
+    if (adjustedScore < 55) {
+      adjustedScore = 55;
+      additionalFlags.push({
+        type: 'TOKEN',
+        severity: 'HIGH',
+        message: 'Very new token (<1 day old) - high risk of rug pull',
+      });
+    }
+  } else if (ageInDays < 3) {
+    if (adjustedScore < 50) adjustedScore = 50;
+  }
+
+  // ============================================
+  // RULE 3: LIQUIDITY RISK
+  // ============================================
+  if (!isPumpFun && liquidityUsd <= 0) {
+    if (adjustedScore < 90) {
+      adjustedScore = 90;
+      additionalFlags.push({
+        type: 'LIQUIDITY',
+        severity: 'CRITICAL',
+        message: 'HONEYPOT: $0 liquidity - YOU CANNOT SELL',
+      });
+    }
+  } else if (!isPumpFun && liquidityUsd < 1000) {
+    if (adjustedScore < 80) {
+      adjustedScore = 80;
+      additionalFlags.push({
+        type: 'LIQUIDITY',
+        severity: 'HIGH',
+        message: `Very low liquidity ($${liquidityUsd.toFixed(0)}) - high rug risk`,
+      });
+    }
+  } else if (!isPumpFun && liquidityUsd < 10000 && ageInDays < 3) {
+    if (adjustedScore < 70) adjustedScore = 70;
+  }
+
+  // ============================================
+  // RULE 4: AUTHORITY RISKS
+  // ============================================
+  if (tokenInfo.mintAuthorityActive) {
+    if (adjustedScore < 50) adjustedScore = 50;
+  }
+  if (tokenInfo.freezeAuthorityActive) {
+    if (adjustedScore < 55) adjustedScore = 55;
+  }
+
+  // ============================================
+  // RULE 5: DEV EXIT STATUS
+  // ============================================
+  if (devActivity && devActivity.hasSold) {
+    if (devActivity.percentSold >= 90 && devActivity.currentHoldingsPercent === 0) {
+      isCommunityOwned = true;
+      // Dev fully exited - positive for new buyers
+      if (!hasKnownRugs) {
+        adjustedScore -= 15;
+        additionalFlags.push({
+          type: 'DEPLOYER',
+          severity: 'LOW',
+          message: `Dev has exited (sold ${devActivity.percentSold.toFixed(0)}%) - community-owned`,
+        });
+      }
+    }
+  }
+
+  // ============================================
+  // RULE 6: CREATOR CURRENT HOLDINGS
+  // ============================================
+  if (devActivity && devActivity.currentHoldingsPercent > 0) {
+    const holdings = devActivity.currentHoldingsPercent;
+    if (holdings >= 50) {
+      if (adjustedScore < 75) adjustedScore = 75;
+      additionalFlags.push({
+        type: 'DEPLOYER',
+        severity: 'CRITICAL',
+        message: `Creator holds ${holdings.toFixed(1)}% of supply - major dump risk`,
+      });
+    } else if (holdings >= 30) {
+      if (adjustedScore < 65) adjustedScore = 65;
+    } else if (holdings >= 20) {
+      if (adjustedScore < 55) adjustedScore = 55;
+    }
+  }
+
+  // ============================================
+  // RULE 7: BUNDLE DETECTION PENALTY
+  // ============================================
+  if (bundleInfo.detected) {
+    const { confidence, count, txBundlePercent } = bundleInfo;
+
+    if (confidence === 'HIGH' || txBundlePercent >= 25) {
+      if (adjustedScore < 80) adjustedScore = 80;
+      additionalFlags.push({
+        type: 'BUNDLE',
+        severity: 'CRITICAL',
+        message: `${count} coordinated wallets detected - likely rug setup`,
+      });
+    } else if (confidence === 'MEDIUM' || count >= 5) {
+      if (adjustedScore < 75) adjustedScore = 75;
+      additionalFlags.push({
+        type: 'BUNDLE',
+        severity: 'HIGH',
+        message: `${count} coordinated wallets detected - suspicious activity`,
+      });
+    } else if (count >= 3) {
+      if (adjustedScore < 70) adjustedScore = 70;
+    }
+
+    // Additional penalty based on dev status
+    if (!isCommunityOwned) {
+      adjustedScore += 15; // Dev still active + bundles = HIGH risk
+    } else {
+      adjustedScore += 5; // Community-owned + bundles = lower concern
+    }
+  }
+
+  // ============================================
+  // RULE 8: SINGLE WHALE CONCENTRATION
+  // ============================================
+  // Only apply to non-mature tokens
+  const isMatureToken = liquidityUsd > 100_000 || marketCapUsd > 10_000_000;
+
+  if (!isMatureToken) {
+    if (top1NonLpPercent >= 30) {
+      if (adjustedScore < 80) adjustedScore = 80;
+      additionalFlags.push({
+        type: 'HOLDERS',
+        severity: 'CRITICAL',
+        message: `CRITICAL: Single wallet holds ${top1NonLpPercent.toFixed(1)}% - major dump risk`,
+      });
+    } else if (top1NonLpPercent >= 25) {
+      if (adjustedScore < 75) adjustedScore = 75;
+      additionalFlags.push({
+        type: 'HOLDERS',
+        severity: 'HIGH',
+        message: `Single wallet holds ${top1NonLpPercent.toFixed(1)}% - high dump risk`,
+      });
+    } else if (top1NonLpPercent >= 15) {
+      if (adjustedScore < 65) adjustedScore = 65;
+    }
+  }
+
+  // ============================================
+  // RULE 9: MATURITY OFFSET (CREDIT)
+  // ============================================
+  // Large established tokens should have score capped
+  if (marketCapUsd >= 100_000_000 && ageInDays >= 30 && !hasKnownRugs) {
+    if (adjustedScore > 35) {
+      adjustedScore = 35;
+      additionalFlags.push({
+        type: 'CONTRACT',
+        severity: 'LOW',
+        message: `Established token ($${(marketCapUsd / 1_000_000).toFixed(1)}M MC) - score capped`,
+      });
+    }
+  } else if (marketCapUsd >= 50_000_000 && ageInDays >= 14 && !hasKnownRugs) {
+    if (adjustedScore > 45) adjustedScore = 45;
+  } else if (marketCapUsd >= 10_000_000 && ageInDays >= 7 && !hasKnownRugs) {
+    if (adjustedScore > 55) adjustedScore = 55;
+  }
+
+  // ============================================
+  // RULE 10: GOOD FUNDAMENTALS CREDIT
+  // ============================================
+  const volume24h = tokenInfo.volume24h || 0;
+  const txns24h = (tokenInfo.txns24h?.buys || 0) + (tokenInfo.txns24h?.sells || 0);
+
+  let fundamentalsCredit = 0;
+  if (liquidityUsd >= 100_000) fundamentalsCredit += 5;
+  if (volume24h >= 1_000_000) fundamentalsCredit += 5;
+  if (txns24h >= 10_000) fundamentalsCredit += 5;
+  if (data.hasWebsite && data.hasTwitter && !hasKnownRugs) fundamentalsCredit += 5;
+
+  // Apply credit (max 15 reduction, floor at 50)
+  if (fundamentalsCredit > 0 && !hasKnownRugs) {
+    const maxCredit = Math.min(fundamentalsCredit, 15);
+    if (adjustedScore - maxCredit >= 50) {
+      adjustedScore -= maxCredit;
+    } else if (adjustedScore > 50) {
+      adjustedScore = 50;
+    }
+  }
+
+  // ============================================
+  // RULE 11: COMMUNITY-OWNED TOKEN CAP
+  // ============================================
+  if (isCommunityOwned) {
+    let positiveSignals = 0;
+    if (data.hasWebsite || data.hasTwitter) positiveSignals++;
+    if (top1NonLpPercent < 10 && top10NonLpPercent >= 10) positiveSignals++;
+    if (liquidityUsd >= 25000) positiveSignals++;
+    if (!tokenInfo.mintAuthorityActive && !tokenInfo.freezeAuthorityActive) positiveSignals++;
+
+    if (positiveSignals >= 3 && adjustedScore > 50) {
+      adjustedScore = 50;
+    } else if (positiveSignals >= 2 && adjustedScore > 55) {
+      adjustedScore = 55;
+    } else if (positiveSignals >= 1 && adjustedScore > 65) {
+      adjustedScore = 65;
+    }
+  }
+
+  // ============================================
+  // DETERMINE FINAL RISK LEVEL
+  // ============================================
+  let adjustedLevel: string;
+  if (adjustedScore >= 90) {
+    adjustedLevel = 'SCAM';
+  } else if (adjustedScore >= 70) {
+    adjustedLevel = 'DANGEROUS';
+  } else if (adjustedScore >= 50) {
+    adjustedLevel = 'SUSPICIOUS';
+  } else {
+    adjustedLevel = 'SAFE';
+  }
+
+  // Ensure score is within bounds
+  adjustedScore = Math.max(0, Math.min(100, adjustedScore));
+
+  // Merge flags (avoid duplicates)
+  const existingMessages = new Set(result.flags.map(f => f.message));
+  const newFlags = additionalFlags.filter(f => !existingMessages.has(f.message));
+
+  console.log(`[Rules] Score adjustment: ${result.riskScore} → ${adjustedScore} (${result.riskLevel} → ${adjustedLevel})`);
+
+  return {
+    ...result,
+    riskScore: adjustedScore,
+    riskLevel: adjustedLevel,
+    flags: [...newFlags, ...result.flags],
+  };
+}
+
 const sentinelRoutes = new Hono<{ Bindings: Bindings }>();
 
 /**
@@ -1654,7 +2036,7 @@ sentinelRoutes.post('/analyze', async (c) => {
 
     // Generate AI analysis - PASS BUNDLE INFO for proper scoring
     const aiStart = Date.now();
-    const analysis = await generateNetworkAnalysis(
+    const aiAnalysis = await generateNetworkAnalysis(
       tokenInfo,
       network,
       creatorInfo,
@@ -1663,7 +2045,37 @@ sentinelRoutes.post('/analyze', async (c) => {
       togetherKey,
       model
     );
-    console.log(`[Sentinel] AI analysis took ${Date.now() - aiStart}ms`);
+    console.log(`[Sentinel] AI analysis took ${Date.now() - aiStart}ms, AI score: ${aiAnalysis.riskScore}`);
+
+    // ============================================
+    // APPLY HARDCODED RULES (THE SPINE)
+    // Overrides AI hallucinations with structural guardrails
+    // ============================================
+    const hasWebsite = !!(dexData?.websites && dexData.websites.length > 0);
+    const hasTwitter = !!(dexData?.socials?.some(s =>
+      s.type === 'twitter' || s.url?.includes('twitter.com') || s.url?.includes('x.com')
+    ));
+
+    const analysis = applyHardcodedRules(aiAnalysis, {
+      tokenInfo: {
+        marketCap: tokenInfo.marketCap,
+        liquidity: tokenInfo.liquidity,
+        ageHours: tokenInfo.ageHours,
+        volume24h: tokenInfo.volume24h,
+        txns24h: tokenInfo.txns24h,
+        mintAuthorityActive: tokenInfo.mintAuthorityActive,
+        freezeAuthorityActive: tokenInfo.freezeAuthorityActive,
+      },
+      holders,
+      creatorInfo,
+      bundleInfo,
+      devActivity,
+      isPumpFun,
+      hasWebsite,
+      hasTwitter,
+      creatorAddress,
+    });
+    console.log(`[Sentinel] Final score after rules: ${analysis.riskScore} (${analysis.riskLevel})`);
 
     // ============================================
     // AUTO-TWEET: Alert on high-risk tokens

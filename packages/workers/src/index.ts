@@ -1,6 +1,5 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { analyzeRoutes } from './routes/analyze';
 import { walletHistoryRoutes } from './routes/wallet-history';
 import { subscriptionRoutes } from './routes/subscription';
 import { authRoutes } from './routes/auth';
@@ -163,7 +162,6 @@ app.get('/privacy', (c) => {
 });
 
 // Mount routes
-app.route('/analyze', analyzeRoutes);
 app.route('/wallet-history', walletHistoryRoutes);
 app.route('/subscribe', subscriptionRoutes);
 app.route('/auth', authRoutes);
