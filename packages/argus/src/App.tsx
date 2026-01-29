@@ -387,6 +387,15 @@ interface AnalysisResult {
       type: string;
       isHighRisk: boolean;
     }>;
+    washTrading?: {
+      detected: boolean;
+      totalBuys: number;
+      bundleBuys: number;
+      organicBuys: number;
+      washTradingPercent: number;
+      realBuyRatio: number | null;
+      warning: string | null;
+    } | null;
   };
   devActivity: {
     hasSold: boolean;
@@ -687,6 +696,7 @@ export default function App() {
                 isHighRisk: n.isHighRisk || false,
               }))
               .sort((a: { holdingsPercent: number }, b: { holdingsPercent: number }) => b.holdingsPercent - a.holdingsPercent),
+            washTrading: data.bundleInfo?.washTrading || null,
           },
           devActivity: data.devActivity ? {
             hasSold: data.devActivity.hasSold,
@@ -1917,6 +1927,58 @@ export default function App() {
                     }
                   </p>
                 )}
+              </div>
+            )}
+
+            {/* Wash Trading Detection */}
+            {analysisResult.bundles.washTrading?.detected && (
+              <div className="p-4 rounded-xl bg-orange-900/30 border border-orange-800">
+                <div className="flex items-center gap-2 mb-3">
+                  <svg className="w-5 h-5 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  <span className="text-sm font-bold text-orange-400">Wash Trading Detected</span>
+                  <span className={`ml-auto px-2 py-0.5 rounded text-[10px] font-bold ${
+                    analysisResult.bundles.washTrading.washTradingPercent >= 70
+                      ? 'bg-red-800/60 text-red-300'
+                      : analysisResult.bundles.washTrading.washTradingPercent >= 50
+                      ? 'bg-orange-800/60 text-orange-300'
+                      : 'bg-amber-800/60 text-amber-300'
+                  }`}>
+                    {analysisResult.bundles.washTrading.washTradingPercent.toFixed(0)}% FAKE
+                  </span>
+                </div>
+
+                <div className="space-y-2 text-xs">
+                  <div className="flex justify-between text-zinc-400">
+                    <span>Total Buys Analyzed:</span>
+                    <span className="font-mono text-zinc-300">{analysisResult.bundles.washTrading.totalBuys}</span>
+                  </div>
+                  <div className="flex justify-between text-zinc-400">
+                    <span>Bundle Self-Buys:</span>
+                    <span className="font-mono text-red-400">{analysisResult.bundles.washTrading.bundleBuys} ({analysisResult.bundles.washTrading.washTradingPercent.toFixed(0)}%)</span>
+                  </div>
+                  <div className="flex justify-between text-zinc-400">
+                    <span>Organic Buys:</span>
+                    <span className="font-mono text-emerald-400">{analysisResult.bundles.washTrading.organicBuys} ({(100 - analysisResult.bundles.washTrading.washTradingPercent).toFixed(0)}%)</span>
+                  </div>
+                  {analysisResult.bundles.washTrading.realBuyRatio !== null && (
+                    <div className="flex justify-between text-zinc-400 pt-1 border-t border-orange-800/50">
+                      <span>Real Buy Ratio:</span>
+                      <span className="font-mono text-orange-300">{analysisResult.bundles.washTrading.realBuyRatio.toFixed(2)}:1</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-3 pt-2 border-t border-orange-800/50">
+                  <p className="text-xs text-orange-300">
+                    {analysisResult.bundles.washTrading.washTradingPercent >= 70
+                      ? `The displayed buy ratio is artificial. Only ${analysisResult.bundles.washTrading.organicBuys} of ${analysisResult.bundles.washTrading.totalBuys} buys are from real users.`
+                      : analysisResult.bundles.washTrading.washTradingPercent >= 50
+                      ? 'Bundle wallets are inflating buy metrics to attract retail buyers.'
+                      : 'Coordinated wallets contributing to buy volume — exercise caution.'}
+                  </p>
+                </div>
               </div>
             )}
 

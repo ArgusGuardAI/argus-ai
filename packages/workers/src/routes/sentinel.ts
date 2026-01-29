@@ -214,13 +214,178 @@ async function getFirstFunder(address: string, heliusKey: string): Promise<strin
  */
 function calculateVariance(numbers: number[]): number {
   if (numbers.length === 0) return 0;
-  
+
   const mean = numbers.reduce((sum, n) => sum + n, 0) / numbers.length;
   const squaredDiffs = numbers.map(n => Math.pow(n - mean, 2));
   const variance = squaredDiffs.reduce((sum, d) => sum + d, 0) / numbers.length;
-  
+
   // Return coefficient of variation (normalized)
   return mean > 0 ? Math.sqrt(variance) / mean : 0;
+}
+
+// ============================================
+// WASH TRADING DETECTION
+// Detects when bundle wallets are creating fake buy pressure
+// ============================================
+
+interface WashTradingResult {
+  detected: boolean;
+  totalBuys: number;
+  bundleBuys: number;
+  organicBuys: number;
+  washTradingPercent: number;
+  realBuyRatio: number | null;
+  warning: string | null;
+}
+
+/**
+ * Fetch recent buy transactions for a token using Helius
+ */
+async function getRecentBuyTransactions(
+  tokenAddress: string,
+  heliusKey: string,
+  limitTxns: number = 100
+): Promise<Array<{ buyer: string; timestamp: number; signature: string }>> {
+  try {
+    // Use Helius parsed transaction history for the token
+    const response = await fetch(
+      `https://api.helius.xyz/v0/addresses/${tokenAddress}/transactions?api-key=${heliusKey}&limit=${limitTxns}`,
+      { method: 'GET' }
+    );
+
+    if (!response.ok) {
+      console.log(`[WashTrading] Failed to fetch transactions: ${response.status}`);
+      return [];
+    }
+
+    const txns = await response.json() as Array<{
+      type: string;
+      timestamp: number;
+      signature: string;
+      feePayer: string;
+      tokenTransfers?: Array<{
+        mint: string;
+        fromUserAccount: string;
+        toUserAccount: string;
+        tokenAmount: number;
+      }>;
+    }>;
+
+    // Filter for SWAP transactions where token is being received (buys)
+    const buyTxns: Array<{ buyer: string; timestamp: number; signature: string }> = [];
+
+    for (const tx of txns) {
+      if (tx.type === 'SWAP' && tx.tokenTransfers) {
+        // Find transfers where the token is being received (buy)
+        const tokenReceived = tx.tokenTransfers.find(
+          t => t.mint === tokenAddress && t.toUserAccount && t.tokenAmount > 0
+        );
+
+        if (tokenReceived && tokenReceived.toUserAccount) {
+          buyTxns.push({
+            buyer: tokenReceived.toUserAccount,
+            timestamp: tx.timestamp,
+            signature: tx.signature
+          });
+        }
+      }
+    }
+
+    console.log(`[WashTrading] Found ${buyTxns.length} buy transactions out of ${txns.length} total`);
+    return buyTxns;
+  } catch (error) {
+    console.error('[WashTrading] Error fetching transactions:', error);
+    return [];
+  }
+}
+
+/**
+ * Detect wash trading by cross-referencing bundle wallets with recent buys
+ */
+async function detectWashTrading(
+  bundleWallets: string[],
+  tokenAddress: string,
+  heliusKey: string,
+  reportedBuys24h: number,
+  reportedSells24h: number
+): Promise<WashTradingResult> {
+  if (bundleWallets.length === 0) {
+    return {
+      detected: false,
+      totalBuys: reportedBuys24h,
+      bundleBuys: 0,
+      organicBuys: reportedBuys24h,
+      washTradingPercent: 0,
+      realBuyRatio: null,
+      warning: null
+    };
+  }
+
+  const recentBuys = await getRecentBuyTransactions(tokenAddress, heliusKey, 100);
+
+  if (recentBuys.length === 0) {
+    return {
+      detected: false,
+      totalBuys: reportedBuys24h,
+      bundleBuys: 0,
+      organicBuys: reportedBuys24h,
+      washTradingPercent: 0,
+      realBuyRatio: null,
+      warning: null
+    };
+  }
+
+  // Create a Set for O(1) lookup
+  const bundleSet = new Set(bundleWallets.map(w => w.toLowerCase()));
+
+  // Count how many buys are from bundle wallets
+  let bundleBuys = 0;
+  const seenSignatures = new Set<string>();
+
+  for (const tx of recentBuys) {
+    // Dedupe by signature
+    if (seenSignatures.has(tx.signature)) continue;
+    seenSignatures.add(tx.signature);
+
+    if (bundleSet.has(tx.buyer.toLowerCase())) {
+      bundleBuys++;
+    }
+  }
+
+  const totalBuys = seenSignatures.size;
+  const organicBuys = totalBuys - bundleBuys;
+  const washTradingPercent = totalBuys > 0 ? (bundleBuys / totalBuys) * 100 : 0;
+
+  // Calculate what the "real" buy ratio would be without wash trades
+  // If reported is 176:73 but 165 buys are wash, real is 11:73
+  const estimatedOrganicBuys24h = Math.max(1, Math.round(reportedBuys24h * (organicBuys / Math.max(1, totalBuys))));
+  const realBuyRatio = reportedSells24h > 0
+    ? estimatedOrganicBuys24h / reportedSells24h
+    : estimatedOrganicBuys24h;
+
+  // Determine if wash trading is significant (30%+ of buys from bundle wallets)
+  const isSignificant = washTradingPercent >= 30 && bundleBuys >= 3;
+
+  let warning: string | null = null;
+  if (washTradingPercent >= 70) {
+    warning = `CRITICAL: ${washTradingPercent.toFixed(0)}% of recent buys are from bundle wallets — massive wash trading`;
+  } else if (washTradingPercent >= 50) {
+    warning = `${washTradingPercent.toFixed(0)}% of buy volume is bundle self-trading — artificial demand`;
+  } else if (washTradingPercent >= 30) {
+    warning = `${washTradingPercent.toFixed(0)}% of buys from coordinated wallets — possible wash trading`;
+  }
+
+  console.log(`[WashTrading] Result: ${bundleBuys}/${totalBuys} buys from bundles (${washTradingPercent.toFixed(1)}%), real ratio: ${realBuyRatio?.toFixed(2)}`);
+
+  return {
+    detected: isSignificant,
+    totalBuys,
+    bundleBuys,
+    organicBuys,
+    washTradingPercent,
+    realBuyRatio,
+    warning
+  };
 }
 
 /**
@@ -230,12 +395,13 @@ function identifyBundleWallets(
   holders: HolderInfo[],
   bundleInfo: { count: number; confidence: string }
 ): string[] {
-  // For same-block bundles, we need to look at holders with similar patterns
-  // Take top N holders that aren't LP and have >1% holding
+  // For same-block bundles, look for holders with similar holdings patterns
+  // Bundle wallets typically have small, similar percentage holdings (often <1%)
+  // Take top N non-LP holders that could be bundle participants
   const candidates = holders
-    .filter(h => !h.isLp && h.percent > 1)
-    .slice(0, Math.min(bundleInfo.count, 10));
-  
+    .filter(h => !h.isLp && h.percent > 0.1 && h.percent < 10)
+    .slice(0, Math.min(bundleInfo.count, 15));
+
   return candidates.map(h => h.address);
 }
 
@@ -472,7 +638,8 @@ interface RulesInputData {
     count: number;
     txBundlePercent: number;
   };
-  bundleQuality?: BundleQuality; // NEW: Bundle legitimacy assessment
+  bundleQuality?: BundleQuality;
+  washTrading?: WashTradingResult | null;
   devActivity: {
     hasSold: boolean;
     percentSold: number;
@@ -761,6 +928,42 @@ function applyHardcodedRules(
       } else {
         adjustedScore += 5; // Community-owned + bundles = lower concern
       }
+    }
+  }
+
+  // ============================================
+  // RULE 7B: WASH TRADING DETECTION
+  // Bundle wallets creating fake buy pressure
+  // ============================================
+  const { washTrading } = data;
+
+  if (washTrading && washTrading.detected) {
+    const { washTradingPercent, bundleBuys, organicBuys, realBuyRatio } = washTrading;
+
+    if (washTradingPercent >= 70) {
+      // Severe wash trading - massive fake buy pressure
+      if (adjustedScore < 85) adjustedScore = 85;
+      additionalFlags.push({
+        type: 'WASH_TRADING',
+        severity: 'CRITICAL',
+        message: `WASH TRADING: ${washTradingPercent.toFixed(0)}% of buys are bundle self-trades (${bundleBuys} fake, ${organicBuys} organic). Real buy ratio: ${realBuyRatio?.toFixed(2) || 'N/A'}`,
+      });
+    } else if (washTradingPercent >= 50) {
+      // Significant wash trading
+      if (adjustedScore < 80) adjustedScore = 80;
+      additionalFlags.push({
+        type: 'WASH_TRADING',
+        severity: 'HIGH',
+        message: `${washTradingPercent.toFixed(0)}% of buy volume is artificial — bundle wallets self-trading to inflate metrics`,
+      });
+    } else if (washTradingPercent >= 30) {
+      // Moderate wash trading
+      if (adjustedScore < 70) adjustedScore = 70;
+      additionalFlags.push({
+        type: 'WASH_TRADING',
+        severity: 'MEDIUM',
+        message: `${washTradingPercent.toFixed(0)}% of buys from coordinated wallets — possible wash trading`,
+      });
     }
   }
 
@@ -1721,6 +1924,47 @@ sentinelRoutes.post('/analyze', async (c) => {
       console.log(`[Sentinel] Bundle quality: ${bundleQuality.assessment} (score: ${bundleQuality.legitimacyScore})`);
     }
 
+    // ============================================
+    // WASH TRADING DETECTION
+    // Check if bundle wallets are creating fake buy pressure
+    // ============================================
+    let washTrading: WashTradingResult | null = null;
+
+    // Use actual detected bundle wallet addresses from transaction analysis
+    // Fall back to holder-based heuristic if tx analysis didn't find wallets
+    let bundleWalletsForWashDetection = txAnalysis.bundleWalletAddresses || [];
+    console.log(`[Sentinel] Bundle wallet addresses from tx analysis: ${bundleWalletsForWashDetection.length}`);
+
+    // Fallback: if tx analysis didn't find bundle wallets but we detected bundles via holder patterns,
+    // use the top holders with similar holdings as the bundle wallets
+    console.log(`[Sentinel] Wash trading check: bundleDetected=${bundleDetected}, bundleInfo.count=${bundleInfo.count}, walletsLen=${bundleWalletsForWashDetection.length}`);
+    if (bundleWalletsForWashDetection.length < 3 && bundleDetected && bundleInfo.count >= 3) {
+      bundleWalletsForWashDetection = identifyBundleWallets(holders, bundleInfo);
+      console.log(`[Sentinel] Using holder-based bundle wallets as fallback: ${bundleWalletsForWashDetection.length}`);
+    }
+
+    if (bundleDetected && bundleWalletsForWashDetection.length >= 3) {
+      const washStart = Date.now();
+
+      washTrading = await detectWashTrading(
+        bundleWalletsForWashDetection,
+        tokenAddress,
+        heliusKey,
+        tokenInfo.txns24h?.buys || 0,
+        tokenInfo.txns24h?.sells || 0
+      );
+
+      console.log(`[Sentinel] Wash trading detection took ${Date.now() - washStart}ms`);
+
+      if (washTrading.detected) {
+        console.log(`[Sentinel] WASH TRADING DETECTED: ${washTrading.bundleBuys}/${washTrading.totalBuys} buys (${washTrading.washTradingPercent.toFixed(1)}%) from bundles`);
+      } else {
+        console.log(`[Sentinel] No significant wash trading detected (${washTrading.washTradingPercent.toFixed(1)}% from bundles)`);
+      }
+    } else if (bundleDetected) {
+      console.log(`[Sentinel] Skipping wash trading detection - only ${bundleWalletsForWashDetection.length} bundle wallets found`);
+    }
+
     const network = buildNetworkGraph(
       tokenAddress,
       tokenInfo.symbol,
@@ -1764,6 +2008,7 @@ sentinelRoutes.post('/analyze', async (c) => {
       creatorInfo,
       bundleInfo,
       bundleQuality,
+      washTrading,
       devActivity,
       isPumpFun,
       hasWebsite,
@@ -1894,7 +2139,18 @@ sentinelRoutes.post('/analyze', async (c) => {
       rulesOverride,
       creatorInfo,
       holderDistribution,
-      bundleInfo,
+      bundleInfo: {
+        ...bundleInfo,
+        washTrading: washTrading ? {
+          detected: washTrading.detected,
+          totalBuys: washTrading.totalBuys,
+          bundleBuys: washTrading.bundleBuys,
+          organicBuys: washTrading.organicBuys,
+          washTradingPercent: washTrading.washTradingPercent,
+          realBuyRatio: washTrading.realBuyRatio,
+          warning: washTrading.warning,
+        } : null,
+      },
       bundleQuality: bundleQuality ? {
         legitimacyScore: bundleQuality.legitimacyScore,
         assessment: bundleQuality.assessment,
