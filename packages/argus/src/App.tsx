@@ -3,6 +3,7 @@ import * as d3 from 'd3';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { useAutoTrade } from './hooks/useAutoTrade';
+import { toPng } from 'html-to-image';
 
 type SignalType = 'STRONG_BUY' | 'BUY' | 'WATCH' | 'HOLD' | 'AVOID';
 
@@ -469,6 +470,12 @@ export default function App() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showExportKeyModal, setShowExportKeyModal] = useState(false);
 
+  // Share card state
+  const [isGeneratingShare, setIsGeneratingShare] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
+  const shareCardRef = useRef<HTMLDivElement>(null);
+
   // Buy warning modal state
   const [buyWarning, setBuyWarning] = useState<{ message: string; symbol: string } | null>(null);
 
@@ -758,6 +765,75 @@ export default function App() {
     } finally {
       setIsAnalyzing(false);
     }
+  };
+
+  // Share analysis - just open modal, generate image on demand
+  const handleShare = () => {
+    if (!analysisResult) return;
+        setShareCopied(false);
+    setShowShareModal(true);
+  };
+
+  // Copy share image to clipboard
+  const handleCopyShareImage = async () => {
+    if (!shareCardRef.current) return;
+
+    setIsGeneratingShare(true);
+    try {
+      // Generate image from the visible card
+      const dataUrl = await toPng(shareCardRef.current, {
+        quality: 0.95,
+        pixelRatio: 2,
+        skipFonts: true,
+        cacheBust: true,
+      });
+      
+      // Copy to clipboard
+      const response = await fetch(dataUrl);
+      const blob = await response.blob();
+      await navigator.clipboard.write([
+        new ClipboardItem({ 'image/png': blob })
+      ]);
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 3000);
+    } catch (err) {
+      console.error('Failed to copy image:', err);
+      // Fallback: try download
+      handleDownloadShareImage();
+    } finally {
+      setIsGeneratingShare(false);
+    }
+  };
+
+  // Download share image
+  const handleDownloadShareImage = async () => {
+    if (!shareCardRef.current || !analysisResult) return;
+
+    setIsGeneratingShare(true);
+    try {
+      const dataUrl = await toPng(shareCardRef.current, {
+        quality: 0.95,
+        pixelRatio: 2,
+        skipFonts: true,
+        cacheBust: true,
+      });
+            const link = document.createElement('a');
+      link.download = `argus-${analysisResult.token.symbol}-analysis.png`;
+      link.href = dataUrl;
+      link.click();
+    } catch (err) {
+      console.error('Failed to download image:', err);
+    } finally {
+      setIsGeneratingShare(false);
+    }
+  };
+
+  // Open Twitter with pre-filled text
+  const handleShareToTwitter = () => {
+    if (!analysisResult) return;
+    const tweetText = `${analysisResult.ai.signal === 'AVOID' ? 'Red flag alert' : analysisResult.ai.signal === 'BUY' || analysisResult.ai.signal === 'STRONG_BUY' ? 'Found one' : 'Watching'} $${analysisResult.token.symbol}\n\nArgus Score: ${analysisResult.ai.score}/100\nMcap: $${(analysisResult.market.marketCap / 1e6).toFixed(2)}M\nLiquidity: $${(analysisResult.market.liquidity / 1e3).toFixed(0)}K\n\nDo your own research at argusguard.io\n\n@ArgusPanoptes7z`;
+    const twitterUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}`;
+    window.open(twitterUrl, '_blank', 'width=550,height=420');
   };
 
   // Buy token
@@ -1801,10 +1877,10 @@ export default function App() {
                 {/* Syndicate summary */}
                 <div className="mb-3 text-sm text-red-400/80">
                   {analysisResult.bundles.confidence === 'HIGH' ? (
-                    <span><span className="text-red-300 font-medium">{analysisResult.bundles.count} wallets</span> confirmed buying in the same block (same-block sniping). {
-                      analysisResult.holders.total > 0
-                        ? `That's ${((analysisResult.bundles.count / analysisResult.holders.total) * 100).toFixed(0)}% of all ${analysisResult.holders.total} holders.`
-                        : ''
+                    <span><span className="text-red-300 font-medium">{analysisResult.bundles.count} wallets</span> confirmed buying in the same block (same-block sniping){
+                      analysisResult.bundles.totalPercent > 0
+                        ? `, controlling ${analysisResult.bundles.totalPercent.toFixed(1)}% of the supply.`
+                        : '.'
                     }</span>
                   ) : (
                     <span>{analysisResult.bundles.count} wallets show coordination patterns — possible coordinated buying activity.</span>
@@ -2042,6 +2118,24 @@ export default function App() {
                         Buying...
                       </span>
                     ) : `Buy ${analysisResult.token.symbol}`}
+                  </button>
+                  {/* Share button */}
+                  <button
+                    onClick={handleShare}
+                    disabled={isGeneratingShare}
+                    className="p-3 rounded-xl text-sm font-bold transition-all bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white border border-zinc-700 disabled:opacity-50"
+                    title="Share analysis"
+                  >
+                    {isGeneratingShare ? (
+                      <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+                      </svg>
+                    ) : (
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                      </svg>
+                    )}
                   </button>
                 </div>
               </div>
@@ -2725,6 +2819,274 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Share Modal */}
+      {showShareModal && analysisResult && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl max-w-2xl w-full p-6 shadow-2xl">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-emerald-500/20 rounded-xl flex items-center justify-center">
+                  <svg className="w-5 h-5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">Share Analysis</h3>
+                  <p className="text-sm text-zinc-400">${analysisResult.token.symbol} Score Card</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowShareModal(false)}
+                className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Card Preview - render actual card for capture */}
+            <div className="bg-zinc-950 rounded-xl p-4 mb-4 flex justify-center overflow-auto">
+              <div
+                ref={shareCardRef}
+                style={{
+                  width: '600px',
+                  height: '315px',
+                  background: 'linear-gradient(135deg, #09090b 0%, #18181b 50%, #09090b 100%)',
+                  fontFamily: 'Inter, -apple-system, system-ui, sans-serif',
+                  color: '#fafafa',
+                  padding: '24px',
+                  borderRadius: '12px',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  flexShrink: 0,
+                }}
+              >
+                {/* Background pattern */}
+                <div style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  background: 'radial-gradient(circle at 80% 20%, rgba(16, 185, 129, 0.08) 0%, transparent 50%)',
+                  pointerEvents: 'none',
+                }} />
+
+                {/* Content */}
+                <div style={{ position: 'relative', height: '100%', display: 'flex', flexDirection: 'column' }}>
+                  {/* Header */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      {/* Score circle */}
+                      <div style={{
+                        width: '64px',
+                        height: '64px',
+                        borderRadius: '50%',
+                        background: `hsl(${(analysisResult.ai.score / 100) * 120}, 75%, 15%)`,
+                        border: `3px solid hsl(${(analysisResult.ai.score / 100) * 120}, 75%, 45%)`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexDirection: 'column',
+                      }}>
+                        <span style={{ fontSize: '24px', fontWeight: 800, color: `hsl(${(analysisResult.ai.score / 100) * 120}, 75%, 45%)` }}>{analysisResult.ai.score}</span>
+                        <span style={{ fontSize: '8px', color: '#71717a', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Score</span>
+                      </div>
+                      {/* Token info */}
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontSize: '22px', fontWeight: 700 }}>{analysisResult.token.symbol}</span>
+                          <span style={{
+                            padding: '4px 10px',
+                            borderRadius: '6px',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            background: analysisResult.ai.signal === 'AVOID' ? '#7f1d1d' : analysisResult.ai.signal === 'BUY' || analysisResult.ai.signal === 'STRONG_BUY' ? '#065f46' : '#854d0e',
+                            color: analysisResult.ai.signal === 'AVOID' ? '#ef4444' : analysisResult.ai.signal === 'BUY' || analysisResult.ai.signal === 'STRONG_BUY' ? '#10b981' : '#eab308',
+                            textTransform: 'uppercase',
+                          }}>{analysisResult.ai.signal.replace('_', ' ')}</span>
+                        </div>
+                        <div style={{ fontSize: '13px', color: '#71717a', marginTop: '2px' }}>
+                          {analysisResult.token.name}
+                        </div>
+                      </div>
+                    </div>
+                    {/* Argus logo */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
+                        <path d="M16 4L28 26H4L16 4Z" stroke="#10b981" strokeWidth="1.5" fill="none"/>
+                        <ellipse cx="16" cy="16" rx="6" ry="4" stroke="#10b981" strokeWidth="1" fill="none"/>
+                        <circle cx="16" cy="16" r="2" fill="#10b981"/>
+                      </svg>
+                      <span style={{ fontSize: '16px', fontWeight: 700, color: '#10b981' }}>ARGUS</span>
+                    </div>
+                  </div>
+
+                  {/* Main stats grid */}
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(4, 1fr)',
+                    gap: '12px',
+                    marginBottom: '16px',
+                  }}>
+                    {[
+                      { label: 'Market Cap', value: analysisResult.market.marketCap >= 1e6 ? `$${(analysisResult.market.marketCap / 1e6).toFixed(2)}M` : `$${(analysisResult.market.marketCap / 1e3).toFixed(1)}K` },
+                      { label: 'Liquidity', value: analysisResult.market.liquidity >= 1e6 ? `$${(analysisResult.market.liquidity / 1e6).toFixed(2)}M` : `$${(analysisResult.market.liquidity / 1e3).toFixed(1)}K` },
+                      { label: '24h Volume', value: analysisResult.market.volume24h >= 1e6 ? `$${(analysisResult.market.volume24h / 1e6).toFixed(2)}M` : `$${(analysisResult.market.volume24h / 1e3).toFixed(1)}K` },
+                      { label: 'Holders', value: analysisResult.holders.total.toLocaleString() },
+                    ].map((stat, i) => (
+                      <div key={i} style={{ background: '#18181b', borderRadius: '8px', padding: '12px' }}>
+                        <div style={{ fontSize: '10px', color: '#71717a', textTransform: 'uppercase', marginBottom: '4px' }}>{stat.label}</div>
+                        <div style={{ fontSize: '16px', fontWeight: 600, color: '#fafafa' }}>{stat.value}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Security + Price Change row */}
+                  <div style={{ display: 'flex', gap: '12px', marginBottom: analysisResult.bundles.detected ? '12px' : '0' }}>
+                    {/* Security checks */}
+                    <div style={{ display: 'flex', gap: '8px', flex: 1 }}>
+                      {[
+                        { label: 'Mint', ok: analysisResult.security.mintAuthorityRevoked },
+                        { label: 'Freeze', ok: analysisResult.security.freezeAuthorityRevoked },
+                        { label: 'LP Lock', ok: analysisResult.security.lpLockedPercent > 50 },
+                      ].map((check, i) => (
+                        <div key={i} style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          padding: '6px 10px',
+                          background: check.ok ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                          borderRadius: '6px',
+                        }}>
+                          <span style={{ fontSize: '12px', color: check.ok ? '#10b981' : '#ef4444' }}>{check.ok ? '✓' : '✗'}</span>
+                          <span style={{ fontSize: '11px', fontWeight: 600, color: check.ok ? '#10b981' : '#ef4444' }}>{check.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {/* Price changes */}
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      {[
+                        { label: '5m', value: analysisResult.market.priceChange5m },
+                        { label: '1h', value: analysisResult.market.priceChange1h },
+                        { label: '24h', value: analysisResult.market.priceChange24h },
+                      ].map((item, i) => (
+                        <div key={i} style={{
+                          padding: '6px 10px',
+                          background: '#18181b',
+                          borderRadius: '6px',
+                          textAlign: 'center',
+                        }}>
+                          <div style={{ fontSize: '9px', color: '#71717a', marginBottom: '2px' }}>{item.label}</div>
+                          <div style={{
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            color: item.value >= 0 ? '#10b981' : '#ef4444',
+                          }}>
+                            {item.value >= 0 ? '+' : ''}{item.value.toFixed(1)}%
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Bundle warning if detected */}
+                  {analysisResult.bundles.detected && (
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '8px 12px',
+                      background: 'rgba(239, 68, 68, 0.15)',
+                      borderRadius: '6px',
+                      marginBottom: '12px',
+                    }}>
+                      <span style={{ fontSize: '14px' }}>⚠</span>
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#ef4444' }}>
+                        {analysisResult.bundles.count} Bundle{analysisResult.bundles.count > 1 ? 's' : ''} Detected - {analysisResult.bundles.totalPercent.toFixed(1)}% supply
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Footer */}
+                  <div style={{
+                    marginTop: 'auto',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    borderTop: '1px solid #27272a',
+                    paddingTop: '12px',
+                  }}>
+                    <div style={{ fontSize: '11px', color: '#52525b' }}>
+                      {analysisResult.token.address.slice(0, 8)}...{analysisResult.token.address.slice(-6)}
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#10b981', fontWeight: 600 }}>
+                      argusguard.io
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Instructions */}
+            <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-3 mb-4">
+              <p className="text-sm text-zinc-300">
+                <span className="font-semibold text-emerald-400">How to share:</span> Copy the image below, then paste it into your tweet on X/Twitter.
+              </p>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex gap-3">
+              <button
+                onClick={handleCopyShareImage}
+                className={`flex-1 py-3 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
+                  shareCopied
+                    ? 'bg-emerald-500 text-white'
+                    : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                }`}
+              >
+                {shareCopied ? (
+                  <>
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                    Copied!
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                    Copy Image
+                  </>
+                )}
+              </button>
+              <button
+                onClick={handleDownloadShareImage}
+                className="py-3 px-4 rounded-lg font-medium bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition-colors flex items-center gap-2"
+                title="Download image"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+              </button>
+              <button
+                onClick={handleShareToTwitter}
+                className="flex-1 py-3 rounded-lg font-semibold bg-[#1DA1F2] text-white hover:bg-[#1a8cd8] transition-colors flex items-center justify-center gap-2"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                </svg>
+                Post on X
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

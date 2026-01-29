@@ -25,7 +25,7 @@ interface RugCheckReport {
 /**
  * Fetch LP lock data from RugCheck API (free, no API key needed)
  */
-async function fetchRugCheckData(tokenAddress: string): Promise<{ lpLockedPct: number } | null> {
+async function fetchRugCheckData(tokenAddress: string): Promise<{ lpLockedPct: number; totalHolders: number } | null> {
   try {
     const response = await fetch(`${RUGCHECK_API}/tokens/${tokenAddress}/report`, {
       headers: { 'Accept': 'application/json' },
@@ -42,9 +42,12 @@ async function fetchRugCheckData(tokenAddress: string): Promise<{ lpLockedPct: n
     const market = data.markets?.[0];
     const lpLockedPct = market?.lp?.lpLockedPct ?? market?.lpLockedPct ?? 0;
 
-    console.log(`[RugCheck] ${tokenAddress.slice(0, 8)}... - LP Locked: ${lpLockedPct.toFixed(1)}%`);
+    // Total holder count from RugCheck's totalHolders field
+    const totalHolders = (data as { totalHolders?: number }).totalHolders ?? 0;
 
-    return { lpLockedPct };
+    console.log(`[RugCheck] ${tokenAddress.slice(0, 8)}... - LP Locked: ${lpLockedPct.toFixed(1)}%, Holders: ${totalHolders}`);
+
+    return { lpLockedPct, totalHolders };
   } catch (error) {
     console.error('[RugCheck] Error:', error instanceof Error ? error.message : 'Unknown error');
     return null;
@@ -1950,7 +1953,7 @@ sentinelRoutes.post('/analyze', async (c) => {
       liquidity: effectiveLiquidity,
       age: ageHours !== undefined ? Math.floor(ageHours / 24) : undefined,
       ageHours: ageHours !== undefined ? Math.round(ageHours * 10) / 10 : undefined,
-      holderCount: holders.length,
+      holderCount: rugCheckData?.totalHolders || holders.length,
       priceChange24h: dexData?.priceChange24h,
       volume24h: dexData?.volume24h,
       txns5m: dexData?.txns5m,
