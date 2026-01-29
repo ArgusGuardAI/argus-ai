@@ -1,0 +1,418 @@
+/**
+ * BitNet Local Inference Service
+ *
+ * This service will run the trained BitNet model for local inference.
+ * Can be deployed as:
+ * - Cloudflare Worker (with WASM model)
+ * - VPS with GPU (for larger models)
+ * - Edge deployment (Workers AI / similar)
+ *
+ * Current status: PLACEHOLDER - awaiting model training
+ */
+
+import { TokenAnalysisInput, TokenAnalysisOutput } from './ai-provider';
+
+// ============================================
+// MODEL CONFIGURATION
+// ============================================
+
+export interface BitNetModelConfig {
+  // Model file path or URL
+  modelPath: string;
+
+  // Inference settings
+  maxTokens?: number;
+  temperature?: number;
+
+  // Performance settings
+  batchSize?: number;
+  useFP16?: boolean;
+
+  // Model type
+  modelType: 'classifier' | 'generator';
+}
+
+// ============================================
+// CLASSIFIER MODEL OUTPUT
+// For direct score prediction without text generation
+// ============================================
+
+export interface ClassifierOutput {
+  riskScore: number;          // 0-100
+  confidence: number;         // 0-100
+  riskLevel: 'SAFE' | 'SUSPICIOUS' | 'DANGEROUS' | 'SCAM';
+
+  // Feature importance (which inputs contributed most)
+  featureImportance: {
+    bundle: number;           // 0-1
+    holders: number;
+    security: number;
+    trading: number;
+    creator: number;
+    washTrading: number;
+  };
+
+  // Flag predictions
+  flags: Array<{
+    type: string;
+    probability: number;      // 0-1
+    severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  }>;
+}
+
+// ============================================
+// BITNET INFERENCE ENGINE (Placeholder)
+// ============================================
+
+export class BitNetInferenceEngine {
+  private config: BitNetModelConfig;
+  private modelLoaded: boolean = false;
+
+  constructor(config: BitNetModelConfig) {
+    this.config = config;
+  }
+
+  /**
+   * Load the model into memory
+   * For WASM deployment, this loads the compiled model
+   * For GPU deployment, this loads model weights
+   */
+  async loadModel(): Promise<void> {
+    console.log(`[BitNet] Loading model from ${this.config.modelPath}...`);
+
+    // TODO: Implement actual model loading
+    // For WASM:
+    //   const wasmModule = await WebAssembly.instantiate(modelBuffer);
+    //   this.model = wasmModule.instance;
+    //
+    // For GPU (using ONNX Runtime Web):
+    //   const session = await ort.InferenceSession.create(this.config.modelPath);
+    //   this.model = session;
+
+    this.modelLoaded = true;
+    console.log('[BitNet] Model loaded successfully');
+  }
+
+  /**
+   * Run inference on input data
+   */
+  async infer(input: TokenAnalysisInput): Promise<ClassifierOutput> {
+    if (!this.modelLoaded) {
+      throw new Error('Model not loaded. Call loadModel() first.');
+    }
+
+    // Convert input to model feature vector
+    const features = this.extractFeatures(input);
+
+    // TODO: Run actual inference
+    // For now, return a rule-based placeholder
+    return this.ruleBasedFallback(input, features);
+  }
+
+  /**
+   * Extract numerical features from input
+   * This matches the training data format
+   */
+  private extractFeatures(input: TokenAnalysisInput): number[] {
+    return [
+      // Token age (normalized)
+      Math.min(input.token.ageHours / 168, 1), // 0-1 over 7 days
+
+      // Market features (log-scaled)
+      Math.log10(Math.max(1, input.market.marketCap)) / 10,
+      Math.log10(Math.max(1, input.market.liquidity)) / 8,
+      Math.log10(Math.max(1, input.market.volume24h)) / 8,
+      (input.market.priceChange24h + 100) / 200, // Normalize -100% to +100%
+
+      // Security (binary)
+      input.security.mintRevoked ? 1 : 0,
+      input.security.freezeRevoked ? 1 : 0,
+      input.security.lpLockedPercent / 100,
+
+      // Trading ratios
+      input.trading.buys24h / Math.max(1, input.trading.buys24h + input.trading.sells24h),
+      Math.min(1, input.trading.buys24h / 1000), // Normalized buy count
+
+      // Holder concentration
+      Math.min(1, input.holders.count / 1000),
+      input.holders.top10Percent / 100,
+      input.holders.whaleCount / 10,
+      input.holders.topWhalePercent / 100,
+
+      // Bundle features
+      input.bundle.detected ? 1 : 0,
+      input.bundle.count / 50, // Normalized bundle count
+      input.bundle.controlPercent / 100,
+      input.bundle.qualityScore / 100,
+      input.bundle.avgWalletAgeDays / 30, // Normalized over 30 days
+      this.encodeConfidence(input.bundle.confidence),
+      this.encodeAssessment(input.bundle.qualityAssessment),
+
+      // Creator features
+      input.creator ? 1 : 0,
+      input.creator?.walletAgeDays ? Math.min(1, input.creator.walletAgeDays / 365) : 0,
+      input.creator?.tokensCreated ? Math.min(1, input.creator.tokensCreated / 20) : 0,
+      input.creator?.ruggedTokens ? Math.min(1, input.creator.ruggedTokens / 5) : 0,
+      input.creator?.currentHoldingsPercent ? input.creator.currentHoldingsPercent / 100 : 0,
+
+      // Dev activity
+      input.devActivity?.hasSold ? 1 : 0,
+      input.devActivity?.percentSold ? input.devActivity.percentSold / 100 : 0,
+      input.devActivity?.currentHoldingsPercent ? input.devActivity.currentHoldingsPercent / 100 : 0,
+
+      // Wash trading
+      input.washTrading?.detected ? 1 : 0,
+      input.washTrading?.percent ? input.washTrading.percent / 100 : 0,
+    ];
+  }
+
+  private encodeConfidence(confidence: 'HIGH' | 'MEDIUM' | 'LOW' | 'NONE'): number {
+    switch (confidence) {
+      case 'HIGH': return 1;
+      case 'MEDIUM': return 0.66;
+      case 'LOW': return 0.33;
+      case 'NONE': return 0;
+    }
+  }
+
+  private encodeAssessment(assessment: 'LIKELY_LEGIT' | 'NEUTRAL' | 'SUSPICIOUS' | 'VERY_SUSPICIOUS'): number {
+    switch (assessment) {
+      case 'LIKELY_LEGIT': return 0;
+      case 'NEUTRAL': return 0.33;
+      case 'SUSPICIOUS': return 0.66;
+      case 'VERY_SUSPICIOUS': return 1;
+    }
+  }
+
+  /**
+   * Rule-based fallback until model is trained
+   * This mimics the current guardrails logic
+   */
+  private ruleBasedFallback(input: TokenAnalysisInput, _features: number[]): ClassifierOutput {
+    let score = 30; // Base score
+    const flags: ClassifierOutput['flags'] = [];
+    const importance = {
+      bundle: 0,
+      holders: 0,
+      security: 0,
+      trading: 0,
+      creator: 0,
+      washTrading: 0,
+    };
+
+    // Security checks
+    if (!input.security.mintRevoked) {
+      score += 15;
+      importance.security += 0.3;
+      flags.push({ type: 'MINT_ACTIVE', probability: 1, severity: 'HIGH' });
+    }
+    if (!input.security.freezeRevoked) {
+      score += 25;
+      importance.security += 0.5;
+      flags.push({ type: 'FREEZE_ACTIVE', probability: 1, severity: 'CRITICAL' });
+    }
+
+    // Bundle detection
+    if (input.bundle.detected) {
+      const bundlePenalty = input.bundle.qualityAssessment === 'VERY_SUSPICIOUS' ? 35
+        : input.bundle.qualityAssessment === 'SUSPICIOUS' ? 25
+        : input.bundle.qualityAssessment === 'LIKELY_LEGIT' ? 5
+        : 15;
+      score += bundlePenalty;
+      importance.bundle = bundlePenalty / 35;
+      flags.push({
+        type: 'BUNDLE',
+        probability: input.bundle.confidence === 'HIGH' ? 0.95 : input.bundle.confidence === 'MEDIUM' ? 0.7 : 0.5,
+        severity: bundlePenalty > 25 ? 'CRITICAL' : 'HIGH',
+      });
+    }
+
+    // Wash trading
+    if (input.washTrading?.detected && input.washTrading.percent > 30) {
+      const washPenalty = input.washTrading.percent >= 70 ? 30
+        : input.washTrading.percent >= 50 ? 20
+        : 10;
+      score += washPenalty;
+      importance.washTrading = washPenalty / 30;
+      flags.push({
+        type: 'WASH_TRADING',
+        probability: Math.min(1, input.washTrading.percent / 100 + 0.3),
+        severity: washPenalty > 20 ? 'CRITICAL' : 'HIGH',
+      });
+    }
+
+    // Creator history
+    if (input.creator?.ruggedTokens && input.creator.ruggedTokens > 0) {
+      score += 40;
+      importance.creator = 0.8;
+      flags.push({ type: 'SERIAL_RUGGER', probability: 1, severity: 'CRITICAL' });
+    }
+
+    // Whale concentration
+    if (input.holders.topWhalePercent > 50) {
+      score += 25;
+      importance.holders = 0.5;
+      flags.push({ type: 'WHALE_DOMINANCE', probability: 1, severity: 'CRITICAL' });
+    } else if (input.holders.topWhalePercent > 30) {
+      score += 15;
+      importance.holders = 0.3;
+      flags.push({ type: 'WHALE_CONCENTRATION', probability: 0.8, severity: 'HIGH' });
+    }
+
+    // Age factor
+    if (input.token.ageHours < 6) {
+      score = Math.max(score, 45);
+    }
+
+    // Cap and determine level
+    score = Math.min(100, score);
+
+    let riskLevel: ClassifierOutput['riskLevel'] = 'SAFE';
+    if (score >= 80) riskLevel = 'SCAM';
+    else if (score >= 60) riskLevel = 'DANGEROUS';
+    else if (score >= 40) riskLevel = 'SUSPICIOUS';
+
+    // Normalize feature importance
+    const totalImportance = Object.values(importance).reduce((a, b) => a + b, 0) || 1;
+    for (const key of Object.keys(importance) as Array<keyof typeof importance>) {
+      importance[key] = importance[key] / totalImportance;
+    }
+
+    return {
+      riskScore: score,
+      confidence: 75, // Rule-based confidence
+      riskLevel,
+      featureImportance: importance,
+      flags,
+    };
+  }
+
+  /**
+   * Convert classifier output to full analysis output
+   */
+  toAnalysisOutput(classifier: ClassifierOutput, input: TokenAnalysisInput): TokenAnalysisOutput {
+    // Generate summary from classifier
+    const summaryParts: string[] = [];
+
+    if (classifier.flags.some(f => f.type === 'BUNDLE')) {
+      summaryParts.push(`${input.bundle.count} coordinated wallets detected (${input.bundle.confidence} confidence)`);
+    }
+    if (classifier.flags.some(f => f.type === 'WHALE_DOMINANCE' || f.type === 'WHALE_CONCENTRATION')) {
+      summaryParts.push(`top whale holds ${input.holders.topWhalePercent.toFixed(1)}%`);
+    }
+    if (classifier.flags.some(f => f.type === 'WASH_TRADING')) {
+      summaryParts.push(`${input.washTrading?.percent?.toFixed(0)}% wash trading`);
+    }
+    if (classifier.flags.some(f => f.type === 'SERIAL_RUGGER')) {
+      summaryParts.push(`creator has ${input.creator?.ruggedTokens} previous rugs`);
+    }
+
+    const summary = summaryParts.length > 0
+      ? `Token shows ${classifier.riskLevel} risk: ${summaryParts.join(', ')}.`
+      : `Token shows ${classifier.riskLevel} risk with score ${classifier.riskScore}/100.`;
+
+    return {
+      riskScore: classifier.riskScore,
+      riskLevel: classifier.riskLevel,
+      confidence: classifier.confidence,
+      summary,
+      prediction: this.generatePrediction(classifier, input),
+      recommendation: this.generateRecommendation(classifier),
+      flags: classifier.flags.map(f => ({
+        type: f.type,
+        severity: f.severity,
+        message: this.flagMessage(f.type, input),
+      })),
+      networkInsights: this.generateInsights(classifier, input),
+    };
+  }
+
+  private generatePrediction(classifier: ClassifierOutput, input: TokenAnalysisInput): string {
+    if (classifier.riskScore >= 80) {
+      return 'High probability of rug pull. Bundle wallets likely to dump.';
+    }
+    if (classifier.riskScore >= 60) {
+      return 'Elevated risk of price manipulation. Exercise extreme caution.';
+    }
+    if (input.bundle.detected && input.bundle.qualityAssessment === 'VERY_SUSPICIOUS') {
+      return 'Bundle patterns suggest coordinated dump setup.';
+    }
+    if (classifier.riskScore >= 40) {
+      return 'Some risk factors present. Monitor closely before investing.';
+    }
+    return 'Lower risk profile. Standard due diligence recommended.';
+  }
+
+  private generateRecommendation(classifier: ClassifierOutput): string {
+    if (classifier.riskScore >= 80) {
+      return 'AVOID. Multiple critical risk factors detected.';
+    }
+    if (classifier.riskScore >= 60) {
+      return 'HIGH CAUTION. Only proceed with amounts you can afford to lose.';
+    }
+    if (classifier.riskScore >= 40) {
+      return 'MODERATE RISK. Research thoroughly before investing.';
+    }
+    return 'LOWER RISK. Always DYOR. Crypto is inherently risky.';
+  }
+
+  private flagMessage(type: string, input: TokenAnalysisInput): string {
+    switch (type) {
+      case 'BUNDLE':
+        return `${input.bundle.count} coordinated wallets controlling ${input.bundle.controlPercent.toFixed(1)}% of supply`;
+      case 'WASH_TRADING':
+        return `${input.washTrading?.percent?.toFixed(0)}% of buys from bundle wallets`;
+      case 'SERIAL_RUGGER':
+        return `Creator has ${input.creator?.ruggedTokens} previous rugged tokens`;
+      case 'WHALE_DOMINANCE':
+        return `Single whale holds ${input.holders.topWhalePercent.toFixed(1)}% of supply`;
+      case 'WHALE_CONCENTRATION':
+        return `High concentration: top holder has ${input.holders.topWhalePercent.toFixed(1)}%`;
+      case 'MINT_ACTIVE':
+        return 'Mint authority active - creator can mint unlimited tokens';
+      case 'FREEZE_ACTIVE':
+        return 'Freeze authority active - can freeze/close your token account';
+      default:
+        return type;
+    }
+  }
+
+  private generateInsights(classifier: ClassifierOutput, input: TokenAnalysisInput): string[] {
+    const insights: string[] = [];
+
+    // Top contributing factors
+    const sortedFactors = Object.entries(classifier.featureImportance)
+      .sort(([, a], [, b]) => b - a)
+      .filter(([, v]) => v > 0.1);
+
+    for (const [factor, weight] of sortedFactors.slice(0, 3)) {
+      insights.push(`${factor} contributed ${(weight * 100).toFixed(0)}% to risk score`);
+    }
+
+    // Token age insight
+    if (input.token.ageHours < 24) {
+      insights.push(`Very new token (${input.token.ageHours.toFixed(1)} hours old)`);
+    }
+
+    // Liquidity insight
+    if (input.market.liquidity < 5000) {
+      insights.push(`Low liquidity ($${input.market.liquidity.toLocaleString()})`);
+    }
+
+    return insights;
+  }
+}
+
+// ============================================
+// FACTORY FUNCTION
+// ============================================
+
+let engineInstance: BitNetInferenceEngine | null = null;
+
+export async function getBitNetEngine(config: BitNetModelConfig): Promise<BitNetInferenceEngine> {
+  if (!engineInstance) {
+    engineInstance = new BitNetInferenceEngine(config);
+    await engineInstance.loadModel();
+  }
+  return engineInstance;
+}

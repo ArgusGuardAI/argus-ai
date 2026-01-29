@@ -9,6 +9,7 @@ import { sentinelRoutes } from './routes/sentinel';
 import { jupiterRoutes } from './routes/jupiter';
 import { twitterRoutes } from './routes/twitter';
 import { telegramRoutes } from './routes/telegram';
+import { trainingRoutes } from './routes/training';
 
 export type Bindings = {
   SCAN_CACHE: KVNamespace;
@@ -28,6 +29,9 @@ export type Bindings = {
   TWITTER_ACCESS_TOKEN_SECRET?: string;
   TELEGRAM_BOT_TOKEN?: string;
   TELEGRAM_CHANNEL_ID?: string;
+  ADMIN_SECRET?: string; // For training data API access
+  BITNET_ENDPOINT?: string; // Future BitNet inference endpoint
+  AI_PROVIDER?: 'together' | 'bitnet' | 'hybrid'; // AI provider selection
   ENVIRONMENT: string;
 };
 
@@ -172,6 +176,7 @@ app.route('/sentinel', sentinelRoutes);
 app.route('/jupiter', jupiterRoutes);
 app.route('/twitter', twitterRoutes);
 app.route('/telegram', telegramRoutes);
+app.route('/training', trainingRoutes);
 
 // 404 handler
 app.notFound((c) => {

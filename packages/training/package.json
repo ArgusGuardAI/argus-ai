@@ -1,0 +1,20 @@
+{
+  "name": "@argusguard/training",
+  "version": "0.1.0",
+  "description": "BitNet model training pipeline for ArgusAI",
+  "type": "module",
+  "scripts": {
+    "backfill": "npx tsx scripts/backfill.ts",
+    "export": "npx tsx scripts/export-data.ts",
+    "evaluate": "npx tsx scripts/evaluate.ts",
+    "train": "npx tsx scripts/train.ts"
+  },
+  "dependencies": {
+    "commander": "^12.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0"
+  }
+}

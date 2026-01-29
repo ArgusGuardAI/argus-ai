@@ -5,6 +5,8 @@ import { fetchDexScreenerData } from '../services/dexscreener';
 import { postTweet, formatAlertTweet, canTweet, recordTweet, type TwitterConfig } from '../services/twitter';
 import { sendMessage, formatAlertHtml } from '../services/telegram';
 import { checkRateLimit, getUserTier, getClientIP } from '../services/rate-limit';
+import { saveTrainingExample } from '../services/training-data';
+import { convertToAnalysisInput, type TokenAnalysisOutput } from '../services/ai-provider';
 
 const HELIUS_RPC_BASE = 'https://mainnet.helius-rpc.com';
 const RUGCHECK_API = 'https://api.rugcheck.xyz/v1';
@@ -1698,7 +1700,13 @@ sentinelRoutes.post('/analyze', async (c) => {
       c.env.SUPABASE_ANON_KEY || ''
     );
 
-    const rateLimitResult = await checkRateLimit(c.env.SCAN_CACHE, rateLimitIdentifier, tier);
+    // Admin bypass for backfill/training
+    const authHeader = c.req.header('Authorization');
+    const isAdmin = authHeader && c.env.ADMIN_SECRET && authHeader.replace('Bearer ', '') === c.env.ADMIN_SECRET;
+
+    const rateLimitResult = isAdmin
+      ? { allowed: true, tier: 'pro' as const, remaining: Infinity, limit: Infinity, resetAt: 0 }
+      : await checkRateLimit(c.env.SCAN_CACHE, rateLimitIdentifier, tier);
 
     if (!rateLimitResult.allowed) {
       return c.json({
@@ -2118,6 +2126,58 @@ sentinelRoutes.post('/analyze', async (c) => {
           }
         })()
       );
+    }
+
+    // ============================================
+    // SAVE TRAINING DATA (for BitNet fine-tuning)
+    // ============================================
+    try {
+      const trainingInput = convertToAnalysisInput(
+        tokenInfo,
+        holders.map(h => ({ percent: h.percent, isWhale: h.percent > 10, address: h.address })),
+        bundleInfo,
+        bundleQuality,
+        creatorInfo,
+        devActivity,
+        washTrading,
+        bundleQuality?.signals.negative.some(s => s.includes('age')) ? 0 : 30, // Avg bundle wallet age
+        bundleInfo.detected ? holders.filter(h => !h.isLp).slice(0, bundleInfo.count).reduce((sum, h) => sum + h.percent, 0) : 0
+      );
+
+      const aiOutput: TokenAnalysisOutput = {
+        riskScore: aiScore,
+        riskLevel: analysis.riskLevel as 'SAFE' | 'SUSPICIOUS' | 'DANGEROUS' | 'SCAM',
+        confidence: 70,
+        summary: analysis.summary || 'Analysis completed.',
+        prediction: analysis.prediction || 'Unable to predict.',
+        recommendation: analysis.recommendation || 'Exercise caution.',
+        flags: analysis.flags.map(f => ({
+          type: f.type,
+          severity: f.severity as 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL',
+          message: f.message,
+        })),
+        networkInsights: analysis.networkInsights,
+      };
+
+      // Save asynchronously (don't block response)
+      c.executionCtx.waitUntil(
+        saveTrainingExample(
+          c.env.BUNDLE_DB,
+          tokenAddress,
+          tokenInfo.symbol || '???',
+          trainingInput,
+          aiOutput,
+          analysis.riskScore,
+          analysis.riskLevel,
+          rulesOverride,
+          rulesOverride ? `AI: ${aiScore} → Final: ${analysis.riskScore}` : undefined,
+          'together',
+          model,
+          Date.now() - fetchStart
+        ).catch(err => console.error('[Training] Failed to save:', err))
+      );
+    } catch (trainingErr) {
+      console.error('[Training] Error preparing data:', trainingErr);
     }
 
     c.header('X-RateLimit-Limit', String(rateLimitResult.limit));
