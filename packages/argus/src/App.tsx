@@ -597,6 +597,18 @@ export default function App() {
         result = data;
         if (!result.ai.flags) result.ai.flags = [];
       } else {
+        // Build bundle wallet addresses from backend's network nodes
+        // Only wallets marked as isHighRisk by backend are actual bundle members
+        const bundleWalletAddresses = new Set(
+          (data.network?.nodes || [])
+            .filter((n: { type: string; isHighRisk?: boolean }) =>
+              n.type !== 'token' &&
+              n.type !== 'lp' &&
+              n.isHighRisk === true
+            )
+            .map((n: { address: string }) => n.address)
+        );
+
         // Calculate holder percentages
         const holders = data.holderDistribution || [];
         const top10 = holders.slice(0, 10);
@@ -653,7 +665,7 @@ export default function App() {
             top10: top10.map((h: { address: string; percent: number; type: string }) => ({
               address: h.address || '',
               percent: typeof h.percent === 'number' ? h.percent : 0,
-              isBundle: h.type === 'insider' || h.type === 'whale',
+              isBundle: bundleWalletAddresses.has(h.address),
             })),
             topHolderPercent: typeof holders[0]?.percent === 'number' ? holders[0].percent : 0,
             top5Percent: typeof top5Percent === 'number' ? top5Percent : 0,

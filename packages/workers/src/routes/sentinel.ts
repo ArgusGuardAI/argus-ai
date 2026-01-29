@@ -5,8 +5,6 @@ import { fetchDexScreenerData } from '../services/dexscreener';
 import { postTweet, formatAlertTweet, canTweet, recordTweet, type TwitterConfig } from '../services/twitter';
 import { sendMessage, formatAlertHtml } from '../services/telegram';
 import { checkRateLimit, getUserTier, getClientIP } from '../services/rate-limit';
-// Pump.fun API disabled (Cloudflare 1016 error)
-// import { fetchPumpFunData, isPumpFunToken } from '../services/pumpfun';
 
 const HELIUS_RPC_BASE = 'https://mainnet.helius-rpc.com';
 const RUGCHECK_API = 'https://api.rugcheck.xyz/v1';
@@ -38,7 +36,6 @@ async function fetchRugCheckData(tokenAddress: string): Promise<{ lpLockedPct: n
 
     const data = await response.json() as RugCheckReport;
 
-    // LP locked percentage can be in markets[0].lp.lpLockedPct or markets[0].lpLockedPct
     const market = data.markets?.[0];
     const lpLockedPct = market?.lp?.lpLockedPct ?? market?.lpLockedPct ?? 0;
 
@@ -84,6 +81,367 @@ interface HolderInfo {
 const LP_PREFIXES = ['5Q544', 'HWy1', 'Gnt2', 'BVCh', 'DQyr', 'BDc8', '39azU', 'FoSD'];
 
 // ============================================
+// BUNDLE QUALITY ASSESSMENT
+// Determines if bundles are legitimate (VCs, team) or malicious (rug setup)
+// ============================================
+
+interface BundleQuality {
+  legitimacyScore: number; // 0-100, higher = more likely legit
+  assessment: 'LIKELY_LEGIT' | 'NEUTRAL' | 'SUSPICIOUS' | 'VERY_SUSPICIOUS';
+  signals: {
+    positive: string[];
+    negative: string[];
+  };
+}
+
+/**
+ * Get wallet age in days by checking first transaction
+ */
+async function getWalletAge(address: string, heliusKey: string): Promise<number> {
+  try {
+    const response = await fetch(`${HELIUS_RPC_BASE}/?api-key=${heliusKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'wallet-age',
+        method: 'getSignaturesForAddress',
+        params: [
+          address,
+          { limit: 1 } // Get oldest transaction
+        ],
+      }),
+    });
+
+    if (!response.ok) return -1;
+
+    const data = await response.json() as {
+      result?: Array<{ blockTime?: number }>;
+    };
+
+    const signatures = data.result || [];
+    if (signatures.length === 0) return -1;
+
+    const firstTx = signatures[signatures.length - 1]; // Oldest
+    if (!firstTx.blockTime) return -1;
+
+    const ageMs = Date.now() - (firstTx.blockTime * 1000);
+    const ageDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
+
+    return ageDays;
+  } catch (error) {
+    console.error(`[BundleQuality] Error getting wallet age for ${address.slice(0, 8)}:`, error);
+    return -1; // Unknown
+  }
+}
+
+/**
+ * Get the first address that funded this wallet
+ */
+async function getFirstFunder(address: string, heliusKey: string): Promise<string | null> {
+  try {
+    const response = await fetch(`${HELIUS_RPC_BASE}/?api-key=${heliusKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'first-funder',
+        method: 'getSignaturesForAddress',
+        params: [
+          address,
+          { limit: 5 } // Get first few transactions
+        ],
+      }),
+    });
+
+    if (!response.ok) return null;
+
+    const data = await response.json() as {
+      result?: Array<{ signature?: string }>;
+    };
+
+    const signatures = data.result || [];
+    if (signatures.length === 0) return null;
+
+    // Get details of oldest transaction
+    const oldestSig = signatures[signatures.length - 1].signature;
+    if (!oldestSig) return null;
+
+    const txResponse = await fetch(`${HELIUS_RPC_BASE}/?api-key=${heliusKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'tx-detail',
+        method: 'getTransaction',
+        params: [
+          oldestSig,
+          { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 }
+        ],
+      }),
+    });
+
+    if (!txResponse.ok) return null;
+
+    const txData = await txResponse.json() as {
+      result?: {
+        transaction?: {
+          message?: {
+            accountKeys?: Array<{ pubkey: string }>;
+          };
+        };
+      };
+    };
+
+    const accountKeys = txData.result?.transaction?.message?.accountKeys || [];
+    
+    // First account that's not the target wallet is likely the funder
+    for (const account of accountKeys) {
+      if (account.pubkey !== address) {
+        return account.pubkey;
+      }
+    }
+
+    return null;
+  } catch (error) {
+    console.error(`[BundleQuality] Error getting first funder for ${address.slice(0, 8)}:`, error);
+    return null;
+  }
+}
+
+/**
+ * Calculate variance of an array of numbers
+ */
+function calculateVariance(numbers: number[]): number {
+  if (numbers.length === 0) return 0;
+  
+  const mean = numbers.reduce((sum, n) => sum + n, 0) / numbers.length;
+  const squaredDiffs = numbers.map(n => Math.pow(n - mean, 2));
+  const variance = squaredDiffs.reduce((sum, d) => sum + d, 0) / numbers.length;
+  
+  // Return coefficient of variation (normalized)
+  return mean > 0 ? Math.sqrt(variance) / mean : 0;
+}
+
+/**
+ * Identify which wallets are part of the bundle
+ */
+function identifyBundleWallets(
+  holders: HolderInfo[],
+  bundleInfo: { count: number; confidence: string }
+): string[] {
+  // For same-block bundles, we need to look at holders with similar patterns
+  // Take top N holders that aren't LP and have >1% holding
+  const candidates = holders
+    .filter(h => !h.isLp && h.percent > 1)
+    .slice(0, Math.min(bundleInfo.count, 10));
+  
+  return candidates.map(h => h.address);
+}
+
+/**
+ * Assess bundle legitimacy based on wallet behavior patterns
+ */
+async function assessBundleQuality(
+  bundleInfo: { detected: boolean; count: number; confidence: string },
+  holders: HolderInfo[],
+  creatorAddress: string | null,
+  tokenAgeHours: number | undefined,
+  heliusKey: string
+): Promise<BundleQuality> {
+  
+  const positive: string[] = [];
+  const negative: string[] = [];
+  let score = 50; // Start neutral
+
+  if (!bundleInfo.detected || bundleInfo.count === 0) {
+    return {
+      legitimacyScore: 100,
+      assessment: 'LIKELY_LEGIT',
+      signals: { positive: ['No bundle detected'], negative: [] }
+    };
+  }
+
+  // Get bundle wallet addresses
+  const bundleWallets = identifyBundleWallets(holders, bundleInfo);
+  console.log(`[BundleQuality] Assessing ${bundleWallets.length} bundle wallets...`);
+
+  // ============================================
+  // 1. Check wallet ages (parallel, limit to 5 for speed)
+  // ============================================
+  try {
+    const agesToCheck = bundleWallets.slice(0, 5);
+    const ages = await Promise.all(
+      agesToCheck.map(addr => getWalletAge(addr, heliusKey))
+    );
+    
+    const validAges = ages.filter(age => age >= 0);
+    
+    if (validAges.length > 0) {
+      const avgAge = validAges.reduce((sum, age) => sum + age, 0) / validAges.length;
+      
+      console.log(`[BundleQuality] Average wallet age: ${avgAge.toFixed(1)} days`);
+      
+      if (avgAge > 180) {
+        score -= 20;
+        positive.push(`Established wallets (avg ${avgAge.toFixed(0)} days old)`);
+      } else if (avgAge > 90) {
+        score -= 10;
+        positive.push(`Mature wallets (avg ${avgAge.toFixed(0)} days old)`);
+      } else if (avgAge > 30) {
+        score -= 5;
+        positive.push('Wallets have some history');
+      } else if (avgAge < 7) {
+        score += 20;
+        negative.push(`Fresh wallets (avg ${avgAge.toFixed(0)} days old)`);
+      } else if (avgAge < 14) {
+        score += 10;
+        negative.push('Recently created wallets');
+      }
+    }
+  } catch (error) {
+    console.error('[BundleQuality] Error checking wallet ages:', error);
+  }
+
+  // ============================================
+  // 2. Check common funding source
+  // ============================================
+  try {
+    const fundersToCheck = bundleWallets.slice(0, 5);
+    const funders = await Promise.all(
+      fundersToCheck.map(addr => getFirstFunder(addr, heliusKey))
+    );
+    
+    const validFunders = funders.filter(f => f !== null) as string[];
+    
+    if (validFunders.length >= 2) {
+      const uniqueFunders = new Set(validFunders);
+      const singleSourceRatio = validFunders.length / uniqueFunders.size;
+      
+      console.log(`[BundleQuality] ${uniqueFunders.size} unique funders for ${validFunders.length} wallets`);
+      
+      if (uniqueFunders.size === 1) {
+        score += 25;
+        negative.push('All wallets funded from single source');
+      } else if (singleSourceRatio > 2) {
+        score += 15;
+        negative.push('Wallets share common funding sources');
+      } else if (uniqueFunders.size >= validFunders.length * 0.7) {
+        score -= 10;
+        positive.push('Diverse funding sources');
+      }
+    }
+  } catch (error) {
+    console.error('[BundleQuality] Error checking funders:', error);
+  }
+
+  // ============================================
+  // 3. Check buy amount variance
+  // ============================================
+  const amounts = bundleWallets
+    .map(w => holders.find(h => h.address === w)?.balance || 0)
+    .filter(a => a > 0);
+  
+  if (amounts.length >= 2) {
+    const variance = calculateVariance(amounts);
+    
+    console.log(`[BundleQuality] Buy amount variance: ${variance.toFixed(3)}`);
+    
+    if (variance < 0.05) {
+      score += 20;
+      negative.push('Near-identical buy amounts');
+    } else if (variance < 0.15) {
+      score += 10;
+      negative.push('Similar buy amounts');
+    } else if (variance > 0.4) {
+      score -= 10;
+      positive.push('Varied position sizes');
+    }
+  }
+
+  // ============================================
+  // 4. Check if they're still holding (if token >24h old)
+  // ============================================
+  if (tokenAgeHours !== undefined && tokenAgeHours > 24) {
+    const stillHolding = bundleWallets.filter(w => 
+      holders.find(h => h.address === w && h.balance > 0)
+    ).length;
+    
+    const holdingPct = stillHolding / bundleWallets.length;
+    
+    console.log(`[BundleQuality] ${stillHolding}/${bundleWallets.length} (${(holdingPct * 100).toFixed(0)}%) still holding after 24h`);
+    
+    if (holdingPct > 0.9) {
+      score -= 20;
+      positive.push('Bundle holding after 24h (not dumped)');
+    } else if (holdingPct > 0.7) {
+      score -= 10;
+      positive.push('Most bundle wallets still holding');
+    } else if (holdingPct < 0.3) {
+      score += 25;
+      negative.push('Bundle dumped within 24h');
+    } else if (holdingPct < 0.5) {
+      score += 15;
+      negative.push('Majority of bundle has sold');
+    }
+  }
+
+  // ============================================
+  // 5. Check if creator is part of bundle
+  // ============================================
+  if (creatorAddress && bundleWallets.includes(creatorAddress)) {
+    score += 20;
+    negative.push('Creator wallet is part of bundle');
+  }
+
+  // ============================================
+  // 6. Check holder percentage concentration
+  // ============================================
+  const bundleHoldings = bundleWallets
+    .map(w => holders.find(h => h.address === w)?.percent || 0)
+    .filter(p => p > 0);
+  
+  const totalBundlePercent = bundleHoldings.reduce((sum, p) => sum + p, 0);
+  
+  console.log(`[BundleQuality] Bundle controls ${totalBundlePercent.toFixed(1)}% of supply`);
+  
+  if (totalBundlePercent > 40) {
+    score += 15;
+    negative.push(`Bundle controls ${totalBundlePercent.toFixed(1)}% of supply`);
+  } else if (totalBundlePercent > 25) {
+    score += 10;
+    negative.push('Significant bundle concentration');
+  } else if (totalBundlePercent < 10) {
+    score -= 5;
+    positive.push('Bundle has limited supply control');
+  }
+
+  // Cap score
+  score = Math.max(0, Math.min(100, score));
+
+  // Determine assessment
+  let assessment: BundleQuality['assessment'];
+  if (score >= 70) {
+    assessment = 'VERY_SUSPICIOUS';
+  } else if (score >= 50) {
+    assessment = 'SUSPICIOUS';
+  } else if (score >= 30) {
+    assessment = 'NEUTRAL';
+  } else {
+    assessment = 'LIKELY_LEGIT';
+  }
+
+  console.log(`[BundleQuality] Final assessment: ${assessment} (score: ${score})`);
+  console.log(`[BundleQuality] Positive signals: ${positive.length}, Negative signals: ${negative.length}`);
+
+  return {
+    legitimacyScore: score,
+    assessment,
+    signals: { positive, negative }
+  };
+}
+
+// ============================================
 // HARDCODED RULES ENGINE
 // Applies structural guardrails that OVERRIDE AI hallucinations
 // Migrated from analyze.ts for unified sentinel brain
@@ -114,6 +472,7 @@ interface RulesInputData {
     count: number;
     txBundlePercent: number;
   };
+  bundleQuality?: BundleQuality; // NEW: Bundle legitimacy assessment
   devActivity: {
     hasSold: boolean;
     percentSold: number;
@@ -152,7 +511,7 @@ function applyHardcodedRules(
   let adjustedScore = result.riskScore;
   const additionalFlags: AnalysisFlag[] = [];
 
-  const { tokenInfo, holders, creatorInfo, bundleInfo, devActivity, isPumpFun } = data;
+  const { tokenInfo, holders, creatorInfo, bundleInfo, bundleQuality, devActivity, isPumpFun } = data;
   const ageInDays = tokenInfo.ageHours !== undefined ? tokenInfo.ageHours / 24 : 0;
   const liquidityUsd = tokenInfo.liquidity || 0;
   const marketCapUsd = tokenInfo.marketCap || 0;
@@ -318,41 +677,96 @@ function applyHardcodedRules(
   }
 
   // ============================================
-  // RULE 7: BUNDLE DETECTION PENALTY
+  // RULE 7: BUNDLE DETECTION PENALTY (WITH QUALITY ASSESSMENT)
   // ============================================
   if (bundleInfo.detected) {
     const { confidence, count, txBundlePercent } = bundleInfo;
-
-    if (confidence === 'HIGH' || txBundlePercent >= 25) {
-      if (adjustedScore < 80) adjustedScore = 80;
-      additionalFlags.push({
-        type: 'BUNDLE',
-        severity: 'CRITICAL',
-        message: `${count} coordinated wallets detected - likely rug setup`,
-      });
-    } else if (confidence === 'MEDIUM' || count >= 5) {
-      if (adjustedScore < 75) adjustedScore = 75;
-      additionalFlags.push({
-        type: 'BUNDLE',
-        severity: 'HIGH',
-        message: `${count} coordinated wallets detected - suspicious activity`,
-      });
-    } else if (count >= 3) {
-      if (adjustedScore < 70) adjustedScore = 70;
+    
+    // Use bundle quality assessment if available
+    if (bundleQuality) {
+      const { legitimacyScore, assessment, signals } = bundleQuality;
+      
+      console.log(`[Rules] Bundle quality: ${assessment} (${legitimacyScore}/100)`);
+      
+      if (assessment === 'VERY_SUSPICIOUS') {
+        // High-risk bundle - full penalty
+        if (confidence === 'HIGH' && adjustedScore < 80) {
+          adjustedScore = 80;
+          additionalFlags.push({
+            type: 'BUNDLE',
+            severity: 'CRITICAL',
+            message: `${count} coordinated wallets detected - HIGH RUG RISK: ${signals.negative.join('; ')}`,
+          });
+        } else if (adjustedScore < 75) {
+          adjustedScore = 75;
+          additionalFlags.push({
+            type: 'BUNDLE',
+            severity: 'HIGH',
+            message: `${count} coordinated wallets - suspicious patterns: ${signals.negative.join('; ')}`,
+          });
+        }
+      } else if (assessment === 'SUSPICIOUS') {
+        // Moderate-risk bundle - reduced penalty
+        if (adjustedScore < 65) {
+          adjustedScore = 65;
+          additionalFlags.push({
+            type: 'BUNDLE',
+            severity: 'MEDIUM',
+            message: `${count} coordinated wallets with mixed signals`,
+          });
+        }
+      } else if (assessment === 'NEUTRAL') {
+        // Uncertain - minimal penalty
+        if (adjustedScore < 55) {
+          adjustedScore = 55;
+          additionalFlags.push({
+            type: 'BUNDLE',
+            severity: 'LOW',
+            message: `${count} wallets show coordination, intent unclear`,
+          });
+        }
+      } else if (assessment === 'LIKELY_LEGIT') {
+        // Likely legitimate - no penalty, add positive flag
+        additionalFlags.push({
+          type: 'BUNDLE',
+          severity: 'LOW',
+          message: `${count} coordinated wallets detected but show legitimacy signals: ${signals.positive.join('; ')}`,
+        });
+      }
+    } else {
+      // No quality assessment available - use original conservative approach
+      if (confidence === 'HIGH' || txBundlePercent >= 25) {
+        if (adjustedScore < 80) adjustedScore = 80;
+        additionalFlags.push({
+          type: 'BUNDLE',
+          severity: 'CRITICAL',
+          message: `${count} coordinated wallets detected - likely rug setup`,
+        });
+      } else if (confidence === 'MEDIUM' || count >= 5) {
+        if (adjustedScore < 75) adjustedScore = 75;
+        additionalFlags.push({
+          type: 'BUNDLE',
+          severity: 'HIGH',
+          message: `${count} coordinated wallets detected - suspicious activity`,
+        });
+      } else if (count >= 3) {
+        if (adjustedScore < 70) adjustedScore = 70;
+      }
     }
 
-    // Additional penalty based on dev status
-    if (!isCommunityOwned) {
-      adjustedScore += 15; // Dev still active + bundles = HIGH risk
-    } else {
-      adjustedScore += 5; // Community-owned + bundles = lower concern
+    // Additional penalty based on dev status (only if bundle is suspicious)
+    if (!bundleQuality || bundleQuality.assessment !== 'LIKELY_LEGIT') {
+      if (!isCommunityOwned) {
+        adjustedScore += 15; // Dev still active + bundles = HIGH risk
+      } else {
+        adjustedScore += 5; // Community-owned + bundles = lower concern
+      }
     }
   }
 
   // ============================================
   // RULE 8: SINGLE WHALE CONCENTRATION
   // ============================================
-  // Only apply to non-mature tokens
   const isMatureToken = liquidityUsd > 100_000 || marketCapUsd > 10_000_000;
 
   if (!isMatureToken) {
@@ -378,7 +792,6 @@ function applyHardcodedRules(
   // ============================================
   // RULE 9: MATURITY OFFSET (CREDIT)
   // ============================================
-  // Large established tokens should have score capped
   if (marketCapUsd >= 100_000_000 && ageInDays >= 30 && !hasKnownRugs) {
     if (adjustedScore > 35) {
       adjustedScore = 35;
@@ -406,7 +819,6 @@ function applyHardcodedRules(
   if (txns24h >= 10_000) fundamentalsCredit += 5;
   if (data.hasWebsite && data.hasTwitter && !hasKnownRugs) fundamentalsCredit += 5;
 
-  // Apply credit (max 15 reduction, floor at 50)
   if (fundamentalsCredit > 0 && !hasKnownRugs) {
     const maxCredit = Math.min(fundamentalsCredit, 15);
     if (adjustedScore - maxCredit >= 50) {
@@ -419,16 +831,11 @@ function applyHardcodedRules(
   // ============================================
   // RULE 11: SECURITY FUNDAMENTALS CAP
   // ============================================
-  // Tokens with revoked authorities and locked LP can't be as risky
-  // as tokens that can be rug-pulled via mint/freeze/LP drain
   const hasRevokedAuth = !tokenInfo.mintAuthorityActive && !tokenInfo.freezeAuthorityActive;
   const hasLockedLP = liquidityUsd > 0 && tokenInfo.lpLockedPct !== undefined && tokenInfo.lpLockedPct > 50;
   const hasGoodLPAmount = liquidityUsd >= 25_000;
 
-  // If authorities are revoked AND LP is locked/good amount, cap max risk
   if (hasRevokedAuth && (hasLockedLP || hasGoodLPAmount)) {
-    // Can't be worse than 75 (WATCH territory on frontend = 25)
-    // Bundles are still risky but can't drain liquidity with these protections
     if (adjustedScore > 75) {
       console.log(`[Rules] Security cap: revoked auth + LP protection caps score at 75 (was ${adjustedScore})`);
       adjustedScore = 75;
@@ -439,7 +846,6 @@ function applyHardcodedRules(
       });
     }
   } else if (hasRevokedAuth && liquidityUsd >= 10_000) {
-    // Just revoked auth with decent liquidity = cap at 80
     if (adjustedScore > 80) {
       console.log(`[Rules] Security cap: revoked auth caps score at 80 (was ${adjustedScore})`);
       adjustedScore = 80;
@@ -479,10 +885,8 @@ function applyHardcodedRules(
     adjustedLevel = 'SAFE';
   }
 
-  // Ensure score is within bounds
   adjustedScore = Math.max(0, Math.min(100, adjustedScore));
 
-  // Merge flags (avoid duplicates)
   const existingMessages = new Set(result.flags.map(f => f.message));
   const newFlags = additionalFlags.filter(f => !existingMessages.has(f.message));
 
@@ -507,10 +911,8 @@ async function fetchTopHolders(
   limit: number = 20,
   knownLpAddresses: string[] = []
 ): Promise<HolderInfo[]> {
-  // Create a set of known LP addresses for quick lookup
   const knownLpSet = new Set(knownLpAddresses.map(a => a.toLowerCase()));
   try {
-    // Get token largest accounts
     const response = await fetch(`${HELIUS_RPC_BASE}/?api-key=${apiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -541,13 +943,10 @@ async function fetchTopHolders(
     const accounts = data.result?.value || [];
     if (accounts.length === 0) return [];
 
-    // Calculate total from top accounts for percentage
     const totalBalance = accounts.reduce((sum, acc) => sum + acc.uiAmount, 0);
 
-    // Get owner addresses for these token accounts
     const holders: HolderInfo[] = [];
 
-    // Batch fetch account info
     const accountAddresses = accounts.slice(0, limit).map(a => a.address);
 
     const infoResponse = await fetch(`${HELIUS_RPC_BASE}/?api-key=${apiKey}`, {
@@ -591,11 +990,6 @@ async function fetchTopHolders(
           const balance = info.data.parsed.info.tokenAmount?.uiAmount || originalAccount.uiAmount;
           const percent = (balance / totalBalance) * 100;
 
-          // Detect LP by checking BOTH owner and token account address for LP patterns
-          // Token account address is what getTokenLargestAccounts returns
-          // Owner is who controls that account
-          // IMPORTANT: Do NOT mark high % holders as LP - that's the bug!
-          // High % holders could be whales or deployers, which are HIGH RISK
           const isLp = LP_PREFIXES.some(prefix => owner.startsWith(prefix)) ||
             LP_PREFIXES.some(prefix => tokenAccountAddress.startsWith(prefix)) ||
             owner.toLowerCase().includes('pool') ||
@@ -638,7 +1032,6 @@ function buildNetworkGraph(
   const links: WalletLink[] = [];
   const addedNodes = new Set<string>();
 
-  // Token node (center)
   nodes.push({
     id: tokenAddress,
     address: tokenAddress,
@@ -647,7 +1040,6 @@ function buildNetworkGraph(
   });
   addedNodes.add(tokenAddress);
 
-  // Creator node
   if (creatorAddress && !addedNodes.has(creatorAddress)) {
     nodes.push({
       id: creatorAddress,
@@ -667,13 +1059,10 @@ function buildNetworkGraph(
     });
   }
 
-  // Holder nodes
   for (const holder of holders) {
-    // Skip if it's the creator (already added)
     if (holder.address === creatorAddress) continue;
     if (addedNodes.has(holder.address)) continue;
 
-    // Determine node type based on holdings
     let type: WalletNode['type'] = 'normal';
     if (holder.percent > 10) {
       type = 'whale';
@@ -681,7 +1070,6 @@ function buildNetworkGraph(
       type = 'insider';
     }
 
-    // Use the isLp flag from holder detection
     if (holder.isLp) {
       type = 'lp';
     }
@@ -764,6 +1152,7 @@ async function generateNetworkAnalysis(
     suspiciousPatterns?: string[];
     description?: string;
   },
+  bundleQuality: BundleQuality | undefined,
   devActivity: {
     hasSold: boolean;
     percentSold: number;
@@ -783,7 +1172,6 @@ async function generateNetworkAnalysis(
   flags: Array<{ type: string; severity: string; message: string }>;
   networkInsights: string[];
 }> {
-  // Build context for AI
   const whales = network.nodes.filter(n => n.type === 'whale');
   const insiders = network.nodes.filter(n => n.type === 'insider');
   const highRiskNodes = network.nodes.filter(n => n.isHighRisk);
@@ -806,33 +1194,6 @@ SECURITY:
 - Mint Authority: ${tokenInfo.mintAuthorityActive ? '⚠️ ACTIVE (can mint more tokens)' : 'REVOKED ✓'}
 - Freeze Authority: ${tokenInfo.freezeAuthorityActive ? '🚨 ACTIVE (can freeze/close accounts — HIGH rug risk)' : 'REVOKED ✓'}
 
-STRUCTURAL RISK:${(() => {
-    const warnings: string[] = [];
-    if (tokenInfo.ageHours !== undefined && tokenInfo.ageHours < 6) {
-      warnings.push('- Token is less than 6 hours old (consider +10 risk)');
-    } else if (tokenInfo.ageHours !== undefined && tokenInfo.ageHours < 24) {
-      warnings.push('- Token is less than 24 hours old (consider +5 risk)');
-    }
-    if (tokenInfo.liquidity && tokenInfo.liquidity < 5000) {
-      warnings.push('- Liquidity under $5K — thin exit (consider +10 risk)');
-    } else if (tokenInfo.liquidity && tokenInfo.liquidity < 10000) {
-      warnings.push('- Liquidity under $10K (consider +5 risk)');
-    }
-    if (tokenInfo.volume24h && tokenInfo.liquidity && tokenInfo.liquidity > 0) {
-      const volLiqRatio = tokenInfo.volume24h / tokenInfo.liquidity;
-      if (volLiqRatio > 5) {
-        warnings.push(`- Volume/Liquidity ratio: ${volLiqRatio.toFixed(1)}x — high pool turnover`);
-      }
-    }
-    if (tokenInfo.marketCap && tokenInfo.liquidity && tokenInfo.liquidity > 0) {
-      const mcapLiqRatio = tokenInfo.marketCap / tokenInfo.liquidity;
-      if (mcapLiqRatio > 10) {
-        warnings.push(`- MCap/Liquidity ratio: ${mcapLiqRatio.toFixed(1)}x — inflated relative to exit liquidity`);
-      }
-    }
-    return warnings.length > 0 ? '\n' + warnings.join('\n') : '\n- No structural concerns';
-  })()}
-
 NETWORK SUMMARY:
 - Total Nodes: ${network.nodes.length}
 - Whales (>10%): ${whales.length}
@@ -844,44 +1205,60 @@ ${whales.map(w => `- ${w.label}: ${w.holdingsPercent?.toFixed(2)}%`).join('\n') 
 
 `;
 
-  // ADD BUNDLE DETECTION TO CONTEXT - weight by confidence level
+  // Add bundle detection with quality assessment
   if (bundleInfo.detected || bundleInfo.confidence === 'LOW') {
-    if (bundleInfo.confidence === 'HIGH') {
-      context += `
-⚠️ BUNDLE DETECTED - HIGH CONFIDENCE:
-- ${bundleInfo.count} coordinated wallets CONFIRMED via same-block transactions
-${bundleInfo.txBundlePercent ? `- ${bundleInfo.txBundlePercent.toFixed(1)}% of buys came from bundled transactions` : ''}
-- Evidence of coordinated buying
-- Consider dump risk but weigh against positive market signals
-- Increase risk score +15-25 points (offset by positive signals if present)
-${bundleInfo.description ? `\nDetails: ${bundleInfo.description}` : ''}
-`;
-    } else if (bundleInfo.confidence === 'MEDIUM') {
-      context += `
-⚠️ BUNDLE DETECTED - MEDIUM CONFIDENCE:
-- ${bundleInfo.count} wallets show coordination patterns
-${bundleInfo.txBundlePercent && bundleInfo.txBundlePercent > 0 ? `- ${bundleInfo.txBundlePercent.toFixed(1)}% of buys from same-block transactions` : '- Near-identical holdings detected'}
-- Possible coordinated buying, exercise caution
-- Increase risk score +10-15 points (offset by positive signals if present)
-${bundleInfo.description ? `\nDetails: ${bundleInfo.description}` : ''}
-`;
-    } else if (bundleInfo.confidence === 'LOW') {
-      context += `
-ℹ️ POSSIBLE BUNDLE - LOW CONFIDENCE:
-- Some wallets have similar holdings, but this could be natural distribution
-- No same-block transaction evidence found
-- Do NOT significantly increase risk score for this alone (+5-10 points max)
-- This is common in new tokens with organic interest
-${bundleInfo.description ? `\nDetails: ${bundleInfo.description}` : ''}
-`;
+    if (bundleQuality) {
+      context += `\n⚠️ BUNDLE DETECTED - ${bundleInfo.confidence} CONFIDENCE:\n`;
+      context += `- ${bundleInfo.count} coordinated wallets\n`;
+      context += `- Quality Assessment: ${bundleQuality.assessment}\n`;
+      context += `- Legitimacy Score: ${bundleQuality.legitimacyScore}/100\n`;
+      
+      if (bundleQuality.signals.positive.length > 0) {
+        context += `\nPositive Signals:\n`;
+        bundleQuality.signals.positive.forEach(signal => {
+          context += `  ✓ ${signal}\n`;
+        });
+      }
+      
+      if (bundleQuality.signals.negative.length > 0) {
+        context += `\nNegative Signals:\n`;
+        bundleQuality.signals.negative.forEach(signal => {
+          context += `  ⚠️ ${signal}\n`;
+        });
+      }
+      
+      if (bundleQuality.assessment === 'LIKELY_LEGIT') {
+        context += `\nThis bundle shows signs of legitimate coordination (VCs, team allocation, etc.)\n`;
+        context += `Reduce bundle-related risk penalties significantly.\n`;
+      } else if (bundleQuality.assessment === 'VERY_SUSPICIOUS') {
+        context += `\nThis bundle shows strong signs of malicious coordination (rug setup)\n`;
+        context += `Apply maximum bundle-related risk penalties.\n`;
+      }
+    } else {
+      // No quality assessment available
+      if (bundleInfo.confidence === 'HIGH') {
+        context += `\n⚠️ BUNDLE DETECTED - HIGH CONFIDENCE:\n`;
+        context += `- ${bundleInfo.count} coordinated wallets CONFIRMED via same-block transactions\n`;
+      } else if (bundleInfo.confidence === 'MEDIUM') {
+        context += `\n⚠️ BUNDLE DETECTED - MEDIUM CONFIDENCE:\n`;
+        context += `- ${bundleInfo.count} wallets show coordination patterns\n`;
+      } else if (bundleInfo.confidence === 'LOW') {
+        context += `\nℹ️ POSSIBLE BUNDLE - LOW CONFIDENCE:\n`;
+        context += `- Some wallets have similar holdings\n`;
+      }
     }
-
-    // Add suspicious patterns from transaction analysis
+    
+    if (bundleInfo.txBundlePercent && bundleInfo.txBundlePercent > 0) {
+      context += `- ${bundleInfo.txBundlePercent.toFixed(1)}% of buys from bundled transactions\n`;
+    }
+    if (bundleInfo.description) {
+      context += `\nDetails: ${bundleInfo.description}\n`;
+    }
     if (bundleInfo.suspiciousPatterns && bundleInfo.suspiciousPatterns.length > 0) {
       context += `\nSuspicious Patterns:\n`;
-      for (const pattern of bundleInfo.suspiciousPatterns) {
+      bundleInfo.suspiciousPatterns.forEach(pattern => {
         context += `- ⚠️ ${pattern}\n`;
-      }
+      });
     }
     context += '\n';
   }
@@ -900,7 +1277,6 @@ CREATOR ANALYSIS:
     }
   }
 
-  // DEV SELLING ACTIVITY - critical for risk assessment
   if (devActivity) {
     context += `\nDEV WALLET ACTIVITY:\n`;
     if (devActivity.hasSold) {
@@ -930,96 +1306,15 @@ CREATOR ANALYSIS:
 Analyze the provided network data and return a JSON response with:
 1. riskScore (0-100): Overall risk based on network patterns
 2. riskLevel: SAFE (<40), SUSPICIOUS (40-59), DANGEROUS (60-79), or SCAM (80+)
-3. summary: 1-2 sentence risk summary WITH SPECIFIC VALUES (see SUMMARY REQUIREMENTS below)
-4. prediction: Your prediction of what will likely happen to this token
+3. summary: 1-2 sentence risk summary WITH SPECIFIC VALUES
+4. prediction: Your prediction of what will likely happen
 5. flags: Array of {type, severity, message} for specific risks
-6. networkInsights: Array of strings with network pattern observations
+6. networkInsights: Array of strings with observations
 
-SUMMARY REQUIREMENTS — USE EXACT VALUES, NOT VAGUE TERMS:
-- ALWAYS use specific numbers from the provided data
-- BANNED WORDS: "moderate", "some", "a few", "significant", "substantial", "considerable", "notable", "decent", "fairly", "relatively", "amidst"
-- If you catch yourself using these words, REPLACE with the actual number
-- BAD: "Dev holds a moderate percentage" → GOOD: "Dev holds 21.7% of supply"
-- BAD: "Some bundle activity detected" → GOOD: "4 wallets show bundle patterns controlling 39.2%"
-- BAD: "High trading volume" → GOOD: "$127K 24h volume with 2.3:1 buy ratio"
-- BAD: "Good liquidity" → GOOD: "$45K liquidity in Raydium pool"
-- Include the token name in your summary when available
-
-NO CONTRADICTORY HEDGING - Give a clear verdict:
-- NEVER use "but also", "however... also", "indicating X but showing Y"
-- BAD: "potential dump risk but also showing signs of organic activity" — this is contradictory garbage
-- Pick a side based on the weight of evidence. If risks outweigh positives, say so directly.
-- GOOD: "$DEGEN has HIGH bundle (5 wallets, 25% supply). $29K volume doesn't offset coordinated wallet risk."
-- GOOD: "$SAFE shows healthy trading: $150K volume, 2.1:1 buy ratio, dev exited. Bundle detection is LOW confidence only."
-
-RISK FACTORS (weight by confidence):
-
-BUNDLE DETECTION - weight by CONFIDENCE LEVEL:
-- HIGH CONFIDENCE bundle (same-block transactions confirmed) = Significant concern (+15-25 points)
-- MEDIUM CONFIDENCE bundle (strong patterns) = Moderate concern (+10-15 points)
-- LOW CONFIDENCE bundle (similar holdings only) = Minor concern (+5 max)
-  * LOW confidence often means natural distribution, NOT a scam
-  * Do NOT flag as SCAM based on LOW confidence alone
-
-DEV SELLING ACTIVITY:
-- Dev sold >50% but still holds >5% = "Dev sold X% but still holds Y%" - moderate dump risk
-- Dev sold >90% and holds <1% = Likely community-owned, reduced dump risk
-- Dev has NOT sold and holds >20% = Major dump risk pending
-- Dev has NOT sold and holds <5% = Minor concern
-- Always mention specific percentages in your summary
-
-OTHER RISK FACTORS:
-- Concentrated holdings (few wallets hold most supply) = +10-20 points
-- Creator with previous rugs = CRITICAL (+40 points)
-- New creator wallet (<7 days) = +10 points
-- Creator still holds large % (>20%) = +10-15 points
-- Multiple whales >5% each = coordination concern
-
-POSITIVE SIGNALS (should LOWER risk score):
-- High trading volume relative to market cap = active, healthy market
-- Strong buy ratio (>1.2:1) = organic demand
-- Good liquidity (>$20K) = harder to manipulate
-- Many transactions (>1000) = real community engagement
-- Price trending up with volume = organic growth
-- Both mint AND freeze authority revoked = safer, -5 points
-- These signals can offset bundle/whale concerns by -10 to -20 points
-
-SECURITY AUTHORITY SCORING:
-- Freeze authority ACTIVE = +20 points (creator can freeze/close token accounts — direct rug vector)
-- Mint authority ACTIVE = +10 points (creator can inflate supply)
-- Both active = +25 points (combined rug capability)
-- Both revoked = -5 points (positive safety signal)
-
-STRUCTURAL RISK AWARENESS (consider but do not over-penalize):
-- Token < 6 hours old = +10 points (most rugs happen in first few hours)
-- Token < 24 hours old = +5 points (elevated rug window)
-- Liquidity < $5K = +10 points (thin exit liquidity, easier to rug)
-- Liquidity < $10K = +5 points (moderate exit liquidity)
-- Volume/Liquidity > 5x on a new token = note as churning risk
-- Max structural penalty should be ~+15 points total (hard guardrails enforce minimums separately)
-- Positive trading signals CAN still offset structural risk, but weight them less for tokens < 6h old
-
-PRICE CRASH — CRITICAL SIGNAL (do NOT let positive signals offset a crash):
-- 24h price change < -80% = ALREADY RUGGED. Score 75+ minimum regardless of other signals
-- 24h price change < -50% = Major dump in progress. Score 65+ minimum
-- 24h price change < -30% = Significant selling pressure. Score 55+ minimum
-- Revoked authorities do NOT offset a price crash — the rug already happened
-- A token down 90% with revoked mint/freeze is STILL a rug, not a safe token
-
-SELL PRESSURE:
-- Sells significantly exceeding buys (ratio < 0.7) on a new token (<24h) = dump in progress (+10-15 points)
-- Very few holders (<25) on a new token (<6h) = no organic adoption (+10 points)
-- Multiple moderate red flags together compound risk — do not treat them independently
-
-SCORING GUIDANCE:
-- 80+ (SCAM): Creator with previous rugs, active freeze authority + bundles, or extreme red flags with NO positive signals
-- 75-79 (DANGEROUS): Token already crashed >80% — likely rugged
-- 60-74 (DANGEROUS): HIGH confidence bundles with additional red flags, active freeze authority with concentration, or >50% price crash
-- 40-59 (SUSPICIOUS): Bundles or concentration WITH positive market activity, or new tokens (<24h) with thin liquidity
-- 0-39 (SAFE): No major red flags, or red flags offset by strong positive signals AND no price crash
-- A token with active freeze authority should almost never score below 40
-- A token with bundles BUT strong volume, good liquidity (>$20K), and active trading should score 40-60, NOT 80+
-- A token down >50% should NEVER score below 55 regardless of other signals
+CRITICAL: When bundle quality assessment is provided, TRUST IT:
+- "LIKELY_LEGIT" bundle = Reduce risk penalties significantly, this may be VCs/team
+- "VERY_SUSPICIOUS" bundle = Apply maximum risk penalties, this is a rug setup
+- "NEUTRAL" or "SUSPICIOUS" = Moderate concern, weigh against other signals
 
 RETURN ONLY VALID JSON, no markdown or explanation.`;
 
@@ -1051,396 +1346,89 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
 
     const rawContent = data.choices?.[0]?.message?.content || '';
 
-    // Extract JSON from response
     const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]);
-      const originalAiScore = Math.max(0, Math.min(100, parsed.riskScore || 50));
-      let score = originalAiScore;
-      const aiFlags = parsed.flags || [];
-      const aiInsights = parsed.networkInsights || [];
+      let score = Math.max(0, Math.min(100, parsed.riskScore || 50));
 
-      // ============================================
-      // POST-AI GUARDRAILS (minimums only, no additive scoring)
-      // The AI prompt already instructs scoring for bundles, whales, etc.
-      // Adding points on top would double-count. Only enforce floor scores.
-      // ============================================
-      // walletAge === -1 means unknown (API couldn't determine) — treat as potentially new
-      const isNewWallet = creatorInfo?.walletAge !== undefined && (creatorInfo.walletAge === -1 || (creatorInfo.walletAge > 0 && creatorInfo.walletAge < 7));
-      const hasBundleDetection = bundleInfo.confidence === 'HIGH' || bundleInfo.confidence === 'MEDIUM';
-      const hasWhale = whales.length > 0;
-      const topWhalePercent = whales[0]?.holdingsPercent || 0;
-
-      console.log(`[Sentinel] Post-AI guardrails: newWallet=${isNewWallet}, bundle=${hasBundleDetection} (${bundleInfo.confidence}), whale=${hasWhale} (${topWhalePercent.toFixed(1)}%), aiScore=${score}`);
-
-      // Enforce floor scores as safety nets (not additive)
-      // HIGH confidence bundle = minimum 55 (SUSPICIOUS)
-      if (bundleInfo.confidence === 'HIGH' && score < 55) {
-        console.log(`[Sentinel] Enforcing minimum 55 for HIGH bundle (was ${score})`);
-        score = 55;
-      }
-
-      // MEDIUM confidence bundle = minimum 50 (SUSPICIOUS)
-      if (bundleInfo.confidence === 'MEDIUM' && score < 50) {
-        console.log(`[Sentinel] Enforcing minimum 50 for MEDIUM bundle (was ${score})`);
-        score = 50;
-      }
-
-      // Triple threat (confirmed new wallet + bundle + whale) = minimum 60 (DANGEROUS)
-      if (isNewWallet && hasBundleDetection && hasWhale && topWhalePercent >= 10 && score < 60) {
-        console.log(`[Sentinel] Enforcing minimum 60 for triple threat (was ${score})`);
-        score = 60;
-      }
-
-      // ============================================
-      // PRICE CRASH GUARDRAIL — highest priority
-      // If a token has already crashed, it's already rugged.
-      // No positive signals (revoked mint, etc.) can offset an actual crash.
-      // ============================================
-      const priceChange24h = tokenInfo.priceChange24h;
-      if (priceChange24h !== undefined && priceChange24h < -80 && score < 75) {
-        console.log(`[Sentinel] Enforcing minimum 75 for >80% price crash (${priceChange24h.toFixed(1)}%, was ${score})`);
-        score = 75;
-        aiFlags.push({ type: 'PRICE_CRASH', severity: 'CRITICAL', message: `Price crashed ${priceChange24h.toFixed(1)}% — token likely already rugged` });
-      } else if (priceChange24h !== undefined && priceChange24h < -50 && score < 65) {
-        console.log(`[Sentinel] Enforcing minimum 65 for >50% price crash (${priceChange24h.toFixed(1)}%, was ${score})`);
-        score = 65;
-        aiFlags.push({ type: 'PRICE_CRASH', severity: 'HIGH', message: `Price dropped ${priceChange24h.toFixed(1)}% — significant dump in progress` });
-      } else if (priceChange24h !== undefined && priceChange24h < -30 && score < 55) {
-        console.log(`[Sentinel] Enforcing minimum 55 for >30% price drop (${priceChange24h.toFixed(1)}%, was ${score})`);
-        score = 55;
-        aiFlags.push({ type: 'PRICE_CRASH', severity: 'MEDIUM', message: `Price dropped ${priceChange24h.toFixed(1)}% — selling pressure detected` });
-      }
-
-      // ============================================
-      // STRUCTURAL RISK GUARDRAILS
-      // Token age and liquidity are the hardest signals to fake.
-      // A brand new token with thin liquidity showing "great" buy activity
-      // is the pump phase of a pump-and-dump.
-      // ============================================
-      const liquidityUsd = tokenInfo.liquidity || 0;
-      const marketCapUsd = tokenInfo.marketCap || 0;
-      const tokenAgeHours = tokenInfo.ageHours;
-
-      // MATURITY GATE: Established tokens (>$100K liquidity OR >$10M market cap)
-      // shouldn't be penalized for bundle detection — those "bundles" are likely
-      // exchanges, market makers, or early investors, not malicious actors.
-      const isMatureToken = liquidityUsd > 100_000 || marketCapUsd > 10_000_000;
-
-      // CRITICAL: $0 liquidity = cannot sell = minimum 80
-      // PumpFun bonding curve tokens already have estimated liquidity from market cap,
-      // so this only fires for genuinely dead/untradeable tokens
-      if (liquidityUsd <= 0 && score < 80) {
-        console.log(`[Sentinel] Enforcing minimum 80 for $0 liquidity (was ${score})`);
-        score = 80;
-        aiFlags.push({ type: 'LIQUIDITY', severity: 'CRITICAL', message: '$0 reported liquidity — extremely high rug risk, may not be sellable' });
-      }
-
-      // CRITICAL: Ultra-thin liquidity (<$1K) on very new token (<1h) = minimum 75
-      // Almost always a fresh pump.fun token in the pump phase before rug
-      if (tokenAgeHours !== undefined && tokenAgeHours < 1 && liquidityUsd > 0 && liquidityUsd < 1000 && score < 75) {
-        console.log(`[Sentinel] Enforcing minimum 75 for ultra-thin liquidity ($${liquidityUsd.toFixed(0)}) on <1h token (was ${score})`);
-        score = 75;
-        aiFlags.push({ type: 'STRUCTURAL', severity: 'CRITICAL', message: `Token is ${(tokenAgeHours * 60).toFixed(0)}m old with only $${liquidityUsd.toLocaleString()} liquidity — extreme rug risk` });
-      }
-
-      // Bundle detected + thin liquidity (<$2K) = minimum 70
-      // Coordinated wallets on a token with no real liquidity = classic rug setup
-      if (hasBundleDetection && liquidityUsd > 0 && liquidityUsd < 2000 && score < 70) {
-        console.log(`[Sentinel] Enforcing minimum 70 for bundles + thin liquidity ($${liquidityUsd.toFixed(0)}) (was ${score})`);
-        score = 70;
-        aiFlags.push({ type: 'STRUCTURAL', severity: 'HIGH', message: `Bundle activity detected with only $${liquidityUsd.toLocaleString()} liquidity — coordinated rug risk` });
-      }
-
-      // ============================================
-      // BUNDLE DOMINANCE GUARDRAIL
-      // When coordinated wallets make up a large % of holders, it's a syndicate pump
-      // Skipped for mature tokens — bundles on established tokens are benign
-      // ============================================
-      const holderCountForBundle = tokenInfo.holderCount || 0;
-      if (!isMatureToken && bundleInfo.count > 0 && holderCountForBundle > 0) {
-        const bundleRatio = bundleInfo.count / holderCountForBundle;
-        if (bundleInfo.confidence === 'HIGH' && bundleRatio > 0.4 && score < 75) {
-          console.log(`[Sentinel] Enforcing minimum 75 for bundle dominance: ${bundleInfo.count}/${holderCountForBundle} holders (${(bundleRatio * 100).toFixed(0)}%) are coordinated (was ${score})`);
-          score = 75;
-          aiFlags.push({ type: 'BUNDLE_DOMINANCE', severity: 'CRITICAL', message: `Pump syndicate: ${bundleInfo.count} of ${holderCountForBundle} holders (${(bundleRatio * 100).toFixed(0)}%) are coordinated wallets confirmed via same-block transactions` });
-        } else if (bundleRatio > 0.5 && score < 70) {
-          console.log(`[Sentinel] Enforcing minimum 70 for bundle dominance: ${bundleInfo.count}/${holderCountForBundle} holders (${(bundleRatio * 100).toFixed(0)}%) are coordinated (was ${score})`);
-          score = 70;
-          aiFlags.push({ type: 'BUNDLE_DOMINANCE', severity: 'HIGH', message: `${bundleInfo.count} of ${holderCountForBundle} holders (${(bundleRatio * 100).toFixed(0)}%) show coordinated wallet patterns — likely pump syndicate` });
-        }
-      }
-
-      // Very new token (<6h) with thin liquidity (<$10K) = minimum 55
-      if (tokenAgeHours !== undefined && tokenAgeHours < 6 && liquidityUsd < 10000 && score < 55) {
-        console.log(`[Sentinel] Enforcing minimum 55 for new token (<6h) + thin liquidity (was ${score})`);
-        score = 55;
-        aiFlags.push({ type: 'STRUCTURAL', severity: 'HIGH', message: `Token is ${tokenAgeHours.toFixed(1)}h old with $${liquidityUsd.toLocaleString()} liquidity — high rug risk` });
-      }
-      // New token (<24h) with very thin liquidity (<$5K) = minimum 55
-      else if (tokenAgeHours !== undefined && tokenAgeHours < 24 && liquidityUsd < 5000 && score < 55) {
-        console.log(`[Sentinel] Enforcing minimum 55 for <24h token + <$5K liquidity (was ${score})`);
-        score = 55;
-        aiFlags.push({ type: 'STRUCTURAL', severity: 'HIGH', message: `Token is ${tokenAgeHours.toFixed(1)}h old with only $${liquidityUsd.toLocaleString()} liquidity` });
-      }
-
-      // Any token < 6 hours old = minimum 50 regardless
-      if (tokenAgeHours !== undefined && tokenAgeHours < 6 && score < 50) {
-        console.log(`[Sentinel] Enforcing minimum 50 for <6h token (was ${score})`);
-        score = 50;
-      }
-
-      // Any token < 24 hours old = minimum 40
-      if (tokenAgeHours !== undefined && tokenAgeHours < 24 && score < 40) {
-        console.log(`[Sentinel] Enforcing minimum 40 for <24h token (was ${score})`);
-        score = 40;
-      }
-
-      // Any token with $0 < liquidity < $5K = minimum 50
-      if (liquidityUsd > 0 && liquidityUsd < 5000 && score < 50) {
-        console.log(`[Sentinel] Enforcing minimum 50 for <$5K liquidity (was ${score})`);
-        score = 50;
-      }
-
-      // Volume/Liquidity churning: if 24h volume > 8x liquidity on a new token, suspicious
-      if (tokenInfo.volume24h && liquidityUsd > 0 && tokenAgeHours !== undefined && tokenAgeHours < 24) {
-        const volLiqRatio = tokenInfo.volume24h / liquidityUsd;
-        if (volLiqRatio > 8 && score < 50) {
-          console.log(`[Sentinel] Enforcing minimum 50 for volume churning (${volLiqRatio.toFixed(1)}x vol/liq on <24h token, was ${score})`);
-          score = 50;
-        }
-      }
-
-      // ============================================
-      // SELL PRESSURE GUARDRAIL
-      // Heavy selling on a new token = dump in progress
-      // ============================================
-      const sells24h = tokenInfo.txns24h?.sells || 0;
-      const buys24h = tokenInfo.txns24h?.buys || 0;
-      if (sells24h > 0 && buys24h > 0) {
-        const buyRatio = buys24h / sells24h;
-        if (buyRatio < 0.7 && sells24h > 100 && tokenAgeHours !== undefined && tokenAgeHours < 24 && score < 60) {
-          console.log(`[Sentinel] Enforcing minimum 60 for sell-heavy new token (ratio ${buyRatio.toFixed(2)}, ${sells24h} sells, was ${score})`);
-          score = 60;
-          aiFlags.push({ type: 'SELL_PRESSURE', severity: 'HIGH', message: `Sell-heavy trading: ${sells24h} sells vs ${buys24h} buys (ratio ${buyRatio.toFixed(2)}) on <24h token` });
-        } else if (buyRatio < 0.5 && sells24h > 50 && score < 55) {
-          console.log(`[Sentinel] Enforcing minimum 55 for extreme sell pressure (ratio ${buyRatio.toFixed(2)}, was ${score})`);
-          score = 55;
-          aiFlags.push({ type: 'SELL_PRESSURE', severity: 'MEDIUM', message: `Heavy sell pressure: ${sells24h} sells vs ${buys24h} buys (ratio ${buyRatio.toFixed(2)})` });
-        }
-      }
-
-      // ============================================
-      // LOW HOLDER COUNT GUARDRAIL
-      // Very few holders on a new token = no organic adoption
-      // ============================================
-      const holderCount = tokenInfo.holderCount || 0;
-      if (holderCount > 0 && holderCount < 25 && tokenAgeHours !== undefined && tokenAgeHours < 6 && score < 55) {
-        console.log(`[Sentinel] Enforcing minimum 55 for low holder count (${holderCount} holders on <6h token, was ${score})`);
-        score = 55;
-        aiFlags.push({ type: 'LOW_HOLDERS', severity: 'MEDIUM', message: `Only ${holderCount} holders on a ${tokenAgeHours.toFixed(1)}h old token — very low organic adoption` });
-      }
-
-      // ============================================
-      // DEV SELLING GUARDRAIL
-      // Developer dumping tokens on a new token = major red flag
-      // ============================================
-      if (devActivity && devActivity.hasSold && tokenAgeHours !== undefined) {
-        if (devActivity.percentSold >= 50 && tokenAgeHours < 6 && score < 80) {
-          console.log(`[Sentinel] Enforcing minimum 80 for dev sold ${devActivity.percentSold.toFixed(0)}% on <6h token (was ${score})`);
-          score = 80;
-          aiFlags.push({ type: 'DEV_DUMP', severity: 'CRITICAL', message: `Developer sold ${devActivity.percentSold.toFixed(0)}% of tokens on a ${tokenAgeHours.toFixed(1)}h old token — likely rug` });
-        } else if (devActivity.percentSold >= 20 && devActivity.currentHoldingsPercent > 20 && tokenAgeHours < 6 && score < 75) {
-          console.log(`[Sentinel] Enforcing minimum 75 for dev sold ${devActivity.percentSold.toFixed(0)}% + still holds ${devActivity.currentHoldingsPercent.toFixed(0)}% on <6h token (was ${score})`);
-          score = 75;
-          aiFlags.push({ type: 'DEV_DUMP', severity: 'HIGH', message: `Developer sold ${devActivity.percentSold.toFixed(0)}% but still holds ${devActivity.currentHoldingsPercent.toFixed(0)}% — more selling likely` });
-        } else if (devActivity.percentSold >= 20 && tokenAgeHours < 24 && score < 65) {
-          console.log(`[Sentinel] Enforcing minimum 65 for dev sold ${devActivity.percentSold.toFixed(0)}% on <24h token (was ${score})`);
-          score = 65;
-          aiFlags.push({ type: 'DEV_DUMP', severity: 'MEDIUM', message: `Developer sold ${devActivity.percentSold.toFixed(0)}% of tokens within first 24h` });
-        }
-      }
-
-      // ============================================
-      // COMBO SIGNAL ESCALATION
-      // Multiple moderate flags firing together = higher risk than any individual flag
-      // ============================================
-      let moderateFlags = 0;
-      if (tokenAgeHours !== undefined && tokenAgeHours < 6) moderateFlags++;
-      if (liquidityUsd < 10000) moderateFlags++;
-      if (sells24h > buys24h && sells24h > 50) moderateFlags++;
-      if (holderCount > 0 && holderCount < 30) moderateFlags++;
-      if (hasBundleDetection && !isMatureToken) moderateFlags++;
-      if (isNewWallet) moderateFlags++;
-      if (priceChange24h !== undefined && priceChange24h < -30) moderateFlags++;
-      if (devActivity && devActivity.hasSold && devActivity.percentSold >= 20) moderateFlags++;
-
-      // POSITIVE SIGNAL OFFSET
-      // Strong bullish counter-signals reduce combo escalation — real momentum
-      // shouldn't be penalized as harshly as tokens with no organic activity.
-      // SAFETY: Disabled when the "positive signals" are likely a coordinated pump:
-      //   - HIGH confidence bundles (wallets ARE the buying pressure)
-      //   - Bundle wallets dominate holder base (>40% = syndicate)
-      //   - Ultra-thin liquidity <$2K (price trivially manipulable)
-      //   - Token < 1h old (too early to trust any momentum)
-      const isHighBundle = bundleInfo?.confidence === 'HIGH' && !isMatureToken;
-      const bundleDominant = !isMatureToken && holderCountForBundle > 0 && bundleInfo.count > 0 && (bundleInfo.count / holderCountForBundle) > 0.4;
-      const tooThinForOffset = liquidityUsd < 2000;
-      const tooNewForOffset = tokenAgeHours !== undefined && tokenAgeHours < 1;
-      const offsetBlocked = isHighBundle || bundleDominant || tooThinForOffset || tooNewForOffset;
-
-      const buyRatio = buys24h > 0 && sells24h > 0 ? buys24h / sells24h : 0;
-
-      if (!offsetBlocked) {
-        let positiveSignals = 0;
-        if (buyRatio > 1.3) positiveSignals++;
-        if (priceChange24h !== undefined && priceChange24h > 50) positiveSignals++;
-        if (liquidityUsd > 0 && tokenInfo.volume24h && tokenInfo.volume24h / liquidityUsd > 5 && buyRatio > 1) positiveSignals++;
-
-        const rawFlags = moderateFlags;
-        if (positiveSignals >= 3) {
-          moderateFlags = Math.max(0, moderateFlags - 2);
-          console.log(`[Sentinel] Positive offset -2: ${positiveSignals} bullish signals (buyRatio=${buyRatio.toFixed(2)}, price=${priceChange24h?.toFixed(0)}%) — flags ${rawFlags} → ${moderateFlags}`);
-        } else if (positiveSignals >= 2) {
-          moderateFlags = Math.max(0, moderateFlags - 1);
-          console.log(`[Sentinel] Positive offset -1: ${positiveSignals} bullish signals (buyRatio=${buyRatio.toFixed(2)}, price=${priceChange24h?.toFixed(0)}%) — flags ${rawFlags} → ${moderateFlags}`);
-        }
-      } else {
-        console.log(`[Sentinel] Positive offset BLOCKED: highBundle=${isHighBundle}, bundleDominant=${bundleDominant}, thinLiq=${tooThinForOffset}, tooNew=${tooNewForOffset}`);
-      }
-
-      if (moderateFlags >= 5 && score < 75) {
-        console.log(`[Sentinel] Enforcing minimum 75 for ${moderateFlags} combined risk signals (was ${score})`);
-        score = 75;
-        aiFlags.push({ type: 'COMBO_RISK', severity: 'CRITICAL', message: `${moderateFlags} risk signals detected simultaneously — extreme compounding risk` });
-      } else if (moderateFlags >= 4 && score < 70) {
-        console.log(`[Sentinel] Enforcing minimum 70 for ${moderateFlags} combined risk signals (was ${score})`);
-        score = 70;
-        aiFlags.push({ type: 'COMBO_RISK', severity: 'HIGH', message: `${moderateFlags} risk signals detected simultaneously — compounding risk` });
-      } else if (moderateFlags >= 3 && score < 60) {
-        console.log(`[Sentinel] Enforcing minimum 60 for ${moderateFlags} combined risk signals (was ${score})`);
-        score = 60;
-        aiFlags.push({ type: 'COMBO_RISK', severity: 'MEDIUM', message: `${moderateFlags} risk signals detected — elevated compound risk` });
-      }
-
-      // ============================================
-      // MATURITY OFFSET
-      // Established tokens carry less rug risk — reduce score proportionally.
-      // A $300M+ market cap token simply cannot rug the same way a pump.fun coin can.
-      // ============================================
-      if (isMatureToken) {
-        let maturityReduction = 0;
-        if (marketCapUsd > 100_000_000) maturityReduction += 15;
-        else if (marketCapUsd > 10_000_000) maturityReduction += 10;
-        if (liquidityUsd > 1_000_000) maturityReduction += 10;
-        else if (liquidityUsd > 100_000) maturityReduction += 5;
-        if (maturityReduction > 0) {
-          const before = score;
-          score = Math.max(20, score - maturityReduction);
-          console.log(`[Sentinel] Maturity offset -${maturityReduction}: mcap=$${(marketCapUsd/1e6).toFixed(1)}M, liq=$${(liquidityUsd/1e3).toFixed(0)}K — score ${before} → ${score}`);
-        }
-      }
-
-      score = Math.min(100, score);
-
-      // Recalculate risk level based on adjusted score
       let riskLevel: 'SAFE' | 'SUSPICIOUS' | 'DANGEROUS' | 'SCAM' = 'SAFE';
       if (score >= 80) riskLevel = 'SCAM';
       else if (score >= 60) riskLevel = 'DANGEROUS';
       else if (score >= 40) riskLevel = 'SUSPICIOUS';
 
-      // Clean up AI summary - remove contradictory hedging phrases
-      let finalSummary = parsed.summary || 'Analysis completed.';
-      finalSummary = finalSummary
-        .replace(/,?\s*but\s+(also\s+)?(showing|indicates?|suggests?).+?(organic|positive|healthy).+?(activity|signals?|signs?)\.?/gi, '.')
-        .replace(/,?\s*but\s+this\s+is\s+(offset|mitigated|reduced).+$/gi, '.')
-        .replace(/however,?\s*(the\s+)?token'?s?\s+(high|good|strong).+?(offset|mitigate|reduce).+?(concerns?|risks?|issues?)\.?/gi, '')
-        .replace(/\.\s*\./g, '.')
-        .trim();
-
       return {
         riskScore: score,
         riskLevel,
-        summary: finalSummary,
+        summary: parsed.summary || 'Analysis completed.',
         prediction: parsed.prediction || 'Unable to predict.',
         recommendation: generateRecommendation(score, bundleInfo.detected, bundleInfo.count),
-        flags: aiFlags,
-        networkInsights: aiInsights,
+        flags: parsed.flags || [],
+        networkInsights: parsed.networkInsights || [],
       };
     }
   } catch (error) {
     console.error('[Sentinel] AI analysis error:', error);
   }
 
-  // Fallback analysis based on data
+  // Fallback
   let riskScore = 30;
   const flags: Array<{ type: string; severity: string; message: string }> = [];
   const networkInsights: string[] = [];
 
-  // Bundle detection scoring based on CONFIDENCE level
-  if (bundleInfo.confidence === 'HIGH') {
-    // HIGH confidence = confirmed same-block transactions
-    riskScore += 35;
-    flags.push({
-      type: 'BUNDLE',
-      severity: 'CRITICAL',
-      message: `🚨 ${bundleInfo.count} coordinated wallets CONFIRMED via same-block transactions`,
-    });
-    networkInsights.push(`Bundle CONFIRMED: ${bundleInfo.count} wallets bought in same block`);
-  } else if (bundleInfo.confidence === 'MEDIUM') {
-    // MEDIUM confidence = strong pattern but not definitive
-    riskScore += 20;
-    flags.push({
-      type: 'BUNDLE',
-      severity: 'HIGH',
-      message: `⚠️ ${bundleInfo.count} wallets show coordination patterns`,
-    });
-    networkInsights.push(`Likely bundle: ${bundleInfo.count} wallets with suspicious patterns`);
-  } else if (bundleInfo.confidence === 'LOW') {
-    // LOW confidence = could be natural distribution, minimal score impact
-    riskScore += 5;
-    flags.push({
-      type: 'BUNDLE',
-      severity: 'LOW',
-      message: `Some wallets have similar holdings (could be natural distribution)`,
-    });
-    networkInsights.push(`Possible coordination: similar holdings detected`);
+  if (bundleInfo.detected) {
+    if (bundleQuality?.assessment === 'VERY_SUSPICIOUS') {
+      riskScore += 35;
+      flags.push({
+        type: 'BUNDLE',
+        severity: 'CRITICAL',
+        message: `${bundleInfo.count} coordinated wallets - HIGH RUG RISK: ${bundleQuality.signals.negative.join('; ')}`,
+      });
+    } else if (bundleQuality?.assessment === 'SUSPICIOUS') {
+      riskScore += 20;
+      flags.push({
+        type: 'BUNDLE',
+        severity: 'HIGH',
+        message: `${bundleInfo.count} coordinated wallets with suspicious patterns`,
+      });
+    } else if (bundleQuality?.assessment === 'LIKELY_LEGIT') {
+      riskScore += 5;
+      flags.push({
+        type: 'BUNDLE',
+        severity: 'LOW',
+        message: `${bundleInfo.count} coordinated wallets show legitimacy signals: ${bundleQuality.signals.positive.join('; ')}`,
+      });
+    } else {
+      // No quality assessment
+      riskScore += 25;
+      flags.push({
+        type: 'BUNDLE',
+        severity: 'HIGH',
+        message: `${bundleInfo.count} coordinated wallets detected`,
+      });
+    }
   }
 
   if (whales.length > 0) {
-    // Get the largest whale
     const topWhale = whales.reduce((max, w) =>
       (w.holdingsPercent || 0) > (max.holdingsPercent || 0) ? w : max
     , whales[0]);
     const topWhalePercent = topWhale?.holdingsPercent || 0;
 
-    // CRITICAL: Extreme concentration (50%+) = guaranteed dump risk
     if (topWhalePercent >= 50) {
-      riskScore += 50; // Massive penalty
+      riskScore += 50;
       flags.push({
         type: 'CONCENTRATED HOLDINGS',
         severity: 'CRITICAL',
-        message: `🚨 CRITICAL: One whale holds ${topWhalePercent.toFixed(2)}% of the total supply`,
+        message: `🚨 CRITICAL: One whale holds ${topWhalePercent.toFixed(2)}% of total supply`,
       });
-      networkInsights.push(`Concentrated holdings with one whale holding ${topWhalePercent.toFixed(2)}% of the total supply`);
     } else if (topWhalePercent >= 30) {
-      // HIGH: Major concentration (30-50%)
       riskScore += 30;
       flags.push({
         type: 'CONCENTRATED HOLDINGS',
         severity: 'HIGH',
-        message: `One whale holds ${topWhalePercent.toFixed(2)}% of the total supply`,
-      });
-    } else if (topWhalePercent >= 20) {
-      // MEDIUM: Significant concentration (20-30%)
-      riskScore += 20;
-      flags.push({
-        type: 'CONCENTRATED HOLDINGS',
-        severity: 'MEDIUM',
-        message: `One whale holds ${topWhalePercent.toFixed(2)}% of supply`,
+        message: `One whale holds ${topWhalePercent.toFixed(2)}% of total supply`,
       });
     } else {
-      // Basic whale penalty for 10-20%
       riskScore += whales.length * 10;
       flags.push({
         type: 'CONCENTRATION',
@@ -1459,327 +1447,9 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
     });
   }
 
-  if (creatorInfo?.currentHoldings && creatorInfo.currentHoldings > 10) {
-    riskScore += 15;
-    flags.push({
-      type: 'DEPLOYER',
-      severity: 'HIGH',
-      message: `Creator still holds ${creatorInfo.currentHoldings.toFixed(1)}% of supply`,
-    });
-  }
-
-  if (creatorInfo?.walletAge !== undefined && (creatorInfo.walletAge === -1 || (creatorInfo.walletAge > 0 && creatorInfo.walletAge < 7))) {
-    riskScore += 10;
-    flags.push({
-      type: 'DEPLOYER',
-      severity: 'MEDIUM',
-      message: creatorInfo.walletAge === -1
-        ? 'Creator wallet age unknown — could be brand new'
-        : `Creator wallet is only ${creatorInfo.walletAge} days old`,
-    });
-  }
-
   networkInsights.push(`${network.nodes.length} wallets in network`);
   if (whales.length > 0) {
     networkInsights.push(`Top whale holds ${whales[0]?.holdingsPercent?.toFixed(1)}%`);
-  }
-
-  // ============================================
-  // STRUCTURAL RISK SCORING (fallback)
-  // ============================================
-  const fallbackLiquidity = tokenInfo.liquidity || 0;
-  const fallbackMarketCap = tokenInfo.marketCap || 0;
-  const fallbackAgeHours = tokenInfo.ageHours;
-
-  // MATURITY GATE (fallback): Established tokens exempt from bundle penalties
-  const fbIsMatureToken = fallbackLiquidity > 100_000 || fallbackMarketCap > 10_000_000;
-
-  if (fallbackAgeHours !== undefined && fallbackAgeHours < 6) {
-    riskScore += 20;
-    flags.push({ type: 'STRUCTURAL', severity: 'HIGH', message: `Token is only ${fallbackAgeHours.toFixed(1)} hours old — very high rug risk` });
-  } else if (fallbackAgeHours !== undefined && fallbackAgeHours < 24) {
-    riskScore += 10;
-    flags.push({ type: 'STRUCTURAL', severity: 'MEDIUM', message: `Token is ${fallbackAgeHours.toFixed(1)} hours old — elevated rug risk` });
-  }
-
-  if (fallbackLiquidity > 0 && fallbackLiquidity < 5000) {
-    riskScore += 20;
-    flags.push({ type: 'STRUCTURAL', severity: 'HIGH', message: `Liquidity is only $${fallbackLiquidity.toLocaleString()} — paper-thin exit` });
-  } else if (fallbackLiquidity > 0 && fallbackLiquidity < 10000) {
-    riskScore += 10;
-    flags.push({ type: 'STRUCTURAL', severity: 'MEDIUM', message: `Liquidity is $${fallbackLiquidity.toLocaleString()} — thin exit` });
-  }
-
-  if (tokenInfo.volume24h && fallbackLiquidity > 0) {
-    const volLiqRatio = tokenInfo.volume24h / fallbackLiquidity;
-    if (volLiqRatio > 8) {
-      riskScore += 10;
-      networkInsights.push(`Volume/Liquidity ratio: ${volLiqRatio.toFixed(1)}x — rapid pool churning`);
-    }
-  }
-
-  // ============================================
-  // POSITIVE SIGNAL OFFSET (fallback only)
-  // The AI naturally weighs positive signals against negatives,
-  // but the fallback scoring is purely additive. Apply discounts
-  // for strong positive market signals to avoid false SCAM ratings
-  // on tokens with real market activity.
-  // ============================================
-  let positiveOffset = 0;
-  const fbPriceChange24h = tokenInfo.priceChange24h;
-  const positiveBuys = tokenInfo.txns24h?.buys || 0;
-  const positiveSells = tokenInfo.txns24h?.sells || 0;
-  const positiveBuyRatio = positiveSells > 0 ? positiveBuys / positiveSells : 1;
-  const totalTxns = positiveBuys + positiveSells;
-
-  // Good liquidity ($20K+) = harder to manipulate
-  if (fallbackLiquidity >= 20000) positiveOffset += 10;
-  if (fallbackLiquidity >= 50000) positiveOffset += 5;
-
-  // Healthy buy/sell ratio (>=1.0) with real volume = organic demand
-  if (positiveBuyRatio >= 1.0 && positiveBuys > 100) positiveOffset += 10;
-
-  // High transaction count = real community engagement
-  if (totalTxns >= 1000) positiveOffset += 5;
-  if (totalTxns >= 5000) positiveOffset += 5;
-
-  // Price trending up = not crashing/dumping
-  if (fbPriceChange24h !== undefined && fbPriceChange24h > 0) positiveOffset += 5;
-
-  // Both mint and freeze authority revoked = safer
-  if (!tokenInfo.mintAuthorityActive && !tokenInfo.freezeAuthorityActive) positiveOffset += 5;
-
-  // Cap total offset at 40 — positive signals reduce risk but don't erase it
-  positiveOffset = Math.min(40, positiveOffset);
-
-  if (positiveOffset > 0) {
-    const beforeOffset = riskScore;
-    riskScore = Math.max(30, riskScore - positiveOffset); // Never below baseline 30
-    console.log(`[Sentinel] Fallback positive offset: -${positiveOffset} (${beforeOffset} → ${riskScore})`);
-    if (positiveOffset >= 20) {
-      networkInsights.push(`Strong positive market signals detected (offset -${positiveOffset})`);
-    }
-  }
-
-  // ============================================
-  // FALLBACK GUARDRAILS (minimums only)
-  // ============================================
-  // walletAge === -1 means unknown (API couldn't determine) — treat as potentially new
-  const isNewWallet = creatorInfo?.walletAge !== undefined && (creatorInfo.walletAge === -1 || (creatorInfo.walletAge > 0 && creatorInfo.walletAge < 7));
-  const hasBundleDetection = bundleInfo.confidence === 'HIGH' || bundleInfo.confidence === 'MEDIUM';
-  const hasWhale = whales.length > 0;
-  const topWhalePercent = whales[0]?.holdingsPercent || 0;
-
-  console.log(`[Sentinel] Fallback guardrails: newWallet=${isNewWallet}, bundle=${hasBundleDetection} (${bundleInfo.confidence}), whale=${hasWhale} (${topWhalePercent.toFixed(1)}%), mature=${fbIsMatureToken}, age=${fallbackAgeHours?.toFixed(1)}h, liq=$${fallbackLiquidity}`);
-
-  // HIGH confidence bundle = minimum 55
-  if (bundleInfo.confidence === 'HIGH' && riskScore < 55) {
-    console.log(`[Sentinel] Enforcing minimum 55 for HIGH bundle (was ${riskScore})`);
-    riskScore = 55;
-  }
-
-  // MEDIUM confidence bundle = minimum 50
-  if (bundleInfo.confidence === 'MEDIUM' && riskScore < 50) {
-    console.log(`[Sentinel] Enforcing minimum 50 for MEDIUM bundle (was ${riskScore})`);
-    riskScore = 50;
-  }
-
-  // Confirmed new wallet + bundle + whale = minimum 60
-  if (isNewWallet && hasBundleDetection && hasWhale && topWhalePercent >= 10 && riskScore < 60) {
-    console.log(`[Sentinel] Enforcing minimum 60 for triple threat (was ${riskScore})`);
-    riskScore = 60;
-  }
-
-  // ============================================
-  // PRICE CRASH GUARDRAIL — highest priority
-  // ============================================
-  const fallbackPriceChange = tokenInfo.priceChange24h;
-  if (fallbackPriceChange !== undefined && fallbackPriceChange < -80 && riskScore < 75) {
-    console.log(`[Sentinel] Enforcing minimum 75 for >80% price crash (${fallbackPriceChange.toFixed(1)}%, was ${riskScore})`);
-    riskScore = 75;
-    flags.push({ type: 'PRICE_CRASH', severity: 'CRITICAL', message: `Price crashed ${fallbackPriceChange.toFixed(1)}% — token likely already rugged` });
-  } else if (fallbackPriceChange !== undefined && fallbackPriceChange < -50 && riskScore < 65) {
-    console.log(`[Sentinel] Enforcing minimum 65 for >50% price crash (${fallbackPriceChange.toFixed(1)}%, was ${riskScore})`);
-    riskScore = 65;
-    flags.push({ type: 'PRICE_CRASH', severity: 'HIGH', message: `Price dropped ${fallbackPriceChange.toFixed(1)}% — significant dump in progress` });
-  } else if (fallbackPriceChange !== undefined && fallbackPriceChange < -30 && riskScore < 55) {
-    console.log(`[Sentinel] Enforcing minimum 55 for >30% price drop (${fallbackPriceChange.toFixed(1)}%, was ${riskScore})`);
-    riskScore = 55;
-    flags.push({ type: 'PRICE_CRASH', severity: 'MEDIUM', message: `Price dropped ${fallbackPriceChange.toFixed(1)}% — selling pressure detected` });
-  }
-
-  // CRITICAL: $0 liquidity = cannot sell = minimum 80 (fallback)
-  if (fallbackLiquidity <= 0 && riskScore < 80) {
-    console.log(`[Sentinel] Enforcing minimum 80 for $0 liquidity (was ${riskScore})`);
-    riskScore = 80;
-    flags.push({ type: 'LIQUIDITY', severity: 'CRITICAL', message: '$0 reported liquidity — extremely high rug risk, may not be sellable' });
-  }
-
-  // CRITICAL: Ultra-thin liquidity (<$1K) on very new token (<1h) = minimum 75
-  if (fallbackAgeHours !== undefined && fallbackAgeHours < 1 && fallbackLiquidity > 0 && fallbackLiquidity < 1000 && riskScore < 75) {
-    console.log(`[Sentinel] Enforcing minimum 75 for ultra-thin liquidity ($${fallbackLiquidity.toFixed(0)}) on <1h token (was ${riskScore})`);
-    riskScore = 75;
-    flags.push({ type: 'STRUCTURAL', severity: 'CRITICAL', message: `Token is ${(fallbackAgeHours * 60).toFixed(0)}m old with only $${fallbackLiquidity.toLocaleString()} liquidity — extreme rug risk` });
-  }
-
-  // Bundle detected + thin liquidity (<$2K) = minimum 70
-  if (hasBundleDetection && fallbackLiquidity > 0 && fallbackLiquidity < 2000 && riskScore < 70) {
-    console.log(`[Sentinel] Enforcing minimum 70 for bundles + thin liquidity ($${fallbackLiquidity.toFixed(0)}) (was ${riskScore})`);
-    riskScore = 70;
-    flags.push({ type: 'STRUCTURAL', severity: 'HIGH', message: `Bundle activity detected with only $${fallbackLiquidity.toLocaleString()} liquidity — coordinated rug risk` });
-  }
-
-  // ============================================
-  // BUNDLE DOMINANCE GUARDRAIL (fallback)
-  // When coordinated wallets make up a large % of holders, it's a syndicate pump
-  // ============================================
-  const fbHolderCountForBundle = tokenInfo.holderCount || 0;
-  if (!fbIsMatureToken && bundleInfo.count > 0 && fbHolderCountForBundle > 0) {
-    const fbBundleRatio = bundleInfo.count / fbHolderCountForBundle;
-    if (bundleInfo.confidence === 'HIGH' && fbBundleRatio > 0.4 && riskScore < 75) {
-      console.log(`[Sentinel] Enforcing minimum 75 for bundle dominance: ${bundleInfo.count}/${fbHolderCountForBundle} holders (${(fbBundleRatio * 100).toFixed(0)}%) are coordinated (was ${riskScore})`);
-      riskScore = 75;
-      flags.push({ type: 'BUNDLE_DOMINANCE', severity: 'CRITICAL', message: `Pump syndicate: ${bundleInfo.count} of ${fbHolderCountForBundle} holders (${(fbBundleRatio * 100).toFixed(0)}%) are coordinated wallets confirmed via same-block transactions` });
-    } else if (fbBundleRatio > 0.5 && riskScore < 70) {
-      console.log(`[Sentinel] Enforcing minimum 70 for bundle dominance: ${bundleInfo.count}/${fbHolderCountForBundle} holders (${(fbBundleRatio * 100).toFixed(0)}%) are coordinated (was ${riskScore})`);
-      riskScore = 70;
-      flags.push({ type: 'BUNDLE_DOMINANCE', severity: 'HIGH', message: `${bundleInfo.count} of ${fbHolderCountForBundle} holders (${(fbBundleRatio * 100).toFixed(0)}%) show coordinated wallet patterns — likely pump syndicate` });
-    }
-  }
-
-  // Structural minimums
-  if (fallbackAgeHours !== undefined && fallbackAgeHours < 6 && fallbackLiquidity < 10000 && riskScore < 55) {
-    riskScore = 55;
-  }
-  if (fallbackAgeHours !== undefined && fallbackAgeHours < 24 && fallbackLiquidity < 5000 && riskScore < 55) {
-    riskScore = 55;
-  }
-  if (fallbackLiquidity > 0 && fallbackLiquidity < 5000 && riskScore < 50) {
-    riskScore = 50;
-  }
-  if (fallbackAgeHours !== undefined && fallbackAgeHours < 6 && riskScore < 50) {
-    riskScore = 50;
-  }
-  if (fallbackAgeHours !== undefined && fallbackAgeHours < 24 && riskScore < 40) {
-    riskScore = 40;
-  }
-
-  // ============================================
-  // SELL PRESSURE GUARDRAIL
-  // ============================================
-  const fbSells24h = tokenInfo.txns24h?.sells || 0;
-  const fbBuys24h = tokenInfo.txns24h?.buys || 0;
-  if (fbSells24h > 0 && fbBuys24h > 0) {
-    const fbBuyRatio = fbBuys24h / fbSells24h;
-    if (fbBuyRatio < 0.7 && fbSells24h > 100 && fallbackAgeHours !== undefined && fallbackAgeHours < 24 && riskScore < 60) {
-      console.log(`[Sentinel] Enforcing minimum 60 for sell-heavy new token (ratio ${fbBuyRatio.toFixed(2)}, was ${riskScore})`);
-      riskScore = 60;
-      flags.push({ type: 'SELL_PRESSURE', severity: 'HIGH', message: `Sell-heavy trading: ${fbSells24h} sells vs ${fbBuys24h} buys (ratio ${fbBuyRatio.toFixed(2)}) on <24h token` });
-    } else if (fbBuyRatio < 0.5 && fbSells24h > 50 && riskScore < 55) {
-      console.log(`[Sentinel] Enforcing minimum 55 for extreme sell pressure (ratio ${fbBuyRatio.toFixed(2)}, was ${riskScore})`);
-      riskScore = 55;
-      flags.push({ type: 'SELL_PRESSURE', severity: 'MEDIUM', message: `Heavy sell pressure: ${fbSells24h} sells vs ${fbBuys24h} buys (ratio ${fbBuyRatio.toFixed(2)})` });
-    }
-  }
-
-  // ============================================
-  // LOW HOLDER COUNT GUARDRAIL
-  // ============================================
-  const fbHolderCount = tokenInfo.holderCount || 0;
-  if (fbHolderCount > 0 && fbHolderCount < 25 && fallbackAgeHours !== undefined && fallbackAgeHours < 6 && riskScore < 55) {
-    console.log(`[Sentinel] Enforcing minimum 55 for low holder count (${fbHolderCount} holders on <6h token, was ${riskScore})`);
-    riskScore = 55;
-    flags.push({ type: 'LOW_HOLDERS', severity: 'MEDIUM', message: `Only ${fbHolderCount} holders on a ${fallbackAgeHours.toFixed(1)}h old token — very low organic adoption` });
-  }
-
-  // ============================================
-  // DEV SELLING GUARDRAIL (fallback)
-  // ============================================
-  if (devActivity && devActivity.hasSold && fallbackAgeHours !== undefined) {
-    if (devActivity.percentSold >= 50 && fallbackAgeHours < 6 && riskScore < 80) {
-      console.log(`[Sentinel] Enforcing minimum 80 for dev sold ${devActivity.percentSold.toFixed(0)}% on <6h token (was ${riskScore})`);
-      riskScore = 80;
-      flags.push({ type: 'DEV_DUMP', severity: 'CRITICAL', message: `Developer sold ${devActivity.percentSold.toFixed(0)}% of tokens on a ${fallbackAgeHours.toFixed(1)}h old token — likely rug` });
-    } else if (devActivity.percentSold >= 20 && devActivity.currentHoldingsPercent > 20 && fallbackAgeHours < 6 && riskScore < 75) {
-      console.log(`[Sentinel] Enforcing minimum 75 for dev sold ${devActivity.percentSold.toFixed(0)}% + still holds ${devActivity.currentHoldingsPercent.toFixed(0)}% on <6h token (was ${riskScore})`);
-      riskScore = 75;
-      flags.push({ type: 'DEV_DUMP', severity: 'HIGH', message: `Developer sold ${devActivity.percentSold.toFixed(0)}% but still holds ${devActivity.currentHoldingsPercent.toFixed(0)}% — more selling likely` });
-    } else if (devActivity.percentSold >= 20 && fallbackAgeHours < 24 && riskScore < 65) {
-      console.log(`[Sentinel] Enforcing minimum 65 for dev sold ${devActivity.percentSold.toFixed(0)}% on <24h token (was ${riskScore})`);
-      riskScore = 65;
-      flags.push({ type: 'DEV_DUMP', severity: 'MEDIUM', message: `Developer sold ${devActivity.percentSold.toFixed(0)}% of tokens within first 24h` });
-    }
-  }
-
-  // ============================================
-  // COMBO SIGNAL ESCALATION
-  // ============================================
-  let fbModerateFlags = 0;
-  if (fallbackAgeHours !== undefined && fallbackAgeHours < 6) fbModerateFlags++;
-  if (fallbackLiquidity < 10000) fbModerateFlags++;
-  if (fbSells24h > fbBuys24h && fbSells24h > 50) fbModerateFlags++;
-  if (fbHolderCount > 0 && fbHolderCount < 30) fbModerateFlags++;
-  if (hasBundleDetection && !fbIsMatureToken) fbModerateFlags++;
-  if (isNewWallet) fbModerateFlags++;
-  if (fallbackPriceChange !== undefined && fallbackPriceChange < -30) fbModerateFlags++;
-  if (devActivity && devActivity.hasSold && devActivity.percentSold >= 20) fbModerateFlags++;
-
-  // POSITIVE SIGNAL OFFSET (fallback)
-  // SAFETY: Blocked when signals are likely a coordinated pump
-  const fbIsHighBundle = bundleInfo?.confidence === 'HIGH' && !fbIsMatureToken;
-  const fbBundleDominant = !fbIsMatureToken && fbHolderCountForBundle > 0 && bundleInfo.count > 0 && (bundleInfo.count / fbHolderCountForBundle) > 0.4;
-  const fbTooThin = fallbackLiquidity < 2000;
-  const fbTooNew = fallbackAgeHours !== undefined && fallbackAgeHours < 1;
-  const fbOffsetBlocked = fbIsHighBundle || fbBundleDominant || fbTooThin || fbTooNew;
-
-  const fbBuyRatio = fbBuys24h > 0 && fbSells24h > 0 ? fbBuys24h / fbSells24h : 0;
-
-  if (!fbOffsetBlocked) {
-    let fbPositiveSignals = 0;
-    if (fbBuyRatio > 1.3) fbPositiveSignals++;
-    if (fallbackPriceChange !== undefined && fallbackPriceChange > 50) fbPositiveSignals++;
-    if (fallbackLiquidity > 0 && tokenInfo.volume24h && tokenInfo.volume24h / fallbackLiquidity > 5 && fbBuyRatio > 1) fbPositiveSignals++;
-
-    const fbRawFlags = fbModerateFlags;
-    if (fbPositiveSignals >= 3) {
-      fbModerateFlags = Math.max(0, fbModerateFlags - 2);
-      console.log(`[Sentinel] Positive offset -2: ${fbPositiveSignals} bullish signals (buyRatio=${fbBuyRatio.toFixed(2)}, price=${fallbackPriceChange?.toFixed(0)}%) — flags ${fbRawFlags} → ${fbModerateFlags}`);
-    } else if (fbPositiveSignals >= 2) {
-      fbModerateFlags = Math.max(0, fbModerateFlags - 1);
-      console.log(`[Sentinel] Positive offset -1: ${fbPositiveSignals} bullish signals (buyRatio=${fbBuyRatio.toFixed(2)}, price=${fallbackPriceChange?.toFixed(0)}%) — flags ${fbRawFlags} → ${fbModerateFlags}`);
-    }
-  } else {
-    console.log(`[Sentinel] Positive offset BLOCKED: highBundle=${fbIsHighBundle}, bundleDominant=${fbBundleDominant}, thinLiq=${fbTooThin}, tooNew=${fbTooNew}`);
-  }
-
-  if (fbModerateFlags >= 5 && riskScore < 75) {
-    console.log(`[Sentinel] Enforcing minimum 75 for ${fbModerateFlags} combined risk signals (was ${riskScore})`);
-    riskScore = 75;
-    flags.push({ type: 'COMBO_RISK', severity: 'CRITICAL', message: `${fbModerateFlags} risk signals detected simultaneously — extreme compounding risk` });
-  } else if (fbModerateFlags >= 4 && riskScore < 70) {
-    console.log(`[Sentinel] Enforcing minimum 70 for ${fbModerateFlags} combined risk signals (was ${riskScore})`);
-    riskScore = 70;
-    flags.push({ type: 'COMBO_RISK', severity: 'HIGH', message: `${fbModerateFlags} risk signals detected simultaneously — compounding risk` });
-  } else if (fbModerateFlags >= 3 && riskScore < 60) {
-    console.log(`[Sentinel] Enforcing minimum 60 for ${fbModerateFlags} combined risk signals (was ${riskScore})`);
-    riskScore = 60;
-    flags.push({ type: 'COMBO_RISK', severity: 'MEDIUM', message: `${fbModerateFlags} risk signals detected — elevated compound risk` });
-  }
-
-  // ============================================
-  // MATURITY OFFSET (fallback)
-  // ============================================
-  if (fbIsMatureToken) {
-    let fbMaturityReduction = 0;
-    if (fallbackMarketCap > 100_000_000) fbMaturityReduction += 15;
-    else if (fallbackMarketCap > 10_000_000) fbMaturityReduction += 10;
-    if (fallbackLiquidity > 1_000_000) fbMaturityReduction += 10;
-    else if (fallbackLiquidity > 100_000) fbMaturityReduction += 5;
-    if (fbMaturityReduction > 0) {
-      const before = riskScore;
-      riskScore = Math.max(20, riskScore - fbMaturityReduction);
-      console.log(`[Sentinel] Maturity offset -${fbMaturityReduction}: mcap=$${(fallbackMarketCap/1e6).toFixed(1)}M, liq=$${(fallbackLiquidity/1e3).toFixed(0)}K — score ${before} → ${riskScore}`);
-    }
   }
 
   riskScore = Math.min(100, riskScore);
@@ -1817,7 +1487,6 @@ sentinelRoutes.post('/analyze', async (c) => {
     const walletAddress = c.req.header('X-Wallet-Address') || null;
     const rateLimitIdentifier = walletAddress || clientIP;
 
-    // Get user tier (based on token holdings or subscription)
     const { tier } = await getUserTier(
       walletAddress,
       c.env.ARGUSGUARD_MINT,
@@ -1826,7 +1495,6 @@ sentinelRoutes.post('/analyze', async (c) => {
       c.env.SUPABASE_ANON_KEY || ''
     );
 
-    // Check rate limit
     const rateLimitResult = await checkRateLimit(c.env.SCAN_CACHE, rateLimitIdentifier, tier);
 
     if (!rateLimitResult.allowed) {
@@ -1850,21 +1518,17 @@ sentinelRoutes.post('/analyze', async (c) => {
       return c.json({ error: 'Together AI API key not configured' }, 500);
     }
 
-    // Fetch data in parallel - including transaction analysis for bundle detection
     console.log('[Sentinel] Starting parallel fetch...');
     const fetchStart = Date.now();
 
-    // First fetch DexScreener to get LP pair address
     const dexData = await fetchDexScreenerData(tokenAddress);
 
-    // Build known LP addresses list
     const knownLpAddresses: string[] = [];
     if (dexData?.pairAddress) {
       knownLpAddresses.push(dexData.pairAddress);
       console.log(`[Sentinel] Known LP from DexScreener: ${dexData.pairAddress.slice(0, 8)}...`);
     }
 
-    // Now fetch remaining data with known LPs
     const [metadata, holders, txAnalysis, rugCheckData] = await Promise.all([
       fetchHeliusTokenMetadata(tokenAddress, heliusKey),
       fetchTopHolders(tokenAddress, heliusKey, 20, knownLpAddresses),
@@ -1873,36 +1537,16 @@ sentinelRoutes.post('/analyze', async (c) => {
     ]);
     console.log(`[Sentinel] Parallel fetch took ${Date.now() - fetchStart}ms`);
 
-    // Extract LP locked percentage from RugCheck
     const lpLockedPct = rugCheckData?.lpLockedPct ?? 0;
 
-    // Get creator info - try multiple fast methods
     let creatorAddress: string | null = null;
 
-    // Method 1: For pump.fun tokens, try pump.fun API (has creator directly)
-    // DISABLED: Pump.fun API is blocking with Cloudflare 1016 error
-    // if (isPumpFunToken(tokenAddress)) {
-    //   try {
-    //     const pumpData = await fetchPumpFunData(tokenAddress);
-    //     if (pumpData?.creator) {
-    //       creatorAddress = pumpData.creator;
-    //       console.log('[Sentinel] Got creator from pump.fun API:', creatorAddress.slice(0, 8));
-    //     }
-    //   } catch (err) {
-    //     console.warn('[Sentinel] Pump.fun API failed:', err);
-    //   }
-    // }
-
-    // Method 2: Get from metadata update authority
     if (!creatorAddress && metadata?.updateAuthority) {
       creatorAddress = metadata.updateAuthority;
       console.log('[Sentinel] Using update authority as creator:', creatorAddress.slice(0, 8));
     }
 
-    // Method 3: Use top non-LP holder as likely creator (fast heuristic)
-    // For pump.fun, the creator often holds a significant portion
     if (!creatorAddress && holders.length > 0) {
-      // Skip LP-like addresses (very high holdings, >40%) and find first regular holder with >2%
       const likelyCreator = holders.find(h => h.percent > 2 && h.percent < 40);
       if (likelyCreator) {
         creatorAddress = likelyCreator.address;
@@ -1914,15 +1558,12 @@ sentinelRoutes.post('/analyze', async (c) => {
     let creatorHoldingsPercent = 0;
 
     if (creatorAddress) {
-      // Find creator in holders to get current holdings
       const creatorHolder = holders.find(h => h.address === creatorAddress);
       creatorHoldingsPercent = creatorHolder?.percent || 0;
 
-      // Skip slow detailed analysis - just use basic info
-      // Full analyzeCreatorWallet takes 10+ seconds checking rug history
       creatorInfo = {
         address: creatorAddress,
-        walletAge: -1, // Unknown — -1 means "not checked", prevents false "new wallet" triggers
+        walletAge: -1,
         tokensCreated: 0,
         ruggedTokens: 0,
         currentHoldings: creatorHoldingsPercent,
@@ -1930,7 +1571,6 @@ sentinelRoutes.post('/analyze', async (c) => {
       console.log(`[Sentinel] Creator: ${creatorAddress.slice(0, 8)}, holdings: ${creatorHoldingsPercent.toFixed(1)}%`);
     }
 
-    // Analyze dev selling activity
     let devActivity = null;
     if (creatorAddress) {
       try {
@@ -1938,8 +1578,6 @@ sentinelRoutes.post('/analyze', async (c) => {
         const devResult = await analyzeDevSelling(creatorAddress, tokenAddress, heliusKey);
         console.log(`[Sentinel] Dev selling analysis took ${Date.now() - devStart}ms: sold ${devResult.percentSold.toFixed(0)}%, holds ${devResult.currentHoldingsPercent.toFixed(1)}%`);
 
-        // Only use dev activity if the creator actually held tokens
-        // Update authority / protocol addresses never hold tokens — skip them
         if (devResult.hasSold || devResult.currentHoldingsPercent > 0) {
           devActivity = devResult;
         } else {
@@ -1950,7 +1588,6 @@ sentinelRoutes.post('/analyze', async (c) => {
       }
     }
 
-    // Build token info with market data
     const mintAuthorityActive = !!metadata?.mintAuthority;
     const freezeAuthorityActive = !!metadata?.freezeAuthority;
 
@@ -1958,9 +1595,6 @@ sentinelRoutes.post('/analyze', async (c) => {
       ? (Date.now() - dexData.pairCreatedAt) / (1000 * 60 * 60)
       : undefined;
 
-    // Estimate bonding curve liquidity for PumpFun tokens
-    // DexScreener reports $0 for tokens still on bonding curve, but they ARE tradeable
-    // PumpFun bonding curve provides ~20% of market cap as effective liquidity
     const isPumpFun = tokenAddress.endsWith('pump') || dexData?.dex === 'pumpfun';
     let effectiveLiquidity = dexData?.liquidityUsd || 0;
     if (isPumpFun && effectiveLiquidity <= 0 && dexData?.marketCap && dexData.marketCap > 0) {
@@ -1988,11 +1622,10 @@ sentinelRoutes.post('/analyze', async (c) => {
       lpLockedPct,
     };
 
-    // Build holder distribution for chart
     const holderDistribution = holders.slice(0, 10).map(h => {
       let type: 'creator' | 'whale' | 'insider' | 'lp' | 'normal' = 'normal';
       if (h.address === creatorAddress) type = 'creator';
-      else if (h.isLp) type = 'lp';  // Use the detected LP flag
+      else if (h.isLp) type = 'lp';
       else if (h.percent > 10) type = 'whale';
       else if (h.percent > 5) type = 'insider';
       return {
@@ -2002,37 +1635,25 @@ sentinelRoutes.post('/analyze', async (c) => {
       };
     });
 
-    // IMPROVED BUNDLE DETECTION - transaction-based is PRIMARY, holder-based is SUPPORTING
-    // Method 1: Transaction-based (HIGH CONFIDENCE) - wallets buying in same slot
     const txBundleDetected = txAnalysis.bundleDetected;
     const txBundleCount = txAnalysis.coordinatedWallets;
     const txBundlePercent = txAnalysis.bundledBuyPercent;
 
-    // Method 2: Holder pattern-based (SUPPORTING EVIDENCE ONLY)
-    // Much stricter: require near-IDENTICAL holdings (0.1% tolerance) AND 5+ wallets
-    // This avoids flagging natural distribution (people buying similar amounts)
     const nearIdenticalHoldings = holders.filter((h, i, arr) => {
       if (i === 0) return false;
       const prevPercent = arr[i - 1].percent;
-      // Must be within 0.1% AND both > 1% holding
       return Math.abs(h.percent - prevPercent) < 0.1 && h.percent > 1 && arr[i - 1].percent > 1;
     });
 
-    // Even stricter: check for EXACT same holdings (within 0.05%) - very suspicious
     const exactSameHoldings = holders.filter((h, i, arr) => {
       if (i === 0) return false;
       const prevPercent = arr[i - 1].percent;
       return Math.abs(h.percent - prevPercent) < 0.05 && h.percent > 0.5;
     });
 
-    // Holder pattern only triggers with 5+ near-identical OR 3+ exact-same
     const holderBundleDetected = nearIdenticalHoldings.length >= 5 || exactSameHoldings.length >= 3;
     const holderBundleCount = Math.max(nearIdenticalHoldings.length, exactSameHoldings.length);
 
-    // CONFIDENCE LEVELS:
-    // HIGH: Transaction-based detected (same-block buys) - this is definitive
-    // MEDIUM: Both transaction AND holder patterns agree
-    // LOW: Only holder patterns (could be natural distribution)
     let bundleConfidence: 'HIGH' | 'MEDIUM' | 'LOW' | 'NONE' = 'NONE';
     if (txBundleDetected && txBundlePercent > 20) {
       bundleConfidence = 'HIGH';
@@ -2041,16 +1662,14 @@ sentinelRoutes.post('/analyze', async (c) => {
     } else if (txBundleDetected) {
       bundleConfidence = 'MEDIUM';
     } else if (holderBundleDetected && exactSameHoldings.length >= 3) {
-      bundleConfidence = 'MEDIUM'; // Exact same holdings is suspicious even without tx data
+      bundleConfidence = 'MEDIUM';
     } else if (holderBundleDetected) {
-      bundleConfidence = 'LOW'; // Could be false positive
+      bundleConfidence = 'LOW';
     }
 
-    // Only flag as bundle if we have at least MEDIUM confidence
     const bundleDetected = bundleConfidence === 'HIGH' || bundleConfidence === 'MEDIUM';
     const bundleCount = txBundleDetected ? txBundleCount : holderBundleCount;
 
-    // Build description with specifics
     let bundleDescription: string | undefined;
     if (bundleDetected || bundleConfidence === 'LOW') {
       const parts: string[] = [];
@@ -2084,7 +1703,24 @@ sentinelRoutes.post('/analyze', async (c) => {
       console.log(`[Sentinel] Possible bundle (LOW confidence): ${bundleDescription}`);
     }
 
-    // Build network graph
+    // ============================================
+    // NEW: Assess bundle quality
+    // ============================================
+    let bundleQuality: BundleQuality | undefined = undefined;
+    
+    if (bundleDetected || bundleConfidence === 'LOW') {
+      const qualityStart = Date.now();
+      bundleQuality = await assessBundleQuality(
+        bundleInfo,
+        holders,
+        creatorAddress,
+        tokenInfo.ageHours,
+        heliusKey
+      );
+      console.log(`[Sentinel] Bundle quality assessment took ${Date.now() - qualityStart}ms`);
+      console.log(`[Sentinel] Bundle quality: ${bundleQuality.assessment} (score: ${bundleQuality.legitimacyScore})`);
+    }
+
     const network = buildNetworkGraph(
       tokenAddress,
       tokenInfo.symbol,
@@ -2093,29 +1729,24 @@ sentinelRoutes.post('/analyze', async (c) => {
       creatorHoldingsPercent
     );
 
-    // Generate AI analysis - PASS BUNDLE INFO for proper scoring
     const aiStart = Date.now();
     const aiAnalysis = await generateNetworkAnalysis(
       tokenInfo,
       network,
       creatorInfo,
       bundleInfo,
+      bundleQuality,
       devActivity,
       togetherKey,
       model
     );
     console.log(`[Sentinel] AI analysis took ${Date.now() - aiStart}ms, AI score: ${aiAnalysis.riskScore}`);
 
-    // ============================================
-    // APPLY HARDCODED RULES (THE SPINE)
-    // Overrides AI hallucinations with structural guardrails
-    // ============================================
     const hasWebsite = !!(dexData?.websites && dexData.websites.length > 0);
     const hasTwitter = !!(dexData?.socials?.some(s =>
       s.type === 'twitter' || s.url?.includes('twitter.com') || s.url?.includes('x.com')
     ));
 
-    // Capture AI score before rules are applied
     const aiScore = aiAnalysis.riskScore;
 
     const analysis = applyHardcodedRules(aiAnalysis, {
@@ -2132,6 +1763,7 @@ sentinelRoutes.post('/analyze', async (c) => {
       holders,
       creatorInfo,
       bundleInfo,
+      bundleQuality,
       devActivity,
       isPumpFun,
       hasWebsite,
@@ -2139,7 +1771,6 @@ sentinelRoutes.post('/analyze', async (c) => {
       creatorAddress,
     });
 
-    // Track if rules overrode the AI score
     const rulesOverride = aiScore !== analysis.riskScore;
     if (rulesOverride) {
       console.log(`[Sentinel] Rules override: AI=${aiScore} → Final=${analysis.riskScore} (${analysis.riskLevel})`);
@@ -2147,11 +1778,7 @@ sentinelRoutes.post('/analyze', async (c) => {
       console.log(`[Sentinel] Final score: ${analysis.riskScore} (${analysis.riskLevel})`);
     }
 
-    // ============================================
-    // AUTO-TWEET: Alert on high-risk tokens
-    // Fire-and-forget via waitUntil (doesn't block response)
-    // Criteria: riskScore >= 70 (DANGEROUS/SCAM)
-    // ============================================
+    // Auto-tweet
     if (analysis.riskScore >= 70 && c.env.TWITTER_API_KEY) {
       const twitterConfig: TwitterConfig = {
         apiKey: c.env.TWITTER_API_KEY,
@@ -2199,15 +1826,11 @@ sentinelRoutes.post('/analyze', async (c) => {
       );
     }
 
-    // ============================================
-    // AUTO-TELEGRAM: Alert on high-risk tokens
-    // Fire-and-forget to Telegram channel
-    // ============================================
+    // Auto-telegram
     if (analysis.riskScore >= 70 && c.env.TELEGRAM_BOT_TOKEN && c.env.TELEGRAM_CHANNEL_ID) {
       c.executionCtx.waitUntil(
         (async () => {
           try {
-            // Check dedup (reuse Twitter KV prefix with telegram: prefix)
             const tgKey = `telegram:${tokenAddress}`;
             const existing = await c.env.SCAN_CACHE.get(tgKey);
             if (existing) {
@@ -2252,7 +1875,6 @@ sentinelRoutes.post('/analyze', async (c) => {
       );
     }
 
-    // Add rate limit headers to response
     c.header('X-RateLimit-Limit', String(rateLimitResult.limit));
     c.header('X-RateLimit-Remaining', String(rateLimitResult.remaining));
     c.header('X-RateLimit-Reset', String(rateLimitResult.resetAt));
@@ -2268,11 +1890,17 @@ sentinelRoutes.post('/analyze', async (c) => {
       },
       network,
       analysis,
-      aiScore, // Original AI score before rules applied
-      rulesOverride, // Whether guardrails adjusted the score
+      aiScore,
+      rulesOverride,
       creatorInfo,
       holderDistribution,
       bundleInfo,
+      bundleQuality: bundleQuality ? {
+        legitimacyScore: bundleQuality.legitimacyScore,
+        assessment: bundleQuality.assessment,
+        positiveSignals: bundleQuality.signals.positive,
+        negativeSignals: bundleQuality.signals.negative,
+      } : null,
       devActivity: devActivity ? {
         hasSold: devActivity.hasSold,
         percentSold: devActivity.percentSold,
