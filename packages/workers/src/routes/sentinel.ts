@@ -25,7 +25,7 @@ interface RugCheckReport {
 /**
  * Fetch LP lock data from RugCheck API (free, no API key needed)
  */
-async function fetchRugCheckData(tokenAddress: string): Promise<{ lpLockedPct: number; totalHolders: number } | null> {
+async function fetchRugCheckData(tokenAddress: string): Promise<{ lpLockedPct: number } | null> {
   try {
     const response = await fetch(`${RUGCHECK_API}/tokens/${tokenAddress}/report`, {
       headers: { 'Accept': 'application/json' },
@@ -42,12 +42,9 @@ async function fetchRugCheckData(tokenAddress: string): Promise<{ lpLockedPct: n
     const market = data.markets?.[0];
     const lpLockedPct = market?.lp?.lpLockedPct ?? market?.lpLockedPct ?? 0;
 
-    // Total holder count from RugCheck's totalHolders field
-    const totalHolders = (data as { totalHolders?: number }).totalHolders ?? 0;
+    console.log(`[RugCheck] ${tokenAddress.slice(0, 8)}... - LP Locked: ${lpLockedPct.toFixed(1)}%`);
 
-    console.log(`[RugCheck] ${tokenAddress.slice(0, 8)}... - LP Locked: ${lpLockedPct.toFixed(1)}%, Holders: ${totalHolders}`);
-
-    return { lpLockedPct, totalHolders };
+    return { lpLockedPct };
   } catch (error) {
     console.error('[RugCheck] Error:', error instanceof Error ? error.message : 'Unknown error');
     return null;
@@ -933,10 +930,27 @@ CREATOR ANALYSIS:
 Analyze the provided network data and return a JSON response with:
 1. riskScore (0-100): Overall risk based on network patterns
 2. riskLevel: SAFE (<40), SUSPICIOUS (40-59), DANGEROUS (60-79), or SCAM (80+)
-3. summary: 1-2 sentence risk summary
+3. summary: 1-2 sentence risk summary WITH SPECIFIC VALUES (see SUMMARY REQUIREMENTS below)
 4. prediction: Your prediction of what will likely happen to this token
 5. flags: Array of {type, severity, message} for specific risks
 6. networkInsights: Array of strings with network pattern observations
+
+SUMMARY REQUIREMENTS — USE EXACT VALUES, NOT VAGUE TERMS:
+- ALWAYS use specific numbers from the provided data
+- BANNED WORDS: "moderate", "some", "a few", "significant", "substantial", "considerable", "notable", "decent", "fairly", "relatively", "amidst"
+- If you catch yourself using these words, REPLACE with the actual number
+- BAD: "Dev holds a moderate percentage" → GOOD: "Dev holds 21.7% of supply"
+- BAD: "Some bundle activity detected" → GOOD: "4 wallets show bundle patterns controlling 39.2%"
+- BAD: "High trading volume" → GOOD: "$127K 24h volume with 2.3:1 buy ratio"
+- BAD: "Good liquidity" → GOOD: "$45K liquidity in Raydium pool"
+- Include the token name in your summary when available
+
+NO CONTRADICTORY HEDGING - Give a clear verdict:
+- NEVER use "but also", "however... also", "indicating X but showing Y"
+- BAD: "potential dump risk but also showing signs of organic activity" — this is contradictory garbage
+- Pick a side based on the weight of evidence. If risks outweigh positives, say so directly.
+- GOOD: "$DEGEN has HIGH bundle (5 wallets, 25% supply). $29K volume doesn't offset coordinated wallet risk."
+- GOOD: "$SAFE shows healthy trading: $150K volume, 2.1:1 buy ratio, dev exited. Bundle detection is LOW confidence only."
 
 RISK FACTORS (weight by confidence):
 
@@ -1041,7 +1055,8 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
     const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]);
-      let score = Math.max(0, Math.min(100, parsed.riskScore || 50));
+      const originalAiScore = Math.max(0, Math.min(100, parsed.riskScore || 50));
+      let score = originalAiScore;
       const aiFlags = parsed.flags || [];
       const aiInsights = parsed.networkInsights || [];
 
@@ -1334,10 +1349,19 @@ RETURN ONLY VALID JSON, no markdown or explanation.`;
       else if (score >= 60) riskLevel = 'DANGEROUS';
       else if (score >= 40) riskLevel = 'SUSPICIOUS';
 
+      // Clean up AI summary - remove contradictory hedging phrases
+      let finalSummary = parsed.summary || 'Analysis completed.';
+      finalSummary = finalSummary
+        .replace(/,?\s*but\s+(also\s+)?(showing|indicates?|suggests?).+?(organic|positive|healthy).+?(activity|signals?|signs?)\.?/gi, '.')
+        .replace(/,?\s*but\s+this\s+is\s+(offset|mitigated|reduced).+$/gi, '.')
+        .replace(/however,?\s*(the\s+)?token'?s?\s+(high|good|strong).+?(offset|mitigate|reduce).+?(concerns?|risks?|issues?)\.?/gi, '')
+        .replace(/\.\s*\./g, '.')
+        .trim();
+
       return {
         riskScore: score,
         riskLevel,
-        summary: parsed.summary || 'Analysis completed.',
+        summary: finalSummary,
         prediction: parsed.prediction || 'Unable to predict.',
         recommendation: generateRecommendation(score, bundleInfo.detected, bundleInfo.count),
         flags: aiFlags,
@@ -1953,7 +1977,7 @@ sentinelRoutes.post('/analyze', async (c) => {
       liquidity: effectiveLiquidity,
       age: ageHours !== undefined ? Math.floor(ageHours / 24) : undefined,
       ageHours: ageHours !== undefined ? Math.round(ageHours * 10) / 10 : undefined,
-      holderCount: rugCheckData?.totalHolders || holders.length,
+      holderCount: holders.length,
       priceChange24h: dexData?.priceChange24h,
       volume24h: dexData?.volume24h,
       txns5m: dexData?.txns5m,

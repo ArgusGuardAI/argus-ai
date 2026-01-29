@@ -12,6 +12,7 @@ import { telegramRoutes } from './routes/telegram';
 
 export type Bindings = {
   SCAN_CACHE: KVNamespace;
+  BUNDLE_DB: D1Database;  // D1 database for bundle network tracking
   TOGETHER_AI_API_KEY: string;
   TOGETHER_AI_MODEL?: string;
   SUPABASE_URL: string;

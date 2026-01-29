@@ -72,6 +72,11 @@ export async function getUserTier(
     return { tier: 'free', tokenBalance: 0, isSubscribed: false };
   }
 
+  // Whitelisted wallets (founders/admins) always get pro tier
+  if (WHITELIST.has(walletAddress)) {
+    return { tier: 'pro', tokenBalance: PRO_THRESHOLD, isSubscribed: false };
+  }
+
   let tokenBalance = 0;
   let isSubscribed = false;
 

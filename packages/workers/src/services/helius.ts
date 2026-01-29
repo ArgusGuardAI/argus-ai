@@ -540,6 +540,7 @@ export interface TransactionAnalysis {
   bundleDetected: boolean;
   bundledBuyPercent: number;
   coordinatedWallets: number;
+  bundleWalletAddresses: string[];  // Actual wallet addresses in bundles
 
   // Trading patterns
   totalBuys24h: number;
@@ -910,6 +911,7 @@ export async function analyzeTokenTransactions(
     bundleDetected: false,
     bundledBuyPercent: 0,
     coordinatedWallets: 0,
+    bundleWalletAddresses: [],
     totalBuys24h: 0,
     totalSells24h: 0,
     uniqueBuyers24h: 0,
@@ -987,16 +989,25 @@ export async function analyzeTokenTransactions(
     // Detect bundles (multiple different wallets in same slot)
     // Threshold of 5+ wallets to avoid false positives from normal trading
     let bundledWallets = 0;
+    const bundleWalletSet = new Set<string>();
+
     for (const [, wallets] of slotGroups) {
       const uniqueWallets = new Set(wallets);
       if (uniqueWallets.size >= 5) {
         analysis.bundleDetected = true;
         bundledWallets += uniqueWallets.size;
+        // Collect actual wallet addresses for bundle network tracking
+        for (const wallet of uniqueWallets) {
+          bundleWalletSet.add(wallet);
+        }
         analysis.suspiciousPatterns.push(
           `${uniqueWallets.size} wallets transacted in same slot`
         );
       }
     }
+
+    // Store unique bundle wallet addresses
+    analysis.bundleWalletAddresses = Array.from(bundleWalletSet);
 
     // Calculate bundle percentage using detected buys, falling back to total transactions
     const denominator = analysis.totalBuys24h > 0 ? analysis.totalBuys24h : totalTransactions;

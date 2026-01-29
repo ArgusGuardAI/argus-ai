@@ -48,6 +48,16 @@ binding = "SCAN_CACHE"
 id = "f68ebeb06b094a29a537c65738f6c50e"
 preview_id = "3fd64db66b4f49f3b56d77f64d8138b3"
 
+# D1 Database for Bundle Network Map
+# Run: wrangler d1 create argus-bundle-network
+# Then replace the database_id below
+# After creation, initialize schema:
+#   wrangler d1 execute argus-bundle-network --file=./src/db/bundle-network.sql
+[[d1_databases]]
+binding = "BUNDLE_DB"
+database_name = "argus-bundle-network"
+database_id = "9cd48296-20f5-4e15-bb81-5b86877bc117"
+
 # Development environment
 [env.dev]
 name = "argusguard-api-dev"
