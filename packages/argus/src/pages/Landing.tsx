@@ -2927,7 +2927,7 @@ export default function Landing() {
                 <div className="icon-bg">
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
                 </div>
-                <div className="card-title">BitNet AI Engine</div>
+                <div className="card-title">Argus BitNet</div>
                 <div className="card-desc">Local CPU inference in under 100ms. Data-driven predictions with specific values like "16 wallets control 4.5%" — not vague "moderate risk" garbage.</div>
               </div>
 
@@ -2951,7 +2951,7 @@ export default function Landing() {
                 <div className="icon-bg">
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
                 </div>
-                <div className="card-title">On-Chain Intelligence</div>
+                <div className="card-title">Argus On-Chain</div>
                 <div className="card-desc">Direct Solana RPC analysis — no third-party APIs. Real-time holder data, transaction patterns, and wallet ages straight from the blockchain.</div>
               </div>
 
@@ -2975,21 +2975,27 @@ export default function Landing() {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 24 }}>
               <div style={{ background: 'var(--bg-card)', borderRadius: 16, padding: 32, border: '1px solid var(--border)' }}>
-                <div style={{ fontSize: 32, marginBottom: 16 }}>🧠</div>
+                <div style={{ width: 48, height: 48, borderRadius: 12, background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
+                  <i className="fa-solid fa-brain" style={{ fontSize: 22, color: 'white' }}></i>
+                </div>
                 <div style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: 8, color: 'var(--text-main)' }}>BitNet AI</div>
                 <div style={{ color: 'var(--text-muted)', fontSize: '0.95rem', lineHeight: 1.6 }}>
                   Local CPU inference on Cloudflare Workers. 26 features extracted per token. Sub-100ms analysis with zero API costs.
                 </div>
               </div>
               <div style={{ background: 'var(--bg-card)', borderRadius: 16, padding: 32, border: '1px solid var(--border)' }}>
-                <div style={{ fontSize: 32, marginBottom: 16 }}>⛓️</div>
+                <div style={{ width: 48, height: 48, borderRadius: 12, background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
+                  <i className="fa-solid fa-link" style={{ fontSize: 22, color: 'white' }}></i>
+                </div>
                 <div style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: 8, color: 'var(--text-main)' }}>Direct RPC</div>
                 <div style={{ color: 'var(--text-muted)', fontSize: '0.95rem', lineHeight: 1.6 }}>
                   Holder data straight from Solana via Helius. No RugCheck, no third-party caching. Real blockchain state.
                 </div>
               </div>
               <div style={{ background: 'var(--bg-card)', borderRadius: 16, padding: 32, border: '1px solid var(--border)' }}>
-                <div style={{ fontSize: 32, marginBottom: 16 }}>⚡</div>
+                <div style={{ width: 48, height: 48, borderRadius: 12, background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
+                  <i className="fa-solid fa-bolt" style={{ fontSize: 22, color: 'white' }}></i>
+                </div>
                 <div style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: 8, color: 'var(--text-main)' }}>Edge Deployed</div>
                 <div style={{ color: 'var(--text-muted)', fontSize: '0.95rem', lineHeight: 1.6 }}>
                   Entire analysis pipeline runs on Cloudflare's global edge network. Fast everywhere, no cold starts.
@@ -3267,10 +3273,26 @@ export default function Landing() {
                     <td className="highlight"><span className="exclusive">ONLY ARGUS</span></td>
                   </tr>
                   <tr>
-                    <td><i className="fa-solid fa-brain" style={{ marginRight: 8, color: 'var(--text-muted)' }}></i>AI Risk Scoring</td>
+                    <td><i className="fa-solid fa-brain" style={{ marginRight: 8, color: 'var(--text-muted)' }}></i>Local AI (BitNet)</td>
                     <td><span className="dash">&mdash;</span></td>
                     <td><span className="dash">&mdash;</span></td>
                     <td><span className="dash">&mdash;</span></td>
+                    <td><span className="dash">&mdash;</span></td>
+                    <td className="highlight"><span className="exclusive">ONLY ARGUS</span></td>
+                  </tr>
+                  <tr>
+                    <td><i className="fa-solid fa-link" style={{ marginRight: 8, color: 'var(--text-muted)' }}></i>Direct RPC (No 3rd Party)</td>
+                    <td><span className="dash">&mdash;</span></td>
+                    <td><span className="dash">&mdash;</span></td>
+                    <td><span className="dash">&mdash;</span></td>
+                    <td><span className="dash">&mdash;</span></td>
+                    <td className="highlight"><span className="exclusive">ONLY ARGUS</span></td>
+                  </tr>
+                  <tr>
+                    <td><i className="fa-solid fa-diagram-project" style={{ marginRight: 8, color: 'var(--text-muted)' }}></i>Bundle Network Graph</td>
+                    <td><span className="dash">&mdash;</span></td>
+                    <td><span className="dash">&mdash;</span></td>
+                    <td><span className="check"><i className="fa-solid fa-check"></i></span></td>
                     <td><span className="dash">&mdash;</span></td>
                     <td className="highlight"><span className="exclusive">ONLY ARGUS</span></td>
                   </tr>
@@ -3285,7 +3307,7 @@ export default function Landing() {
               <div className="callout-content">
                 <h4>Other tools see fragments. Argus sees everything.</h4>
                 <p>
-                  RugCheck does security. DexScreener does charts. Sniper bots do trading. Nobody combines research <em>and</em> execution in one place. Argus is the first <strong>Research-to-Trade</strong> platform&mdash;a hundred eyes analyzing every angle of a token so you can act on it instantly, with auto-sell protecting your position. No more tab-hopping between five different tools.
+                  RugCheck relies on cached data. DexScreener shows charts but no intelligence. Sniper bots trade blind. Argus runs <strong>BitNet AI locally</strong> with <strong>direct Solana RPC</strong>&mdash;no third-party APIs, no stale data, sub-100ms analysis. The first <strong>Research-to-Trade</strong> platform with real-time on-chain intelligence and auto-sell protection.
                 </p>
               </div>
             </div>
