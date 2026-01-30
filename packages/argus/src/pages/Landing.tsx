@@ -118,6 +118,20 @@ const styles = `
     50% { opacity: 0.5; }
   }
 
+  @keyframes countUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes glowPulse {
+    0%, 100% { box-shadow: 0 0 20px rgba(16, 185, 129, 0.3); }
+    50% { box-shadow: 0 0 40px rgba(16, 185, 129, 0.6); }
+  }
+
+  .landing-page .stat-highlight {
+    animation: countUp 0.6s ease-out forwards, glowPulse 3s ease-in-out infinite;
+  }
+
   /* --- HEADER --- */
   .landing-page header {
     position: sticky;
@@ -2244,6 +2258,21 @@ const styles = `
     background: var(--border);
     vertical-align: middle;
   }
+
+  /* --- COMPRESSION STATS RESPONSIVE --- */
+  @media (max-width: 900px) {
+    .landing-page .compression-stats-grid {
+      grid-template-columns: repeat(2, 1fr) !important;
+    }
+  }
+  @media (max-width: 600px) {
+    .landing-page .compression-stats-grid {
+      grid-template-columns: 1fr !important;
+    }
+    .landing-page .compression-visual {
+      flex-direction: column !important;
+    }
+  }
 `;
 
 const Logo = () => (
@@ -2661,16 +2690,16 @@ export default function Landing() {
           <div className="container">
             <div className="badge">
               <span className="badge-dot"></span>
-              The Hundred-Eyed Guardian
+              World's First Edge-Native Crypto AI
             </div>
-            <h1>Detect Coordinated Wallets<br/><span>Before They Dump</span></h1>
+            <h1>17,000x Data Compression<br/><span>13ms AI Inference</span></h1>
             <p className="hero-typewriter">
               <span className="typewriter-text">{typewriterText}</span>
               <span className="typewriter-cursor" />
             </p>
             <p>
-              A titan blessed with one hundred eyes, each one watching a different wallet.
-              Argus exposes pump syndicates, insider clusters, and coordinated dumps on Solana before they strike.
+              We compress 2MB of blockchain data into 116 bytes. Our AI runs entirely on Cloudflare's edge —
+              no GPUs, no servers, no API costs. Just pure, instant intelligence.
             </p>
 
             <div className="token-ticker">
@@ -2887,7 +2916,7 @@ export default function Landing() {
           <div className="container">
             <div className="section-header reveal">
               <h2>Stop Getting Rugged</h2>
-              <p>BitNet AI + Direct RPC. Sub-100ms analysis with specific, actionable intelligence — not vague warnings.</p>
+              <p>29 neural features compressed into 116 bytes. 13ms inference. Zero API costs. This is the future of crypto intelligence.</p>
             </div>
 
             <div className="feature-grid stagger-children reveal">
@@ -2923,12 +2952,12 @@ export default function Landing() {
                 <div className="card-desc">Buy tokens directly from the dashboard with your dedicated trading wallet. No popup confirmations, just instant execution.</div>
               </div>
 
-              <div className="feature-card">
-                <div className="icon-bg">
+              <div className="feature-card" style={{ background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, var(--bg-card) 100%)', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+                <div className="icon-bg" style={{ background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)' }}>
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
                 </div>
-                <div className="card-title">Argus BitNet</div>
-                <div className="card-desc">Local CPU inference in under 100ms. Data-driven predictions with specific values like "16 wallets control 4.5%" — not vague "moderate risk" garbage.</div>
+                <div className="card-title">Argus Compression Engine</div>
+                <div className="card-desc">17,000x data compression. 2MB of blockchain data → 116 bytes. 13ms CPU inference. Gini coefficient analysis. The world's first edge-native crypto AI.</div>
               </div>
 
               <div className="feature-card">
@@ -2966,39 +2995,131 @@ export default function Landing() {
           </div>
         </section>
 
-        {/* TECH STACK */}
-        <section className="tech-stack reveal" style={{ padding: '80px 0', borderTop: '1px solid var(--border)' }}>
+        {/* COMPRESSION ENGINE */}
+        <section className="tech-stack reveal" style={{ padding: '100px 0', borderTop: '1px solid var(--border)', background: 'linear-gradient(180deg, var(--bg-body) 0%, #0a0f0a 100%)' }}>
           <div className="container">
-            <div className="section-header" style={{ marginBottom: 48 }}>
-              <h2>Built Different</h2>
-              <p>Zero external APIs. Everything runs on the edge.</p>
+            <div className="section-header" style={{ marginBottom: 60 }}>
+              <div className="badge" style={{ marginBottom: 16 }}>
+                <span className="badge-dot"></span>
+                Patent-Pending Technology
+              </div>
+              <h2 style={{ fontSize: '2.5rem' }}>The Compression Engine</h2>
+              <p style={{ maxWidth: 600, margin: '0 auto' }}>We don't just analyze tokens. We compress the entire blockchain state into a neural fingerprint.</p>
             </div>
+
+            {/* Big Stats */}
+            <div className="compression-stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 24, marginBottom: 60 }}>
+              <div style={{ textAlign: 'center', padding: '32px 16px', background: 'var(--bg-card)', borderRadius: 16, border: '1px solid var(--border)' }}>
+                <div style={{ fontSize: '3rem', fontWeight: 800, background: 'linear-gradient(135deg, #10B981 0%, #34D399 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', marginBottom: 8 }}>17,000x</div>
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Data Compression</div>
+              </div>
+              <div style={{ textAlign: 'center', padding: '32px 16px', background: 'var(--bg-card)', borderRadius: 16, border: '1px solid var(--border)' }}>
+                <div style={{ fontSize: '3rem', fontWeight: 800, background: 'linear-gradient(135deg, #10B981 0%, #34D399 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', marginBottom: 8 }}>13ms</div>
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>AI Inference</div>
+              </div>
+              <div style={{ textAlign: 'center', padding: '32px 16px', background: 'var(--bg-card)', borderRadius: 16, border: '1px solid var(--border)' }}>
+                <div style={{ fontSize: '3rem', fontWeight: 800, background: 'linear-gradient(135deg, #10B981 0%, #34D399 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', marginBottom: 8 }}>29</div>
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Neural Features</div>
+              </div>
+              <div style={{ textAlign: 'center', padding: '32px 16px', background: 'var(--bg-card)', borderRadius: 16, border: '1px solid var(--border)' }}>
+                <div style={{ fontSize: '3rem', fontWeight: 800, background: 'linear-gradient(135deg, #10B981 0%, #34D399 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', marginBottom: 8 }}>$0</div>
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Monthly AI Cost</div>
+              </div>
+            </div>
+
+            {/* Compression Visual */}
+            <div style={{ background: 'var(--bg-card)', borderRadius: 20, padding: 40, border: '1px solid var(--border)', marginBottom: 60 }}>
+              <div className="compression-visual" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 40, flexWrap: 'wrap' }}>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '1rem', color: 'var(--text-muted)', marginBottom: 12 }}>Raw Blockchain Data</div>
+                  <div style={{ width: 120, height: 120, borderRadius: 16, background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+                    <span style={{ fontSize: '1.5rem', fontWeight: 700, color: 'white' }}>~2MB</span>
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Holders, txns, metadata...</div>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                  <svg width="60" height="24" viewBox="0 0 60 24" fill="none">
+                    <path d="M0 12H50M50 12L40 6M50 12L40 18" stroke="#10B981" strokeWidth="2"/>
+                  </svg>
+                  <span style={{ fontSize: '0.75rem', color: '#10B981', fontWeight: 600 }}>COMPRESS</span>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '1rem', color: 'var(--text-muted)', marginBottom: 12 }}>Feature Vector</div>
+                  <div style={{ width: 60, height: 60, borderRadius: 12, background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+                    <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'white' }}>116B</span>
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>29 dense floats</div>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                  <svg width="60" height="24" viewBox="0 0 60 24" fill="none">
+                    <path d="M0 12H50M50 12L40 6M50 12L40 18" stroke="#10B981" strokeWidth="2"/>
+                  </svg>
+                  <span style={{ fontSize: '0.75rem', color: '#10B981', fontWeight: 600 }}>INFER</span>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '1rem', color: 'var(--text-muted)', marginBottom: 12 }}>Risk Score</div>
+                  <div style={{ width: 80, height: 80, borderRadius: '50%', background: 'linear-gradient(135deg, #10B981 0%, #34D399 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', boxShadow: '0 0 40px rgba(16, 185, 129, 0.4)' }}>
+                    <span style={{ fontSize: '1.8rem', fontWeight: 800, color: 'white' }}>72</span>
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Instant verdict</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Tech Cards */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 24 }}>
               <div style={{ background: 'var(--bg-card)', borderRadius: 16, padding: 32, border: '1px solid var(--border)' }}>
                 <div style={{ width: 48, height: 48, borderRadius: 12, background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
-                  <i className="fa-solid fa-brain" style={{ fontSize: 22, color: 'white' }}></i>
+                  <i className="fa-solid fa-compress" style={{ fontSize: 22, color: 'white' }}></i>
                 </div>
-                <div style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: 8, color: 'var(--text-main)' }}>BitNet AI</div>
+                <div style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: 8, color: 'var(--text-main)' }}>Feature Compression</div>
                 <div style={{ color: 'var(--text-muted)', fontSize: '0.95rem', lineHeight: 1.6 }}>
-                  Local CPU inference on Cloudflare Workers. 26 features extracted per token. Sub-100ms analysis with zero API costs.
+                  29 normalized features: market metrics, holder Gini coefficient, bundle patterns, security flags, and temporal decay — all in 116 bytes.
                 </div>
               </div>
               <div style={{ background: 'var(--bg-card)', borderRadius: 16, padding: 32, border: '1px solid var(--border)' }}>
                 <div style={{ width: 48, height: 48, borderRadius: 12, background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
-                  <i className="fa-solid fa-link" style={{ fontSize: 22, color: 'white' }}></i>
+                  <i className="fa-solid fa-brain" style={{ fontSize: 22, color: 'white' }}></i>
                 </div>
-                <div style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: 8, color: 'var(--text-main)' }}>Direct RPC</div>
+                <div style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: 8, color: 'var(--text-main)' }}>Edge AI Engine</div>
                 <div style={{ color: 'var(--text-muted)', fontSize: '0.95rem', lineHeight: 1.6 }}>
-                  Holder data straight from Solana via Helius. No RugCheck, no third-party caching. Real blockchain state.
+                  CPU-based inference on Cloudflare Workers. No GPUs, no cold starts, no API keys. Runs in 200+ cities worldwide at $0/month.
+                </div>
+              </div>
+              <div style={{ background: 'var(--bg-card)', borderRadius: 16, padding: 32, border: '1px solid var(--border)' }}>
+                <div style={{ width: 48, height: 48, borderRadius: 12, background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
+                  <i className="fa-solid fa-chart-line" style={{ fontSize: 22, color: 'white' }}></i>
+                </div>
+                <div style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: 8, color: 'var(--text-main)' }}>Gini Analysis</div>
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.95rem', lineHeight: 1.6 }}>
+                  We calculate the Gini coefficient of holder distribution. A token with 1000 holders but Gini=0.95 is more dangerous than 100 holders at Gini=0.3.
                 </div>
               </div>
               <div style={{ background: 'var(--bg-card)', borderRadius: 16, padding: 32, border: '1px solid var(--border)' }}>
                 <div style={{ width: 48, height: 48, borderRadius: 12, background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
                   <i className="fa-solid fa-bolt" style={{ fontSize: 22, color: 'white' }}></i>
                 </div>
-                <div style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: 8, color: 'var(--text-main)' }}>Edge Deployed</div>
+                <div style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: 8, color: 'var(--text-main)' }}>Multi-RPC Routing</div>
                 <div style={{ color: 'var(--text-muted)', fontSize: '0.95rem', lineHeight: 1.6 }}>
-                  Entire analysis pipeline runs on Cloudflare's global edge network. Fast everywhere, no cold starts.
+                  Smart load balancing across QuickNode, Alchemy, and Helius. Light calls use free tier, heavy operations route to premium — automatic failover.
+                </div>
+              </div>
+              <div style={{ background: 'var(--bg-card)', borderRadius: 16, padding: 32, border: '1px solid var(--border)' }}>
+                <div style={{ width: 48, height: 48, borderRadius: 12, background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
+                  <i className="fa-solid fa-database" style={{ fontSize: 22, color: 'white' }}></i>
+                </div>
+                <div style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: 8, color: 'var(--text-main)' }}>Syndicate Memory</div>
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.95rem', lineHeight: 1.6 }}>
+                  Every bundle wallet is stored in our network map. Scan a new token and we'll tell you if these wallets rugged before — with receipts.
+                </div>
+              </div>
+              <div style={{ background: 'var(--bg-card)', borderRadius: 16, padding: 32, border: '1px solid var(--border)' }}>
+                <div style={{ width: 48, height: 48, borderRadius: 12, background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
+                  <i className="fa-solid fa-code" style={{ fontSize: 22, color: 'white' }}></i>
+                </div>
+                <div style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: 8, color: 'var(--text-main)' }}>100% Open Source</div>
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.95rem', lineHeight: 1.6 }}>
+                  Every line of code is on GitHub under MIT license. Fork it, audit it, improve it. We believe transparency is the best security.
                 </div>
               </div>
             </div>

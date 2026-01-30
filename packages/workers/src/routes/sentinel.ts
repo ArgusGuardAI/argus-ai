@@ -9,6 +9,7 @@ import { saveTrainingExample } from '../services/training-data';
 import { convertToAnalysisInput, type TokenAnalysisOutput, createAIProvider, LocalBitNetProvider } from '../services/ai-provider';
 import { createSentinelDataFetcher } from '../services/sentinel-data';
 import { storeBundleWallets, findRepeatOffenders, type SyndicateNetwork } from '../services/bundle-network';
+import { extractFromSentinelData, toFeatureVector, getFeatureSummary, getFeatureMemorySize } from '../services/feature-extractor';
 
 const HELIUS_RPC_BASE = 'https://mainnet.helius-rpc.com';
 const RUGCHECK_API = 'https://api.rugcheck.xyz/v1';
@@ -1740,6 +1741,13 @@ sentinelRoutes.post('/analyze', async (c) => {
       const data = await dataFetcher.fetchData(tokenAddress);
 
       console.log(`[Sentinel] ${dataMode} fetch took ${data.fetchDuration}ms`);
+
+      // Extract compressed features for efficient inference
+      const compressedFeatures = extractFromSentinelData(data);
+      const featureVector = toFeatureVector(compressedFeatures);
+      const memSize = getFeatureMemorySize();
+      console.log(`[Sentinel] Compressed features: ${featureVector.length} floats (${memSize.vector} bytes vs ~2MB raw)`);
+      console.log(`[Sentinel] Feature summary: ${getFeatureSummary(compressedFeatures)}`);
 
       // Use local BitNet or Together AI based on config
       let aiProvider;
