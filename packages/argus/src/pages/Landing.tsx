@@ -2887,7 +2887,7 @@ export default function Landing() {
           <div className="container">
             <div className="section-header reveal">
               <h2>Stop Getting Rugged</h2>
-              <p>Every eye sees a different threat. Every signal, exposed before you invest.</p>
+              <p>BitNet AI + Direct RPC. Sub-100ms analysis with specific, actionable intelligence — not vague warnings.</p>
             </div>
 
             <div className="feature-grid stagger-children reveal">
@@ -2896,7 +2896,7 @@ export default function Landing() {
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                 </div>
                 <div className="card-title">Argus Syndicate Scanner</div>
-                <div className="card-desc">Expose pump syndicates and coordinated wallet clusters via same-block transaction analysis. See the manipulation others miss.</div>
+                <div className="card-desc">Expose pump syndicates via same-block transaction analysis. Interactive network graph shows coordinated wallets and their holding status in real-time.</div>
               </div>
 
               <div className="feature-card">
@@ -2927,8 +2927,8 @@ export default function Landing() {
                 <div className="icon-bg">
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
                 </div>
-                <div className="card-title">Argus Risk Score</div>
-                <div className="card-desc">Get instant risk scores and trading signals with written analysis explaining the verdict. Make informed decisions fast.</div>
+                <div className="card-title">BitNet AI Engine</div>
+                <div className="card-desc">Local CPU inference in under 100ms. Data-driven predictions with specific values like "16 wallets control 4.5%" — not vague "moderate risk" garbage.</div>
               </div>
 
               <div className="feature-card">
@@ -2951,8 +2951,8 @@ export default function Landing() {
                 <div className="icon-bg">
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
                 </div>
-                <div className="card-title">Argus Crash Alert</div>
-                <div className="card-desc">Automatically flags tokens that have crashed 30%, 50%, or 80%+. Deterministic guardrails override AI scores to protect you from already-rugged tokens.</div>
+                <div className="card-title">On-Chain Intelligence</div>
+                <div className="card-desc">Direct Solana RPC analysis — no third-party APIs. Real-time holder data, transaction patterns, and wallet ages straight from the blockchain.</div>
               </div>
 
               <div className="feature-card">
@@ -2961,6 +2961,39 @@ export default function Landing() {
                 </div>
                 <div className="card-title">Argus Dev Tracker</div>
                 <div className="card-desc">Analyzes creator wallet age, deployment history, and activity patterns. Unknown or brand-new deployer wallets trigger automatic risk escalation.</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* TECH STACK */}
+        <section className="tech-stack reveal" style={{ padding: '80px 0', borderTop: '1px solid var(--border)' }}>
+          <div className="container">
+            <div className="section-header" style={{ marginBottom: 48 }}>
+              <h2>Built Different</h2>
+              <p>Zero external APIs. Everything runs on the edge.</p>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 24 }}>
+              <div style={{ background: 'var(--bg-card)', borderRadius: 16, padding: 32, border: '1px solid var(--border)' }}>
+                <div style={{ fontSize: 32, marginBottom: 16 }}>🧠</div>
+                <div style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: 8, color: 'var(--text-main)' }}>BitNet AI</div>
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.95rem', lineHeight: 1.6 }}>
+                  Local CPU inference on Cloudflare Workers. 26 features extracted per token. Sub-100ms analysis with zero API costs.
+                </div>
+              </div>
+              <div style={{ background: 'var(--bg-card)', borderRadius: 16, padding: 32, border: '1px solid var(--border)' }}>
+                <div style={{ fontSize: 32, marginBottom: 16 }}>⛓️</div>
+                <div style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: 8, color: 'var(--text-main)' }}>Direct RPC</div>
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.95rem', lineHeight: 1.6 }}>
+                  Holder data straight from Solana via Helius. No RugCheck, no third-party caching. Real blockchain state.
+                </div>
+              </div>
+              <div style={{ background: 'var(--bg-card)', borderRadius: 16, padding: 32, border: '1px solid var(--border)' }}>
+                <div style={{ fontSize: 32, marginBottom: 16 }}>⚡</div>
+                <div style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: 8, color: 'var(--text-main)' }}>Edge Deployed</div>
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.95rem', lineHeight: 1.6 }}>
+                  Entire analysis pipeline runs on Cloudflare's global edge network. Fast everywhere, no cold starts.
+                </div>
               </div>
             </div>
           </div>
