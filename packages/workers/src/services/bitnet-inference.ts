@@ -317,7 +317,7 @@ export class BitNetInferenceEngine {
       confidence: classifier.confidence,
       summary,
       prediction: this.generatePrediction(classifier, input),
-      recommendation: this.generateRecommendation(classifier),
+      recommendation: this.generateRecommendation(classifier, input),
       flags: classifier.flags.map(f => ({
         type: f.type,
         severity: f.severity,
@@ -328,32 +328,98 @@ export class BitNetInferenceEngine {
   }
 
   private generatePrediction(classifier: ClassifierOutput, input: TokenAnalysisInput): string {
-    if (classifier.riskScore >= 80) {
-      return 'High probability of rug pull. Bundle wallets likely to dump.';
+    const parts: string[] = [];
+
+    // Bundle-based prediction
+    if (input.bundle.detected) {
+      const controlPct = input.bundle.controlPercent?.toFixed(1) || '0';
+      if (input.bundle.qualityAssessment === 'VERY_SUSPICIOUS') {
+        parts.push(`${input.bundle.count} coordinated wallets control ${controlPct}% — expect coordinated dump within hours`);
+      } else if (input.bundle.qualityAssessment === 'SUSPICIOUS') {
+        parts.push(`${input.bundle.count} wallets show coordination patterns — elevated dump risk`);
+      } else if (input.bundle.confidence === 'HIGH') {
+        parts.push(`${input.bundle.count} bundled wallets holding ${controlPct}% may exit together`);
+      }
     }
-    if (classifier.riskScore >= 60) {
-      return 'Elevated risk of price manipulation. Exercise extreme caution.';
+
+    // Whale concentration prediction
+    if (input.holders.topWhalePercent > 50) {
+      parts.push(`Top wallet holds ${input.holders.topWhalePercent.toFixed(1)}% — single seller can crash price 50%+`);
+    } else if (input.holders.topWhalePercent > 30) {
+      parts.push(`${input.holders.topWhalePercent.toFixed(1)}% whale concentration creates dump vulnerability`);
     }
-    if (input.bundle.detected && input.bundle.qualityAssessment === 'VERY_SUSPICIOUS') {
-      return 'Bundle patterns suggest coordinated dump setup.';
+
+    // Security-based prediction
+    if (!input.security.mintRevoked) {
+      parts.push('Mint authority active — unlimited inflation possible');
     }
-    if (classifier.riskScore >= 40) {
-      return 'Some risk factors present. Monitor closely before investing.';
+    if (!input.security.freezeRevoked) {
+      parts.push('Freeze authority active — your tokens can be locked');
     }
-    return 'Lower risk profile. Standard due diligence recommended.';
+
+    // Liquidity-based prediction
+    if (input.market.liquidity < 5000) {
+      parts.push(`Only $${input.market.liquidity.toLocaleString()} liquidity — large sells will cause massive slippage`);
+    }
+
+    // Creator history
+    if (input.creator?.ruggedTokens && input.creator.ruggedTokens > 0) {
+      parts.push(`Creator has ${input.creator.ruggedTokens} previous rugs — high repeat offender risk`);
+    }
+
+    // Age-based prediction
+    if (input.token.ageHours < 6) {
+      parts.push(`Token is ${input.token.ageHours.toFixed(1)}h old — too early for reliable pattern analysis`);
+    }
+
+    // Fallback based on score
+    if (parts.length === 0) {
+      if (classifier.riskScore >= 60) {
+        return `Risk score ${classifier.riskScore}/100 indicates elevated manipulation probability. Price action likely driven by coordinated activity rather than organic demand.`;
+      }
+      if (classifier.riskScore >= 40) {
+        return `Risk score ${classifier.riskScore}/100 shows mixed signals. Token has ${input.holders.count} holders with ${input.holders.top10Percent.toFixed(1)}% in top 10. Monitor for sudden holder changes.`;
+      }
+      return `Risk score ${classifier.riskScore}/100. Distribution appears reasonable with ${input.holders.count} holders. Standard volatility expected for memecoins.`;
+    }
+
+    return parts.slice(0, 2).join('. ') + '.';
   }
 
-  private generateRecommendation(classifier: ClassifierOutput): string {
+  private generateRecommendation(classifier: ClassifierOutput, input: TokenAnalysisInput): string {
+    // Critical red flags - immediate avoid
     if (classifier.riskScore >= 80) {
-      return 'AVOID. Multiple critical risk factors detected.';
+      const reasons: string[] = [];
+      if (input.bundle.detected && input.bundle.count >= 5) reasons.push(`${input.bundle.count} coordinated wallets`);
+      if (input.holders.topWhalePercent > 50) reasons.push(`${input.holders.topWhalePercent.toFixed(0)}% whale`);
+      if (input.creator?.ruggedTokens) reasons.push(`creator rugged ${input.creator.ruggedTokens} tokens`);
+      if (!input.security.mintRevoked) reasons.push('mint authority active');
+      const reasonStr = reasons.length > 0 ? ` (${reasons.join(', ')})` : '';
+      return `AVOID${reasonStr}. If holding, exit immediately. This token shows critical rug indicators.`;
     }
+
+    // High risk - strong caution
     if (classifier.riskScore >= 60) {
-      return 'HIGH CAUTION. Only proceed with amounts you can afford to lose.';
+      const warnings: string[] = [];
+      if (input.bundle.detected) warnings.push(`${input.bundle.count} bundled wallets`);
+      if (input.holders.topWhalePercent > 30) warnings.push(`${input.holders.topWhalePercent.toFixed(0)}% top holder`);
+      if (input.market.liquidity < 10000) warnings.push(`$${(input.market.liquidity / 1000).toFixed(1)}K liquidity`);
+      const warningStr = warnings.length > 0 ? `: ${warnings.join(', ')}` : '';
+      return `HIGH RISK${warningStr}. If you trade, use max 0.1 SOL and set tight stop-loss. Expect sudden 50%+ drops.`;
     }
+
+    // Moderate risk
     if (classifier.riskScore >= 40) {
-      return 'MODERATE RISK. Research thoroughly before investing.';
+      const notes: string[] = [];
+      if (input.bundle.detected) notes.push(`${input.bundle.count} bundled wallets detected`);
+      if (input.holders.top10Percent > 50) notes.push(`top 10 control ${input.holders.top10Percent.toFixed(0)}%`);
+      if (input.token.ageHours < 24) notes.push(`only ${input.token.ageHours.toFixed(0)}h old`);
+      const noteStr = notes.length > 0 ? ` Note: ${notes.join(', ')}.` : '';
+      return `ELEVATED RISK. Proceed with caution and position size accordingly.${noteStr} Take profits early.`;
     }
-    return 'LOWER RISK. Always DYOR. Crypto is inherently risky.';
+
+    // Lower risk
+    return `LOWER RISK (${classifier.riskScore}/100). No major red flags detected. ${input.holders.count} holders, ${input.security.mintRevoked ? 'mint revoked' : 'mint active'}, $${(input.market.liquidity / 1000).toFixed(1)}K LP. Always DYOR.`;
   }
 
   private flagMessage(type: string, input: TokenAnalysisInput): string {

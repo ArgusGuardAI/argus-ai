@@ -1,99 +1,62 @@
 /**
- * Pump.fun API Service
- * Fetches accurate data for pump.fun tokens (bonding curve mechanism)
+ * Pumpfun Token Parser
+ *
+ * Pumpfun tokens don't use standard Metaplex metadata.
+ * They store metadata in the bonding curve account and use
+ * a different program structure.
+ *
+ * Program ID: 6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P
  */
 
+import { SolanaRpcClient, PROGRAMS, TOKENS } from './solana-rpc';
+
+// Pumpfun API for metadata (they have a public API)
 const PUMPFUN_API = 'https://frontend-api.pump.fun';
 
-export interface PumpFunTokenData {
-  tokenAddress: string;
+export interface PumpfunTokenInfo {
+  mint: string;
   name: string;
   symbol: string;
   description?: string;
-  imageUri?: string;
-
-  // Creator info
+  image?: string;
   creator: string;
-  createdTimestamp: number;
-  ageInDays: number;
-
-  // Bonding curve data
-  bondingCurveAddress: string;
+  createdAt?: number;
+  bondingCurve: string;
+  associatedBondingCurve: string;
   virtualSolReserves: number;
   virtualTokenReserves: number;
   realSolReserves: number;
   realTokenReserves: number;
-
-  // Market data
-  marketCapSol: number;
-  pricePerToken: number;
-
-  // Status
+  totalSupply: number;
   complete: boolean; // Has graduated to Raydium
-  raydiumPool?: string;
-
-  // Social
-  twitter?: string;
-  telegram?: string;
-  website?: string;
-
-  // Trading activity
-  replyCount: number;
-  lastReply?: number;
+  marketCap?: number;
+  price?: number;
 }
 
-export async function fetchPumpFunData(tokenAddress: string): Promise<PumpFunTokenData | null> {
-  // Retry up to 3 times with exponential backoff to handle Cloudflare blocking (error 1016)
-  const maxRetries = 3;
-  const delays = [0, 500, 1500]; // No delay, 500ms, 1500ms
+/**
+ * Check if a token is a Pumpfun token
+ */
+export function isPumpfunToken(mint: string): boolean {
+  return mint.endsWith('pump');
+}
 
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
-    try {
-      // Add delay between retries (exponential backoff)
-      if (delays[attempt] > 0) {
-        console.log(`[PumpFun] Waiting ${delays[attempt]}ms before retry ${attempt + 1}...`);
-        await new Promise(resolve => setTimeout(resolve, delays[attempt]));
-      }
+/**
+ * Fetch Pumpfun token metadata from their API
+ * Falls back to DexScreener if Pumpfun API fails
+ */
+export async function fetchPumpfunMetadata(mint: string): Promise<PumpfunTokenInfo | null> {
+  if (!isPumpfunToken(mint)) return null;
 
-      console.log(`[PumpFun] Attempt ${attempt + 1}/${maxRetries} for ${tokenAddress.slice(0, 8)}...`);
+  // Try Pumpfun API first
+  try {
+    const response = await fetch(`${PUMPFUN_API}/coins/${mint}`, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; ArgusBot/1.0)',
+        'Accept': 'application/json',
+      },
+    });
 
-      // Fetch coin data with browser-like headers to avoid Cloudflare blocking
-      const response = await fetch(`${PUMPFUN_API}/coins/${tokenAddress}`, {
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Referer': 'https://pump.fun/',
-          'Origin': 'https://pump.fun',
-          'Accept-Language': 'en-US,en;q=0.9',
-          'Cache-Control': 'no-cache',
-        },
-      });
-
-      if (!response.ok) {
-        if (response.status === 404) {
-          console.log('[PumpFun] Token not found on Pump.fun');
-          return null;
-        }
-        // Log the error details
-        const errorText = await response.text().catch(() => 'unknown');
-        const isCloudflareBlock = errorText.includes('1016') || errorText.includes('Cloudflare');
-        console.warn(`[PumpFun] API error: ${response.status} - ${errorText.slice(0, 100)}`);
-
-        // If Cloudflare is blocking, retry
-        if (isCloudflareBlock && attempt < maxRetries - 1) {
-          console.log(`[PumpFun] Cloudflare blocking detected, will retry...`);
-          continue;
-        }
-        return null;
-      }
-
-      // Check if response is JSON
-      const contentType = response.headers.get('content-type');
-      if (!contentType?.includes('application/json')) {
-        console.warn('[PumpFun] API returned non-JSON response');
-        continue; // Retry
-      }
-
+    if (response.ok) {
       const data = await response.json() as {
         mint: string;
         name: string;
@@ -101,182 +64,244 @@ export async function fetchPumpFunData(tokenAddress: string): Promise<PumpFunTok
         description?: string;
         image_uri?: string;
         creator: string;
-        created_timestamp: number;
+        created_timestamp?: number;
         bonding_curve: string;
+        associated_bonding_curve: string;
         virtual_sol_reserves: number;
         virtual_token_reserves: number;
         real_sol_reserves: number;
         real_token_reserves: number;
-        market_cap: number;
+        total_supply: number;
         complete: boolean;
-        raydium_pool?: string;
-        twitter?: string;
-        telegram?: string;
-        website?: string;
-        reply_count: number;
-        last_reply?: number;
+        market_cap?: number;
+        usd_market_cap?: number;
       };
 
-      const createdAt = data.created_timestamp || 0;
-      const ageInMs = Date.now() - createdAt;
-      const ageInDays = Math.floor(ageInMs / (1000 * 60 * 60 * 24));
-
-      // Calculate price from bonding curve
-      // Price = virtual_sol_reserves / virtual_token_reserves
-      const pricePerToken = data.virtual_token_reserves > 0
-        ? data.virtual_sol_reserves / data.virtual_token_reserves
-        : 0;
+      const price = data.virtual_sol_reserves > 0 && data.virtual_token_reserves > 0
+        ? (data.virtual_sol_reserves / 1e9) / (data.virtual_token_reserves / 1e6)
+        : undefined;
 
       return {
-        tokenAddress: data.mint,
+        mint: data.mint,
         name: data.name,
         symbol: data.symbol,
         description: data.description,
-        imageUri: data.image_uri,
-
+        image: data.image_uri,
         creator: data.creator,
-        createdTimestamp: createdAt,
-        ageInDays,
-
-        bondingCurveAddress: data.bonding_curve,
-        virtualSolReserves: data.virtual_sol_reserves / 1e9, // Convert lamports to SOL
-        virtualTokenReserves: data.virtual_token_reserves / 1e6, // Adjust decimals
+        createdAt: data.created_timestamp,
+        bondingCurve: data.bonding_curve,
+        associatedBondingCurve: data.associated_bonding_curve,
+        virtualSolReserves: data.virtual_sol_reserves / 1e9,
+        virtualTokenReserves: data.virtual_token_reserves / 1e6,
         realSolReserves: data.real_sol_reserves / 1e9,
         realTokenReserves: data.real_token_reserves / 1e6,
-
-        marketCapSol: data.market_cap / 1e9, // Convert to SOL
-        pricePerToken,
-
+        totalSupply: data.total_supply / 1e6,
         complete: data.complete,
-        raydiumPool: data.raydium_pool,
-
-        twitter: data.twitter,
-        telegram: data.telegram,
-        website: data.website,
-
-        replyCount: data.reply_count || 0,
-        lastReply: data.last_reply,
+        marketCap: data.usd_market_cap || data.market_cap,
+        price,
       };
-    } catch (error) {
-      console.error(`[PumpFun] Attempt ${attempt + 1} error:`, error);
-      // Continue to next retry if not the last attempt
-      if (attempt < maxRetries - 1) {
-        continue;
-      }
     }
+  } catch (err) {
+    console.warn('[Pumpfun] API failed, trying DexScreener fallback:', err);
   }
 
-  // All retries failed
-  console.warn('[PumpFun] All retry attempts failed');
+  // Fallback to DexScreener
+  try {
+    const dexResponse = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
+
+    if (dexResponse.ok) {
+      const dexData = await dexResponse.json() as {
+        pairs?: Array<{
+          baseToken: { name: string; symbol: string };
+          priceUsd?: string;
+          liquidity?: { usd: number };
+          marketCap?: number;
+          pairCreatedAt?: number;
+          dexId?: string;
+        }>;
+      };
+
+      const pair = dexData.pairs?.[0];
+      if (pair) {
+        console.log('[Pumpfun] Using DexScreener fallback');
+        return {
+          mint,
+          name: pair.baseToken.name,
+          symbol: pair.baseToken.symbol,
+          creator: '', // Not available from DexScreener
+          bondingCurve: '',
+          associatedBondingCurve: '',
+          virtualSolReserves: 0,
+          virtualTokenReserves: 0,
+          realSolReserves: (pair.liquidity?.usd || 0) / 200 / 2, // Rough estimate
+          realTokenReserves: 0,
+          totalSupply: 1000000000, // Default for pumpfun
+          complete: pair.dexId !== 'pumpfun', // If on another DEX, graduated
+          marketCap: pair.marketCap,
+          price: pair.priceUsd ? parseFloat(pair.priceUsd) / 200 : undefined, // Price in SOL
+          createdAt: pair.pairCreatedAt,
+        };
+      }
+    }
+  } catch (err) {
+    console.warn('[Pumpfun] DexScreener fallback also failed:', err);
+  }
+
   return null;
 }
 
 /**
- * Build context string for AI analysis from Pump.fun data
+ * Get Pumpfun bonding curve data from on-chain
  */
-export function buildPumpFunContext(data: PumpFunTokenData, solPriceUsd: number): string {
-  let context = `\nPUMP.FUN TOKEN DATA:\n`;
+export async function getPumpfunBondingCurve(
+  rpc: SolanaRpcClient,
+  mint: string
+): Promise<{
+  bondingCurve: string;
+  solReserve: number;
+  tokenReserve: number;
+  complete: boolean;
+} | null> {
+  if (!isPumpfunToken(mint)) return null;
 
-  context += `- Name: ${data.name}\n`;
-  context += `- Symbol: ${data.symbol}\n`;
-  if (data.description) {
-    context += `- Description: ${data.description.slice(0, 200)}${data.description.length > 200 ? '...' : ''}\n`;
-  }
+  try {
+    // Find bonding curve account by searching program accounts
+    const accounts = await rpc.getProgramAccounts(PROGRAMS.PUMPFUN, [
+      {
+        memcmp: {
+          offset: 8, // After discriminator
+          bytes: mint,
+        },
+      },
+    ]);
 
-  // Creator
-  context += `\nCREATOR INFO:\n`;
-  context += `- Creator Wallet: ${data.creator}\n`;
-  context += `- Created: ${data.ageInDays} days ago\n`;
-
-  // Bonding curve liquidity (THIS IS THE REAL LIQUIDITY FOR PUMP.FUN)
-  const liquiditySol = data.realSolReserves;
-  const liquidityUsd = liquiditySol * solPriceUsd;
-  const virtualLiquidityUsd = data.virtualSolReserves * solPriceUsd;
-
-  context += `\nBONDING CURVE LIQUIDITY:\n`;
-  context += `- Real SOL Reserves: ${liquiditySol.toFixed(2)} SOL ($${formatNumber(liquidityUsd)})\n`;
-  context += `- Virtual SOL Reserves: ${data.virtualSolReserves.toFixed(2)} SOL ($${formatNumber(virtualLiquidityUsd)})\n`;
-  context += `- This is NOT a traditional LP - pump.fun uses a bonding curve mechanism\n`;
-
-  if (liquiditySol > 100) {
-    context += `  ✓ Strong bonding curve reserves (>100 SOL)\n`;
-  } else if (liquiditySol > 10) {
-    context += `  - Moderate bonding curve reserves\n`;
-  } else {
-    context += `  ⚠️ Low bonding curve reserves (<10 SOL)\n`;
-  }
-
-  // Market cap
-  const marketCapUsd = data.marketCapSol * solPriceUsd;
-  context += `\nMARKET DATA:\n`;
-  context += `- Market Cap: ${data.marketCapSol.toFixed(2)} SOL ($${formatNumber(marketCapUsd)})\n`;
-
-  if (marketCapUsd >= 100_000_000) {
-    context += `  ⚠️ LARGE CAP TOKEN (>$100M) - Established on pump.fun\n`;
-  } else if (marketCapUsd >= 10_000_000) {
-    context += `  ⚠️ MID CAP TOKEN ($10M-$100M)\n`;
-  } else if (marketCapUsd >= 1_000_000) {
-    context += `  - Small cap token ($1M-$10M)\n`;
-  } else {
-    context += `  - Micro cap token (<$1M)\n`;
-  }
-
-  // Status
-  context += `\nSTATUS:\n`;
-  if (data.complete) {
-    context += `- ✓ GRADUATED to Raydium - has traditional LP now\n`;
-    if (data.raydiumPool) {
-      context += `- Raydium Pool: ${data.raydiumPool}\n`;
+    if (accounts.length === 0) {
+      console.log('[Pumpfun] No bonding curve found');
+      return null;
     }
-  } else {
-    context += `- Still on bonding curve (not yet graduated to Raydium)\n`;
+
+    const bondingCurveAddress = accounts[0].pubkey;
+
+    // Get the bonding curve's SOL balance
+    const solBalance = await rpc.getBalance(bondingCurveAddress);
+
+    // Get the bonding curve's token balance
+    const tokenAccounts = await rpc.getTokenAccountsByOwner(bondingCurveAddress, mint);
+    const tokenBalance = tokenAccounts.value.length > 0
+      ? tokenAccounts.value[0].account.data.parsed.info.tokenAmount.uiAmount
+      : 0;
+
+    // Check if complete (graduated to Raydium)
+    const complete = solBalance < 0.1 && tokenBalance < 1000;
+
+    return {
+      bondingCurve: bondingCurveAddress,
+      solReserve: solBalance,
+      tokenReserve: tokenBalance,
+      complete,
+    };
+  } catch (err) {
+    console.warn('[Pumpfun] Failed to get bonding curve:', err);
+    return null;
   }
-
-  // Age assessment
-  context += `\nAGE ASSESSMENT:\n`;
-  if (data.ageInDays < 1) {
-    context += `- ⚠️ VERY NEW TOKEN (<1 day old) - Higher risk\n`;
-  } else if (data.ageInDays < 7) {
-    context += `- New token (${data.ageInDays} days old)\n`;
-  } else if (data.ageInDays >= 30) {
-    context += `- ✓ Established token (${data.ageInDays} days old)\n`;
-  } else {
-    context += `- Token age: ${data.ageInDays} days\n`;
-  }
-
-  // Social
-  context += `\nSOCIAL:\n`;
-  if (data.twitter) context += `- Twitter: ${data.twitter}\n`;
-  if (data.telegram) context += `- Telegram: ${data.telegram}\n`;
-  if (data.website) context += `- Website: ${data.website}\n`;
-  context += `- Community Replies: ${data.replyCount}\n`;
-
-  if (!data.twitter && !data.telegram && !data.website) {
-    context += `- ⚠️ No social links provided\n`;
-  }
-
-  return context;
 }
 
 /**
- * Check if a token address is a pump.fun token
+ * Calculate Pumpfun price from bonding curve
  */
-export function isPumpFunToken(tokenAddress: string): boolean {
-  return tokenAddress.endsWith('pump');
+export function calculatePumpfunPrice(
+  virtualSolReserves: number,
+  virtualTokenReserves: number,
+  solPrice: number
+): number {
+  if (virtualTokenReserves <= 0) return 0;
+  const priceInSol = virtualSolReserves / virtualTokenReserves;
+  return priceInSol * solPrice;
 }
 
 /**
- * Pump.fun program ID
+ * Calculate Pumpfun liquidity
  */
-export const PUMP_FUN_PROGRAM_ID = '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P';
+export function calculatePumpfunLiquidity(
+  realSolReserves: number,
+  solPrice: number
+): number {
+  return realSolReserves * solPrice * 2;
+}
 
-function formatNumber(num: number): string {
-  if (num >= 1_000_000_000) {
-    return `${(num / 1_000_000_000).toFixed(2)}B`;
-  } else if (num >= 1_000_000) {
-    return `${(num / 1_000_000).toFixed(2)}M`;
-  } else if (num >= 1_000) {
-    return `${(num / 1_000).toFixed(2)}K`;
+/**
+ * Get Pumpfun pool info in standard format
+ */
+export async function getPumpfunPoolInfo(
+  rpc: SolanaRpcClient,
+  mint: string,
+  solPrice: number
+): Promise<{
+  address: string;
+  dex: 'pumpfun';
+  tokenMint: string;
+  quoteMint: string;
+  tokenReserve: number;
+  quoteReserve: number;
+  lpLocked: boolean;
+  lpLockedPct: number;
+  price: number;
+  liquidity: number;
+  marketCap: number;
+} | null> {
+  // Try API first (faster and more accurate)
+  const apiData = await fetchPumpfunMetadata(mint);
+
+  if (apiData) {
+    const price = apiData.price
+      ? apiData.price * solPrice
+      : calculatePumpfunPrice(apiData.virtualSolReserves, apiData.virtualTokenReserves, solPrice);
+
+    const liquidity = calculatePumpfunLiquidity(apiData.realSolReserves, solPrice);
+    const marketCap = apiData.marketCap || (price * apiData.totalSupply);
+
+    return {
+      address: apiData.bondingCurve,
+      dex: 'pumpfun',
+      tokenMint: mint,
+      quoteMint: TOKENS.SOL,
+      tokenReserve: apiData.virtualTokenReserves,
+      quoteReserve: apiData.virtualSolReserves,
+      lpLocked: true,
+      lpLockedPct: 100,
+      price,
+      liquidity,
+      marketCap,
+    };
   }
-  return num.toFixed(2);
+
+  // Fallback to on-chain
+  const onChainData = await getPumpfunBondingCurve(rpc, mint);
+
+  if (onChainData) {
+    const price = onChainData.tokenReserve > 0
+      ? (onChainData.solReserve / onChainData.tokenReserve) * solPrice
+      : 0;
+
+    const liquidity = onChainData.solReserve * solPrice * 2;
+
+    const supply = await rpc.getTokenSupply(mint);
+    const marketCap = price * supply.value.uiAmount;
+
+    return {
+      address: onChainData.bondingCurve,
+      dex: 'pumpfun',
+      tokenMint: mint,
+      quoteMint: TOKENS.SOL,
+      tokenReserve: onChainData.tokenReserve,
+      quoteReserve: onChainData.solReserve,
+      lpLocked: true,
+      lpLockedPct: 100,
+      price,
+      liquidity,
+      marketCap,
+    };
+  }
+
+  return null;
 }

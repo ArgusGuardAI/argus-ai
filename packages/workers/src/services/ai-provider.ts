@@ -143,7 +143,7 @@ export interface TrainingExample {
 // PROVIDER INTERFACE
 // ============================================
 
-export type AIProvider = 'together' | 'bitnet' | 'hybrid';
+export type AIProvider = 'together' | 'bitnet' | 'local-bitnet' | 'hybrid';
 
 export interface AIProviderConfig {
   provider: AIProvider;
@@ -320,7 +320,7 @@ Return your analysis as JSON.`;
 }
 
 // ============================================
-// BITNET PROVIDER (Future - Placeholder)
+// BITNET PROVIDER (Remote endpoint)
 // ============================================
 
 export class BitNetProvider extends BaseAIProvider {
@@ -350,6 +350,44 @@ export class BitNetProvider extends BaseAIProvider {
     }
 
     return await response.json() as TokenAnalysisOutput;
+  }
+}
+
+// ============================================
+// LOCAL BITNET PROVIDER (Rule-based, zero cost)
+// Uses the BitNetInferenceEngine directly in-process
+// ============================================
+
+import { BitNetInferenceEngine, type BitNetModelConfig } from './bitnet-inference';
+
+export class LocalBitNetProvider extends BaseAIProvider {
+  private engine: BitNetInferenceEngine;
+  private initialized: boolean = false;
+
+  constructor(config?: Partial<BitNetModelConfig>) {
+    super();
+    this.engine = new BitNetInferenceEngine({
+      modelPath: config?.modelPath || 'rule-based', // Use rule-based fallback
+      modelType: config?.modelType || 'classifier',
+    });
+  }
+
+  getName(): string {
+    return 'local-bitnet';
+  }
+
+  async initialize(): Promise<void> {
+    if (!this.initialized) {
+      await this.engine.loadModel();
+      this.initialized = true;
+    }
+  }
+
+  async analyze(input: TokenAnalysisInput): Promise<TokenAnalysisOutput> {
+    await this.initialize();
+
+    const classifierOutput = await this.engine.infer(input);
+    return this.engine.toAnalysisOutput(classifierOutput, input);
   }
 }
 
@@ -426,16 +464,26 @@ export function createAIProvider(config: AIProviderConfig): BaseAIProvider {
 
     case 'bitnet':
       if (!config.bitnetEndpoint) {
-        throw new Error('BitNet endpoint required');
+        // Fall back to local BitNet if no endpoint provided
+        console.log('[AI] No BitNet endpoint, using local inference');
+        return new LocalBitNetProvider({ modelPath: config.bitnetModelPath });
       }
       return new BitNetProvider(config.bitnetEndpoint);
 
+    case 'local-bitnet':
+      // Zero-cost local inference using rule-based engine
+      return new LocalBitNetProvider({ modelPath: config.bitnetModelPath });
+
     case 'hybrid':
-      if (!config.bitnetEndpoint || !config.togetherApiKey) {
-        throw new Error('Both BitNet endpoint and Together AI key required for hybrid mode');
+      if (!config.togetherApiKey) {
+        throw new Error('Together AI key required for hybrid mode');
+      }
+      // If no BitNet endpoint, use local BitNet + Together AI
+      if (!config.bitnetEndpoint) {
+        console.log('[AI] Hybrid mode: Local BitNet + Together AI');
       }
       return new HybridProvider(
-        config.bitnetEndpoint,
+        config.bitnetEndpoint || 'local', // Marker for local
         config.togetherApiKey,
         config.togetherModel || 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
         config.hybridConfidenceThreshold || 80

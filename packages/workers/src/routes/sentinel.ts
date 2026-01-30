@@ -6,7 +6,9 @@ import { postTweet, formatAlertTweet, canTweet, recordTweet, type TwitterConfig 
 import { sendMessage, formatAlertHtml } from '../services/telegram';
 import { checkRateLimit, getUserTier, getClientIP } from '../services/rate-limit';
 import { saveTrainingExample } from '../services/training-data';
-import { convertToAnalysisInput, type TokenAnalysisOutput } from '../services/ai-provider';
+import { convertToAnalysisInput, type TokenAnalysisOutput, createAIProvider, LocalBitNetProvider } from '../services/ai-provider';
+import { createSentinelDataFetcher } from '../services/sentinel-data';
+import { storeBundleWallets, findRepeatOffenders, type SyndicateNetwork } from '../services/bundle-network';
 
 const HELIUS_RPC_BASE = 'https://mainnet.helius-rpc.com';
 const RUGCHECK_API = 'https://api.rugcheck.xyz/v1';
@@ -1307,18 +1309,21 @@ function buildNetworkGraph(
  */
 function generateRecommendation(riskScore: number, bundleDetected: boolean, bundleCount: number): string {
   if (riskScore >= 80 || (bundleDetected && bundleCount >= 10)) {
-    return '🚨 AVOID. This token shows critical red flags. Do not invest. If holding, exit immediately.';
+    const bundleNote = bundleDetected ? ` (${bundleCount} coordinated wallets detected)` : '';
+    return `AVOID${bundleNote}. Critical risk indicators present. Do not invest. If holding, exit immediately.`;
   }
   if (riskScore >= 70 || (bundleDetected && bundleCount >= 5)) {
-    return '⚠️ AVOID or EXIT. High probability of coordinated dump. If you must trade, use tight stop losses and expect sudden price crashes.';
+    const bundleNote = bundleDetected ? ` ${bundleCount} bundled wallets indicate coordinated activity.` : '';
+    return `HIGH RISK.${bundleNote} If you must trade, use max 0.1 SOL and set tight stop-loss at -20%. Expect sudden 50%+ price drops.`;
   }
   if (riskScore >= 60 || bundleDetected) {
-    return '⚠️ CAUTION. Suspicious patterns detected. Trade with extreme care. Set stop losses and take profits early.';
+    const bundleNote = bundleDetected ? ` ${bundleCount} wallets show coordination.` : '';
+    return `ELEVATED RISK.${bundleNote} Trade with caution. Set stop losses and take profits at 2x. Position size: max 0.2 SOL.`;
   }
   if (riskScore >= 40) {
-    return '⚡ MODERATE RISK. Some concerns detected. DYOR and monitor closely. Consider smaller position sizes.';
+    return `CAUTION (${riskScore}/100). Risk factors detected. DYOR before entry. Use smaller position sizes and set stop-loss at -30%.`;
   }
-  return '✅ LOWER RISK. No major red flags detected, but always DYOR. Crypto is inherently risky.';
+  return `LOWER RISK (${riskScore}/100). No critical red flags detected. Standard memecoin volatility expected. Always DYOR.`;
 }
 
 /**
@@ -1720,6 +1725,177 @@ sentinelRoutes.post('/analyze', async (c) => {
     const heliusKey = c.env.HELIUS_API_KEY;
     const togetherKey = c.env.TOGETHER_AI_API_KEY;
     const model = c.env.TOGETHER_AI_MODEL || 'meta-llama/Llama-3.3-70B-Instruct-Turbo';
+    const dataMode = c.env.DATA_PROVIDER_MODE || 'ON_CHAIN';
+    const aiMode = c.env.AI_PROVIDER || 'local-bitnet';
+
+    // ============================================
+    // NEW: On-Chain Mode - Zero External Dependencies
+    // ============================================
+    if (dataMode === 'ON_CHAIN' || dataMode === 'HYBRID') {
+      console.log(`[Sentinel] Using ${dataMode} mode with ${aiMode} AI`);
+      const fetchStart = Date.now();
+
+      // Use new on-chain data fetcher
+      const dataFetcher = createSentinelDataFetcher(c.env);
+      const data = await dataFetcher.fetchData(tokenAddress);
+
+      console.log(`[Sentinel] ${dataMode} fetch took ${data.fetchDuration}ms`);
+
+      // Use local BitNet or Together AI based on config
+      let aiProvider;
+      if (aiMode === 'local-bitnet' || aiMode === 'bitnet') {
+        aiProvider = new LocalBitNetProvider();
+      } else if (togetherKey) {
+        aiProvider = createAIProvider({
+          provider: 'together',
+          togetherApiKey: togetherKey,
+          togetherModel: model,
+        });
+      } else {
+        // Fallback to local BitNet if no Together AI key
+        aiProvider = new LocalBitNetProvider();
+      }
+
+      // Convert to AI input format
+      const holders = data.holders.map(h => ({
+        percent: h.percent,
+        isWhale: h.percent > 10,
+      }));
+
+      const aiInput = convertToAnalysisInput(
+        {
+          name: data.tokenInfo.name,
+          symbol: data.tokenInfo.symbol,
+          address: tokenAddress,
+          marketCap: data.tokenInfo.marketCap,
+          liquidity: data.tokenInfo.liquidity,
+          ageHours: data.tokenInfo.ageHours,
+          volume24h: data.tokenInfo.volume24h,
+          priceChange24h: data.tokenInfo.priceChange24h,
+          txns24h: data.tokenInfo.txns24h,
+          txns1h: data.tokenInfo.txns1h,
+          mintAuthorityActive: data.tokenInfo.mintAuthorityActive,
+          freezeAuthorityActive: data.tokenInfo.freezeAuthorityActive,
+          holderCount: data.tokenInfo.holderCount,
+        },
+        holders,
+        {
+          detected: data.bundleInfo.detected,
+          count: data.bundleInfo.count,
+          confidence: data.bundleInfo.confidence,
+        },
+        {
+          legitimacyScore: 50,
+          assessment: data.bundleInfo.confidence === 'HIGH' ? 'VERY_SUSPICIOUS' : 'NEUTRAL',
+        },
+        data.creatorInfo,
+        data.devActivity,
+        null, // washTrading - can be added later
+        0, // avgBundleWalletAge
+        Math.min(data.bundleInfo.controlPercent || 0, 100) // Use actual control %, capped at 100%
+      );
+
+      // Run AI analysis
+      const aiStart = Date.now();
+      const aiResult = await aiProvider.analyze(aiInput);
+      console.log(`[Sentinel] AI analysis (${aiProvider.getName()}) took ${Date.now() - aiStart}ms`);
+
+      // Apply structural guardrails
+      let finalScore = aiResult.riskScore;
+      let finalLevel = aiResult.riskLevel;
+
+      // Guardrail: Very new tokens with low liquidity
+      if ((data.tokenInfo.ageHours ?? 24) < 6 && (data.tokenInfo.liquidity ?? 0) < 10000) {
+        finalScore = Math.max(finalScore, 50);
+      }
+      if ((data.tokenInfo.ageHours ?? 24) < 24 && (data.tokenInfo.liquidity ?? 0) < 5000) {
+        finalScore = Math.max(finalScore, 50);
+      }
+      if ((data.tokenInfo.ageHours ?? 24) < 6) {
+        finalScore = Math.max(finalScore, 35);
+      }
+      if ((data.tokenInfo.liquidity ?? 0) < 5000) {
+        finalScore = Math.max(finalScore, 40);
+      }
+
+      // Update risk level based on final score
+      if (finalScore >= 80) finalLevel = 'SCAM';
+      else if (finalScore >= 60) finalLevel = 'DANGEROUS';
+      else if (finalScore >= 40) finalLevel = 'SUSPICIOUS';
+      else finalLevel = 'SAFE';
+
+      // Build response
+      const response = {
+        tokenInfo: {
+          name: data.tokenInfo.name,
+          symbol: data.tokenInfo.symbol,
+          address: tokenAddress,
+          price: data.tokenInfo.price,
+          marketCap: data.tokenInfo.marketCap,
+          liquidity: data.tokenInfo.liquidity,
+          age: data.tokenInfo.age,
+          ageHours: data.tokenInfo.ageHours,
+          holderCount: data.tokenInfo.holderCount,
+          priceChange24h: data.tokenInfo.priceChange24h,
+          volume24h: data.tokenInfo.volume24h,
+          txns5m: data.tokenInfo.txns5m,
+          txns1h: data.tokenInfo.txns1h,
+          txns24h: data.tokenInfo.txns24h,
+        },
+        security: {
+          mintAuthorityActive: data.tokenInfo.mintAuthorityActive,
+          freezeAuthorityActive: data.tokenInfo.freezeAuthorityActive,
+          lpLockedPct: data.tokenInfo.lpLockedPct,
+        },
+        analysis: {
+          riskScore: finalScore,
+          riskLevel: finalLevel,
+          summary: aiResult.summary,
+          prediction: aiResult.prediction,
+          recommendation: aiResult.recommendation,
+          flags: aiResult.flags,
+        },
+        holderDistribution: data.holders.slice(0, 10).map(h => {
+          let type: 'creator' | 'whale' | 'insider' | 'lp' | 'normal' = 'normal';
+          if (h.address === data.creatorAddress) type = 'creator';
+          else if (h.isLp) type = 'lp';
+          else if (h.percent > 10) type = 'whale';
+          else if (h.percent > 5) type = 'insider';
+          return {
+            address: h.address,
+            percent: h.percent,
+            type,
+          };
+        }),
+        bundleInfo: {
+          detected: data.bundleInfo.detected,
+          confidence: data.bundleInfo.confidence,
+          count: data.bundleInfo.count,
+          txBundlePercent: data.bundleInfo.txBundlePercent,
+          description: data.bundleInfo.description,
+          wallets: data.bundleInfo.wallets || [],
+          controlPercent: data.bundleInfo.controlPercent || 0,
+          walletsWithHoldings: data.bundleInfo.walletsWithHoldings || [],
+        },
+        creatorInfo: data.creatorInfo,
+        network: { nodes: [], links: [] },
+        dataSource: data.dataSource,
+        aiProvider: aiProvider.getName(),
+        fetchDuration: Date.now() - fetchStart,
+      };
+
+      // Set rate limit headers
+      c.header('X-RateLimit-Limit', rateLimitResult.limit.toString());
+      c.header('X-RateLimit-Remaining', rateLimitResult.remaining.toString());
+      c.header('X-RateLimit-Reset', rateLimitResult.resetAt.toString());
+      c.header('X-User-Tier', tier);
+
+      return c.json(response);
+    }
+
+    // ============================================
+    // LEGACY: Original API-based mode
+    // ============================================
 
     if (!heliusKey) {
       return c.json({ error: 'Helius API key not configured' }, 500);
@@ -1729,7 +1905,7 @@ sentinelRoutes.post('/analyze', async (c) => {
       return c.json({ error: 'Together AI API key not configured' }, 500);
     }
 
-    console.log('[Sentinel] Starting parallel fetch...');
+    console.log('[Sentinel] Starting parallel fetch (LEGACY mode)...');
     const fetchStart = Date.now();
 
     const dexData = await fetchDexScreenerData(tokenAddress);
@@ -1850,6 +2026,15 @@ sentinelRoutes.post('/analyze', async (c) => {
     const txBundleCount = txAnalysis.coordinatedWallets;
     const txBundlePercent = txAnalysis.bundledBuyPercent;
 
+    // Check if this is an established token (less suspicious for bundle patterns)
+    const isEstablishedToken = (
+      (tokenInfo.ageHours !== undefined && tokenInfo.ageHours > 168) || // >7 days old
+      (tokenInfo.liquidity !== undefined && tokenInfo.liquidity > 100000) || // >$100K liquidity
+      (tokenInfo.marketCap !== undefined && tokenInfo.marketCap > 1000000) // >$1M market cap
+    );
+
+    console.log(`[Sentinel] Token status: established=${isEstablishedToken}, age=${tokenInfo.ageHours?.toFixed(0)}h, liq=$${tokenInfo.liquidity?.toFixed(0)}, mcap=$${tokenInfo.marketCap?.toFixed(0)}`);
+
     const nearIdenticalHoldings = holders.filter((h, i, arr) => {
       if (i === 0) return false;
       const prevPercent = arr[i - 1].percent;
@@ -1862,20 +2047,40 @@ sentinelRoutes.post('/analyze', async (c) => {
       return Math.abs(h.percent - prevPercent) < 0.05 && h.percent > 0.5;
     });
 
-    const holderBundleDetected = nearIdenticalHoldings.length >= 5 || exactSameHoldings.length >= 3;
+    // For established tokens, require stronger evidence of coordination
+    const holderBundleThreshold = isEstablishedToken ? 8 : 5;
+    const exactHoldingsThreshold = isEstablishedToken ? 5 : 3;
+
+    const holderBundleDetected = nearIdenticalHoldings.length >= holderBundleThreshold || exactSameHoldings.length >= exactHoldingsThreshold;
     const holderBundleCount = Math.max(nearIdenticalHoldings.length, exactSameHoldings.length);
 
+    // Determine bundle confidence - be more conservative for established tokens
     let bundleConfidence: 'HIGH' | 'MEDIUM' | 'LOW' | 'NONE' = 'NONE';
-    if (txBundleDetected && txBundlePercent > 20) {
-      bundleConfidence = 'HIGH';
-    } else if (txBundleDetected && holderBundleDetected) {
-      bundleConfidence = 'HIGH';
-    } else if (txBundleDetected) {
-      bundleConfidence = 'MEDIUM';
-    } else if (holderBundleDetected && exactSameHoldings.length >= 3) {
-      bundleConfidence = 'MEDIUM';
-    } else if (holderBundleDetected) {
-      bundleConfidence = 'LOW';
+
+    if (isEstablishedToken) {
+      // Established tokens: require much stronger evidence
+      // Same-block transactions are NORMAL for high-volume tokens (arbitrage, MEV, etc.)
+      if (txBundleDetected && txBundlePercent > 50 && holderBundleDetected) {
+        bundleConfidence = 'HIGH'; // Very strong evidence
+      } else if (txBundleDetected && txBundlePercent > 30 && holderBundleDetected) {
+        bundleConfidence = 'MEDIUM'; // Moderate evidence
+      } else if (holderBundleDetected && exactSameHoldings.length >= exactHoldingsThreshold) {
+        bundleConfidence = 'LOW'; // Weak evidence
+      }
+      // Note: Pure same-block tx detection is ignored for established tokens
+    } else {
+      // New tokens: standard detection
+      if (txBundleDetected && txBundlePercent > 20) {
+        bundleConfidence = 'HIGH';
+      } else if (txBundleDetected && holderBundleDetected) {
+        bundleConfidence = 'HIGH';
+      } else if (txBundleDetected) {
+        bundleConfidence = 'MEDIUM';
+      } else if (holderBundleDetected && exactSameHoldings.length >= 3) {
+        bundleConfidence = 'MEDIUM';
+      } else if (holderBundleDetected) {
+        bundleConfidence = 'LOW';
+      }
     }
 
     const bundleDetected = bundleConfidence === 'HIGH' || bundleConfidence === 'MEDIUM';
@@ -1899,6 +2104,40 @@ sentinelRoutes.post('/analyze', async (c) => {
       bundleDescription = parts.join('; ');
     }
 
+    // Get ACTUAL bundle wallet addresses from transaction analysis
+    // Only use identifyBundleWallets as fallback if tx analysis found nothing
+    let bundleWalletAddresses: string[] = txAnalysis.bundleWalletAddresses || [];
+
+    // Only use holder-based identification if:
+    // 1. We have no tx-based bundle wallets AND
+    // 2. We detected bundles via other signals
+    if (bundleWalletAddresses.length === 0 && bundleDetected) {
+      bundleWalletAddresses = identifyBundleWallets(holders, { count: bundleCount, confidence: bundleConfidence });
+      console.log(`[Sentinel] Using holder-based bundle wallets (fallback): ${bundleWalletAddresses.length}`);
+    }
+
+    // Calculate ACTUAL bundle control percentage from ONLY the bundle wallets
+    // Only count wallets that are in our holders list (top 20)
+    const matchedBundleHolders = holders.filter(h => bundleWalletAddresses.includes(h.address));
+    const rawBundleControlPercent = matchedBundleHolders.reduce((sum, h) => sum + h.percent, 0);
+
+    // SANITY CHECK: Control percent can never exceed 100% (mathematically impossible)
+    // If it does, something is wrong with the data - cap it
+    const actualBundleControlPercent = Math.min(rawBundleControlPercent, 100);
+
+    console.log(`[Sentinel] Bundle wallets from tx: ${bundleWalletAddresses.length}, matched in holders: ${matchedBundleHolders.length}, raw: ${rawBundleControlPercent.toFixed(1)}%, capped: ${actualBundleControlPercent.toFixed(1)}%`);
+
+    if (rawBundleControlPercent > 100) {
+      console.warn(`[Sentinel] WARNING: Raw bundle control ${rawBundleControlPercent.toFixed(1)}% exceeds 100% - data issue detected`);
+    }
+
+    // Build detailed wallet info with holdings for each bundle wallet
+    const bundleWalletsWithHoldings = matchedBundleHolders.map(h => ({
+      address: h.address,
+      percent: h.percent,
+      isLp: h.isLp,
+    })).sort((a, b) => b.percent - a.percent);
+
     const bundleInfo = {
       detected: bundleDetected,
       confidence: bundleConfidence,
@@ -1906,6 +2145,9 @@ sentinelRoutes.post('/analyze', async (c) => {
       txBundlePercent: txBundlePercent,
       suspiciousPatterns: txAnalysis.suspiciousPatterns,
       description: bundleDescription,
+      wallets: bundleWalletAddresses,
+      walletsWithHoldings: bundleWalletsWithHoldings, // Detailed wallet info for UI
+      controlPercent: actualBundleControlPercent, // Actual holdings of bundle wallets (capped at 100%)
     };
 
     if (bundleDetected) {
@@ -1971,6 +2213,53 @@ sentinelRoutes.post('/analyze', async (c) => {
       }
     } else if (bundleDetected) {
       console.log(`[Sentinel] Skipping wash trading detection - only ${bundleWalletsForWashDetection.length} bundle wallets found`);
+    }
+
+    // ============================================
+    // BUNDLE NETWORK MAP (10K holder feature)
+    // Store bundle wallets and check for repeat offenders
+    // ============================================
+    let syndicateNetwork: SyndicateNetwork | null = null;
+
+    if (bundleDetected && bundleWalletsForWashDetection.length > 0 && c.env.BUNDLE_DB) {
+      const networkStart = Date.now();
+
+      try {
+        // Build holdings map for the bundle wallets
+        const holdingsMap = new Map<string, number>();
+        for (const walletAddr of bundleWalletsForWashDetection) {
+          const holder = holders.find(h => h.address === walletAddr);
+          if (holder) {
+            holdingsMap.set(walletAddr, holder.percent);
+          }
+        }
+
+        // Check for repeat offenders BEFORE storing (so we find wallets from previous scans)
+        syndicateNetwork = await findRepeatOffenders(
+          c.env.BUNDLE_DB,
+          bundleWalletsForWashDetection,
+          tokenAddress
+        );
+
+        if (syndicateNetwork.detected) {
+          console.log(`[Sentinel] SYNDICATE ALERT: ${syndicateNetwork.repeatOffenders} repeat offenders found, ${syndicateNetwork.rugRate}% historical rug rate`);
+        }
+
+        // Store the bundle wallets for future lookups
+        await storeBundleWallets(
+          c.env.BUNDLE_DB,
+          tokenAddress,
+          tokenInfo.symbol,
+          bundleWalletsForWashDetection,
+          bundleInfo.confidence as 'HIGH' | 'MEDIUM' | 'LOW',
+          holdingsMap
+        );
+
+        console.log(`[Sentinel] Bundle network check took ${Date.now() - networkStart}ms`);
+      } catch (error) {
+        console.error('[Sentinel] Bundle network error (non-fatal):', error);
+        // Non-fatal - continue with analysis
+      }
     }
 
     const network = buildNetworkGraph(
@@ -2141,7 +2430,7 @@ sentinelRoutes.post('/analyze', async (c) => {
         devActivity,
         washTrading,
         bundleQuality?.signals.negative.some(s => s.includes('age')) ? 0 : 30, // Avg bundle wallet age
-        bundleInfo.detected ? holders.filter(h => !h.isLp).slice(0, bundleInfo.count).reduce((sum, h) => sum + h.percent, 0) : 0
+        bundleInfo.controlPercent // Actual holdings of bundle wallets (calculated correctly)
       );
 
       const aiOutput: TokenAnalysisOutput = {
@@ -2216,6 +2505,14 @@ sentinelRoutes.post('/analyze', async (c) => {
         assessment: bundleQuality.assessment,
         positiveSignals: bundleQuality.signals.positive,
         negativeSignals: bundleQuality.signals.negative,
+      } : null,
+      syndicateNetwork: syndicateNetwork ? {
+        detected: syndicateNetwork.detected,
+        repeatOffenders: syndicateNetwork.repeatOffenders,
+        totalTokensTouched: syndicateNetwork.totalTokensTouched,
+        rugRate: syndicateNetwork.rugRate,
+        highRiskWallets: syndicateNetwork.highRiskWallets,
+        networkWarning: syndicateNetwork.networkWarning,
       } : null,
       devActivity: devActivity ? {
         hasSold: devActivity.hasSold,

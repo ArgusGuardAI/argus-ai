@@ -10,6 +10,7 @@ import { jupiterRoutes } from './routes/jupiter';
 import { twitterRoutes } from './routes/twitter';
 import { telegramRoutes } from './routes/telegram';
 import { trainingRoutes } from './routes/training';
+import { onchainRoutes } from './routes/onchain';
 
 export type Bindings = {
   SCAN_CACHE: KVNamespace;
@@ -31,7 +32,9 @@ export type Bindings = {
   TELEGRAM_CHANNEL_ID?: string;
   ADMIN_SECRET?: string; // For training data API access
   BITNET_ENDPOINT?: string; // Future BitNet inference endpoint
-  AI_PROVIDER?: 'together' | 'bitnet' | 'hybrid'; // AI provider selection
+  AI_PROVIDER?: 'together' | 'bitnet' | 'local-bitnet' | 'hybrid'; // AI provider selection
+  DATA_PROVIDER_MODE?: 'ON_CHAIN' | 'HYBRID' | 'LEGACY'; // Data source mode
+  SOLANA_RPC_URL?: string; // Optional custom RPC endpoint
   ENVIRONMENT: string;
 };
 
@@ -177,6 +180,7 @@ app.route('/jupiter', jupiterRoutes);
 app.route('/twitter', twitterRoutes);
 app.route('/telegram', telegramRoutes);
 app.route('/training', trainingRoutes);
+app.route('/onchain', onchainRoutes);
 
 // 404 handler
 app.notFound((c) => {
@@ -189,4 +193,27 @@ app.onError((err, c) => {
   return c.json({ error: 'Internal server error' }, 500);
 });
 
-export default app;
+// Scheduled handler for cron jobs
+import { runRugDetection } from './services/rug-detector';
+
+export default {
+  // HTTP request handler (Hono app)
+  fetch: app.fetch,
+
+  // Cron trigger handler - runs every 6 hours
+  async scheduled(
+    _event: ScheduledEvent,
+    env: Bindings,
+    _ctx: ExecutionContext
+  ): Promise<void> {
+    console.log('[Cron] Starting scheduled rug detection...');
+
+    if (!env.BUNDLE_DB) {
+      console.error('[Cron] BUNDLE_DB not available');
+      return;
+    }
+
+    const stats = await runRugDetection(env.BUNDLE_DB, env.SOLANA_RPC_URL);
+    console.log(`[Cron] Rug detection complete: ${stats.rugged} rugs found out of ${stats.checked} tokens checked`);
+  },
+};

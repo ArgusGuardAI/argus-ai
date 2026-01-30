@@ -6,9 +6,11 @@
 import { checkTokenBalance } from './auth';
 
 // Rate limit configuration by tier
+// With on-chain mode + local-bitnet, costs are zero
+// Generous limits to prevent abuse while allowing normal usage
 const RATE_LIMITS = {
   free: {
-    daily: 10,
+    daily: 500, // Generous free tier - zero marginal cost
     window: 24 * 60 * 60 * 1000, // 24 hours in ms
   },
   holder: {

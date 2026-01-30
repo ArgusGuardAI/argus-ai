@@ -3,6 +3,7 @@ import * as d3 from 'd3';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { useAutoTrade } from './hooks/useAutoTrade';
+import { BundleNetworkGraph } from './components/BundleNetworkGraph';
 
 type SignalType = 'STRONG_BUY' | 'BUY' | 'WATCH' | 'HOLD' | 'AVOID';
 
@@ -378,7 +379,13 @@ interface AnalysisResult {
     detected: boolean;
     count: number;
     totalPercent: number;
+    controlPercent: number;  // Actual % of supply held by bundle wallets
     wallets: string[];
+    walletsWithHoldings: Array<{  // Detailed wallet info from API
+      address: string;
+      percent: number;
+      isLp: boolean;
+    }>;
     description?: string;
     confidence?: string;
     syndicateWallets?: Array<{
@@ -396,6 +403,25 @@ interface AnalysisResult {
       realBuyRatio: number | null;
       warning: string | null;
     } | null;
+    syndicateNetwork?: {
+      detected: boolean;
+      repeatOffenders: number;
+      totalTokensTouched: number;
+      rugRate: number;
+      highRiskWallets: Array<{
+        address: string;
+        tokenCount: number;
+        rugCount: number;
+        riskScore: number;
+        recentTokens: Array<{
+          symbol: string;
+          address: string;
+          rugged: boolean;
+          daysAgo: number;
+        }>;
+      }>;
+      networkWarning?: string;
+    } | null;
   };
   devActivity: {
     hasSold: boolean;
@@ -411,6 +437,9 @@ interface AnalysisResult {
     aiScore?: number; // Original AI score before guardrails
     rulesOverride?: boolean; // Whether guardrails adjusted the score
     verdict: string;
+    prediction?: string; // What will likely happen
+    recommendation?: string; // Action advice
+    networkInsights?: string[]; // Key observations
     flags: Array<{ type: string; severity: string; message: string }>;
   };
   links: {
@@ -454,6 +483,7 @@ export default function App() {
   const [isSelling, setIsSelling] = useState(false);
   const [logs, setLogs] = useState<Array<{ time: Date; msg: string; type: string }>>([]);
   const [showBuyConfig, setShowBuyConfig] = useState(false);
+  const [showBundleNetwork, setShowBundleNetwork] = useState(false);
 
   // Wallet management
   const [showWalletMenu, setShowWalletMenu] = useState(false);
@@ -606,16 +636,20 @@ export default function App() {
         result = data;
         if (!result.ai.flags) result.ai.flags = [];
       } else {
-        // Build bundle wallet addresses from backend's network nodes
-        // Only wallets marked as isHighRisk by backend are actual bundle members
+        // Build bundle wallet addresses from bundleInfo.wallets (primary) or network nodes (fallback)
+        // bundleInfo.wallets contains actual detected bundle wallet addresses from transaction analysis
+        const bundleWalletsFromApi = data.bundleInfo?.wallets || [];
+        const bundleWalletsFromNetwork = (data.network?.nodes || [])
+          .filter((n: { type: string; isHighRisk?: boolean }) =>
+            n.type !== 'token' &&
+            n.type !== 'lp' &&
+            n.isHighRisk === true
+          )
+          .map((n: { address: string }) => n.address);
+
+        // Use bundleInfo.wallets if available, otherwise fall back to network nodes
         const bundleWalletAddresses = new Set(
-          (data.network?.nodes || [])
-            .filter((n: { type: string; isHighRisk?: boolean }) =>
-              n.type !== 'token' &&
-              n.type !== 'lp' &&
-              n.isHighRisk === true
-            )
-            .map((n: { address: string }) => n.address)
+          bundleWalletsFromApi.length > 0 ? bundleWalletsFromApi : bundleWalletsFromNetwork
         );
 
         // Calculate holder percentages
@@ -684,7 +718,13 @@ export default function App() {
             detected: data.bundleInfo?.detected || false,
             count: data.bundleInfo?.count || 0,
             totalPercent: typeof data.bundleInfo?.txBundlePercent === 'number' ? data.bundleInfo.txBundlePercent : 0,
+            controlPercent: typeof data.bundleInfo?.controlPercent === 'number' ? data.bundleInfo.controlPercent : 0, // Actual % held by bundle wallets
             wallets: data.bundleInfo?.wallets || [],
+            walletsWithHoldings: (data.bundleInfo?.walletsWithHoldings || []).map((w: { address: string; percent: number; isLp?: boolean }) => ({
+              address: w.address,
+              percent: w.percent,
+              isLp: w.isLp || false,
+            })),
             description: data.bundleInfo?.description,
             confidence: data.bundleInfo?.confidence,
             syndicateWallets: (data.network?.nodes || [])
@@ -697,6 +737,14 @@ export default function App() {
               }))
               .sort((a: { holdingsPercent: number }, b: { holdingsPercent: number }) => b.holdingsPercent - a.holdingsPercent),
             washTrading: data.bundleInfo?.washTrading || null,
+            syndicateNetwork: data.syndicateNetwork ? {
+              detected: data.syndicateNetwork.detected,
+              repeatOffenders: data.syndicateNetwork.repeatOffenders,
+              totalTokensTouched: data.syndicateNetwork.totalTokensTouched,
+              rugRate: data.syndicateNetwork.rugRate,
+              highRiskWallets: data.syndicateNetwork.highRiskWallets || [],
+              networkWarning: data.syndicateNetwork.networkWarning,
+            } : null,
           },
           devActivity: data.devActivity ? {
             hasSold: data.devActivity.hasSold,
@@ -713,6 +761,9 @@ export default function App() {
             aiScore: data.aiScore !== undefined ? Math.max(0, 100 - data.aiScore) : undefined,
             rulesOverride: data.rulesOverride || false,
             verdict: data.analysis?.summary || 'Analysis unavailable',
+            prediction: data.analysis?.prediction,
+            recommendation: data.analysis?.recommendation,
+            networkInsights: data.analysis?.networkInsights || [],
             flags: (data.analysis?.flags || []).map((f: { type: string; severity: string; message: string }) => ({
               type: f.type,
               severity: f.severity?.toUpperCase() || 'MEDIUM',
@@ -1682,7 +1733,7 @@ export default function App() {
                 )}
               </div>
 
-              {/* AI Verdict */}
+              {/* AI Analysis - Enhanced */}
               <div className={`${cardBg} rounded-xl border ${cardBorder} p-5`}>
                 <div className="flex items-center gap-2 mb-4">
                   <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-lg flex items-center justify-center">
@@ -1711,7 +1762,54 @@ export default function App() {
                   </div>
                 )}
 
-                <p className="text-sm text-zinc-400 leading-relaxed mb-4">{analysisResult.ai.verdict}</p>
+                {/* Summary */}
+                <p className="text-sm text-zinc-300 leading-relaxed mb-4">{analysisResult.ai.verdict}</p>
+
+                {/* Prediction & Recommendation Grid */}
+                {(analysisResult.ai.prediction || analysisResult.ai.recommendation) && (
+                  <div className="grid grid-cols-1 gap-3 mb-4">
+                    {/* Prediction */}
+                    {analysisResult.ai.prediction && (
+                      <div className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700/50">
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <svg className="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                          </svg>
+                          <span className="text-xs font-semibold text-amber-400 uppercase tracking-wider">Prediction</span>
+                        </div>
+                        <p className="text-xs text-zinc-400 leading-relaxed">{analysisResult.ai.prediction}</p>
+                      </div>
+                    )}
+
+                    {/* Recommendation */}
+                    {analysisResult.ai.recommendation && (
+                      <div className={`rounded-lg p-3 border ${
+                        analysisResult.ai.signal === 'AVOID'
+                          ? 'bg-red-900/20 border-red-800/50'
+                          : analysisResult.ai.signal === 'STRONG_BUY' || analysisResult.ai.signal === 'BUY'
+                            ? 'bg-emerald-900/20 border-emerald-800/50'
+                            : 'bg-zinc-800/50 border-zinc-700/50'
+                      }`}>
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <svg className={`w-4 h-4 ${
+                            analysisResult.ai.signal === 'AVOID' ? 'text-red-400' :
+                            analysisResult.ai.signal === 'STRONG_BUY' || analysisResult.ai.signal === 'BUY' ? 'text-emerald-400' : 'text-zinc-400'
+                          }`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <span className={`text-xs font-semibold uppercase tracking-wider ${
+                            analysisResult.ai.signal === 'AVOID' ? 'text-red-400' :
+                            analysisResult.ai.signal === 'STRONG_BUY' || analysisResult.ai.signal === 'BUY' ? 'text-emerald-400' : 'text-zinc-400'
+                          }`}>Recommendation</span>
+                        </div>
+                        <p className={`text-xs leading-relaxed ${
+                          analysisResult.ai.signal === 'AVOID' ? 'text-red-300/80' :
+                          analysisResult.ai.signal === 'STRONG_BUY' || analysisResult.ai.signal === 'BUY' ? 'text-emerald-300/80' : 'text-zinc-400'
+                        }`}>{analysisResult.ai.recommendation}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Split flags into Risk Factors and Protective Factors */}
                 {analysisResult.ai.flags.length > 0 && (() => {
@@ -1765,6 +1863,23 @@ export default function App() {
                   );
                 })()}
 
+                {/* Network Insights */}
+                {analysisResult.ai.networkInsights && analysisResult.ai.networkInsights.length > 0 && (
+                  <div className="mb-4">
+                    <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">Network Insights</h4>
+                    <div className="space-y-1.5">
+                      {analysisResult.ai.networkInsights.map((insight, i) => (
+                        <div key={i} className="flex items-start gap-2">
+                          <svg className="w-3.5 h-3.5 text-zinc-600 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <span className="text-xs text-zinc-500 leading-relaxed">{insight}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Links */}
                 <div className="mt-4 pt-4 border-t border-zinc-800 flex items-center gap-2 flex-wrap">
                   <a
@@ -1806,7 +1921,7 @@ export default function App() {
                       ? 'Pump Syndicate Detected'
                       : 'Bundle Warning'}
                   </span>
-                  <div className="ml-auto flex gap-1.5">
+                  <div className="ml-auto flex items-center gap-1.5">
                     {analysisResult.bundles.confidence && (
                       <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                         analysisResult.bundles.confidence === 'HIGH' ? 'bg-red-700/80 text-red-200' : 'bg-amber-800/60 text-amber-300'
@@ -1817,6 +1932,15 @@ export default function App() {
                     <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-800/60 text-red-300">
                       {analysisResult.bundles.count} WALLETS
                     </span>
+                    <button
+                      onClick={() => setShowBundleNetwork(true)}
+                      className="ml-1 px-2.5 py-0.5 rounded text-[10px] font-bold bg-zinc-700/80 text-zinc-300 hover:bg-zinc-600/80 hover:text-white transition-colors flex items-center gap-1"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                      </svg>
+                      VIEW MAP
+                    </button>
                   </div>
                 </div>
 
@@ -1836,90 +1960,95 @@ export default function App() {
                 </div>
 
                 {/* Syndicate signs - show for both HIGH and MEDIUM confidence */}
-                {(analysisResult.bundles.confidence === 'HIGH' || analysisResult.bundles.confidence === 'MEDIUM') && analysisResult.bundles.syndicateWallets && analysisResult.bundles.syndicateWallets.length > 0 && (() => {
-                  const sw = analysisResult.bundles.syndicateWallets!;
-                  const nonCreator = sw.filter(w => w.type !== 'creator');
-                  const insiders = nonCreator.filter(w => w.type === 'insider');
-                  const holdings = nonCreator.filter(w => w.holdingsPercent > 0);
-                  const holdingsPcts = holdings.map(w => w.holdingsPercent);
-                  const min = holdingsPcts.length > 0 ? Math.min(...holdingsPcts) : 0;
-                  const max = holdingsPcts.length > 0 ? Math.max(...holdingsPcts) : 0;
-                  const totalSupply = holdings.reduce((s, w) => s + w.holdingsPercent, 0);
-                  const uniformSizing = max > 0 && min > 0 && (max / min) < 3;
-                  const creator = sw.find(w => w.type === 'creator');
-
-                  return (
-                    <div className="space-y-3">
-                      {/* Signs of syndicate */}
-                      <div className="grid grid-cols-2 gap-2 text-xs">
+                {(analysisResult.bundles.confidence === 'HIGH' || analysisResult.bundles.confidence === 'MEDIUM') && analysisResult.bundles.count > 0 && (
+                  <div className="space-y-3">
+                    {/* Signs of syndicate */}
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="flex items-center gap-1.5 text-red-300">
+                        <span className="text-red-500">&#x2716;</span>
+                        Same-block sniping
+                      </div>
+                      {analysisResult.bundles.controlPercent > 0 && (
                         <div className="flex items-center gap-1.5 text-red-300">
                           <span className="text-red-500">&#x2716;</span>
-                          Same-block sniping
+                          Control ~{analysisResult.bundles.controlPercent.toFixed(1)}% of supply
                         </div>
-                        {uniformSizing && (
-                          <div className="flex items-center gap-1.5 text-red-300">
-                            <span className="text-red-500">&#x2716;</span>
-                            Uniform position sizing ({min.toFixed(1)}-{max.toFixed(1)}%)
-                          </div>
-                        )}
-                        {insiders.length > 0 && (
-                          <div className="flex items-center gap-1.5 text-red-300">
-                            <span className="text-red-500">&#x2716;</span>
-                            {insiders.length} insider wallet{insiders.length > 1 ? 's' : ''} flagged
-                          </div>
-                        )}
-                        {creator && creator.holdingsPercent < 0.1 && (
-                          <div className="flex items-center gap-1.5 text-red-300">
-                            <span className="text-red-500">&#x2716;</span>
-                            Creator holds 0% (distributed)
-                          </div>
-                        )}
-                        {holdings.length > 0 && (
-                          <div className="flex items-center gap-1.5 text-red-300">
-                            <span className="text-red-500">&#x2716;</span>
-                            {holdings.length < nonCreator.length
-                              ? `${holdings.length} of ${nonCreator.length} still hold ~${totalSupply.toFixed(0)}% of supply`
-                              : `Controls ~${totalSupply.toFixed(0)}% of supply`}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Wallet table */}
-                      <div className="mt-2 rounded-lg bg-black/30 border border-red-900/40 overflow-hidden">
-                        <div className="grid grid-cols-[1fr_80px_70px] gap-2 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-red-400/60 border-b border-red-900/30">
-                          <span>Wallet</span>
-                          <span className="text-right">Holdings</span>
-                          <span className="text-right">Type</span>
-                        </div>
-                        <div className="max-h-[180px] overflow-y-auto">
-                          {nonCreator.filter(w => w.holdingsPercent > 0).slice(0, 15).map((w, i) => (
-                            <div key={i} className={`grid grid-cols-[1fr_80px_70px] gap-2 px-3 py-1.5 text-xs border-b border-red-900/20 ${w.isHighRisk ? 'bg-red-900/20' : ''}`}>
-                              <span className="font-mono text-zinc-400 truncate">
-                                {w.address.slice(0, 4)}...{w.address.slice(-4)}
-                              </span>
-                              <span className="text-right text-zinc-300">{w.holdingsPercent.toFixed(2)}%</span>
-                              <span className="text-right">
-                                {w.type === 'insider' ? (
-                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-800/80 text-red-200">INSIDER</span>
-                                ) : (
-                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-zinc-800 text-zinc-400">Bundle</span>
-                                )}
-                              </span>
-                            </div>
-                          ))}
-                          {nonCreator.filter(w => w.holdingsPercent > 0).length > 15 && (
-                            <div className="px-3 py-1.5 text-[10px] text-zinc-500 text-center">
-                              +{nonCreator.filter(w => w.holdingsPercent > 0).length - 15} more wallets
-                            </div>
-                          )}
-                        </div>
-                      </div>
+                      )}
                     </div>
-                  );
-                })()}
+
+                    {/* Wallet table - Use walletsWithHoldings from API (has exact % for each wallet) */}
+                    {analysisResult.bundles.wallets && analysisResult.bundles.wallets.length > 0 && (() => {
+                      // Use walletsWithHoldings from API - it has exact % for each bundle wallet
+                      const walletsFromApi = analysisResult.bundles.walletsWithHoldings || [];
+
+                      // Build status array: prefer walletsWithHoldings, fall back to top10 lookup
+                      const bundleWalletsWithStatus = analysisResult.bundles.wallets.map(addr => {
+                        // First check walletsWithHoldings (has ALL bundle wallet percentages)
+                        const apiWallet = walletsFromApi.find(w => w.address === addr);
+                        if (apiWallet && apiWallet.percent > 0) {
+                          return { addr, percent: apiWallet.percent, isHolder: true };
+                        }
+                        // Fall back to top10 lookup
+                        const holderMatch = analysisResult.holders.top10.find(h => h.address === addr);
+                        return { addr, percent: holderMatch?.percent || 0, isHolder: !!holderMatch };
+                      });
+
+                      // Sort: holders first (descending by %), then sold wallets
+                      bundleWalletsWithStatus.sort((a, b) => b.percent - a.percent);
+
+                      const holdersCount = bundleWalletsWithStatus.filter(w => w.isHolder).length;
+                      const soldCount = bundleWalletsWithStatus.length - holdersCount;
+
+                      return (
+                        <div className="mt-3 rounded-lg bg-zinc-900/80 border border-zinc-700/50 overflow-hidden">
+                          {/* Table Header */}
+                          <div className="grid grid-cols-[1fr_70px_70px] gap-2 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 border-b border-zinc-700/50 bg-zinc-800/50">
+                            <span>WALLET</span>
+                            <span className="text-right">%</span>
+                            <span className="text-right">TYPE</span>
+                          </div>
+                          {/* Table Body */}
+                          <div className="max-h-[200px] overflow-y-auto">
+                            {bundleWalletsWithStatus.slice(0, 10).map(({ addr, percent, isHolder }, i) => (
+                              <div
+                                key={i}
+                                className={`grid grid-cols-[1fr_70px_70px] gap-2 px-4 py-2 text-sm border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors ${!isHolder ? 'opacity-60' : ''}`}
+                              >
+                                <span className="font-mono text-zinc-300 truncate">
+                                  {addr.slice(0, 4)}...{addr.slice(-4)}
+                                </span>
+                                <span className="text-right text-zinc-400 font-medium">
+                                  {isHolder ? `${percent.toFixed(2)}%` : <span className="text-xs text-zinc-500">sold</span>}
+                                </span>
+                                <span className="text-right">
+                                  <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold ${isHolder ? 'bg-red-900/50 text-red-400 border border-red-800/50' : 'bg-zinc-800/50 text-zinc-500 border border-zinc-700/50'}`}>
+                                    Bundle
+                                  </span>
+                                </span>
+                              </div>
+                            ))}
+                            {bundleWalletsWithStatus.length > 10 && (
+                              <div className="px-4 py-2 text-xs text-zinc-500 text-center bg-zinc-800/20">
+                                +{bundleWalletsWithStatus.length - 10} more ({soldCount > 10 ? `${soldCount - (10 - holdersCount)} sold` : 'sold'})
+                              </div>
+                            )}
+                          </div>
+                          {/* Table Footer */}
+                          <div className="grid grid-cols-[1fr_70px_70px] gap-2 px-4 py-2 text-xs border-t border-zinc-700/50 bg-zinc-800/30">
+                            <span className="text-zinc-500 font-medium">
+                              {holdersCount > 0 ? `${holdersCount} holding, ${soldCount} sold` : `${analysisResult.bundles.count} detected (all sold)`}
+                            </span>
+                            <span className="text-right text-red-400 font-bold">{(analysisResult.bundles.controlPercent || 0).toFixed(1)}%</span>
+                            <span></span>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
 
                 {/* Fallback for LOW confidence or missing wallet data */}
-                {((analysisResult.bundles.confidence !== 'HIGH' && analysisResult.bundles.confidence !== 'MEDIUM') || !analysisResult.bundles.syndicateWallets || analysisResult.bundles.syndicateWallets.length === 0) && (
+                {((analysisResult.bundles.confidence !== 'HIGH' && analysisResult.bundles.confidence !== 'MEDIUM') || analysisResult.bundles.count === 0) && (
                   <p className="text-sm text-red-400/80">
                     {analysisResult.bundles.description
                       ? `${analysisResult.bundles.description}. This indicates coordinated wallet activity designed to manipulate price action.`
@@ -1979,6 +2108,92 @@ export default function App() {
                       : 'Coordinated wallets contributing to buy volume — exercise caution.'}
                   </p>
                 </div>
+              </div>
+            )}
+
+            {/* Syndicate Network Alert - Repeat Offenders */}
+            {analysisResult.bundles.syndicateNetwork?.detected && (
+              <div className="p-4 rounded-xl bg-purple-900/30 border border-purple-800">
+                <div className="flex items-center gap-2 mb-3">
+                  <svg className="w-5 h-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                  </svg>
+                  <span className="text-sm font-bold text-purple-400">Syndicate Network Detected</span>
+                  <div className="ml-auto flex gap-1.5">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-800/60 text-purple-300">
+                      {analysisResult.bundles.syndicateNetwork.repeatOffenders} REPEAT
+                    </span>
+                    {analysisResult.bundles.syndicateNetwork.rugRate > 0 && (
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                        analysisResult.bundles.syndicateNetwork.rugRate >= 50
+                          ? 'bg-red-800/60 text-red-300'
+                          : 'bg-amber-800/60 text-amber-300'
+                      }`}>
+                        {analysisResult.bundles.syndicateNetwork.rugRate}% RUG RATE
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <p className="text-sm text-purple-300/90 mb-3">
+                  {analysisResult.bundles.syndicateNetwork.networkWarning ||
+                    `${analysisResult.bundles.syndicateNetwork.repeatOffenders} bundle wallets have appeared in ${analysisResult.bundles.syndicateNetwork.totalTokensTouched} previous token launches.`}
+                </p>
+
+                {/* High Risk Wallets */}
+                {analysisResult.bundles.syndicateNetwork.highRiskWallets.length > 0 && (
+                  <div className="rounded-lg bg-black/30 border border-purple-900/40 overflow-hidden">
+                    <div className="grid grid-cols-[1fr_60px_60px_70px] gap-2 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-purple-400/60 border-b border-purple-900/30">
+                      <span>Wallet</span>
+                      <span className="text-center">Tokens</span>
+                      <span className="text-center">Rugs</span>
+                      <span className="text-right">Risk</span>
+                    </div>
+                    <div className="max-h-[140px] overflow-y-auto">
+                      {analysisResult.bundles.syndicateNetwork.highRiskWallets.slice(0, 5).map((wallet, i) => (
+                        <div key={i} className="grid grid-cols-[1fr_60px_60px_70px] gap-2 px-3 py-1.5 text-xs border-b border-purple-900/20 hover:bg-purple-900/20">
+                          <span className="font-mono text-zinc-400 truncate">
+                            {wallet.address.slice(0, 4)}...{wallet.address.slice(-4)}
+                          </span>
+                          <span className="text-center text-zinc-300">{wallet.tokenCount}</span>
+                          <span className={`text-center ${wallet.rugCount > 0 ? 'text-red-400' : 'text-zinc-500'}`}>
+                            {wallet.rugCount}
+                          </span>
+                          <span className="text-right">
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                              wallet.riskScore >= 70 ? 'bg-red-800/80 text-red-200' :
+                              wallet.riskScore >= 50 ? 'bg-amber-800/80 text-amber-200' :
+                              'bg-zinc-700 text-zinc-300'
+                            }`}>
+                              {wallet.riskScore}
+                            </span>
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Recent rugged tokens */}
+                {(() => {
+                  const ruggedTokens = analysisResult.bundles.syndicateNetwork!.highRiskWallets
+                    .flatMap(w => w.recentTokens)
+                    .filter(t => t.rugged)
+                    .slice(0, 3);
+
+                  return ruggedTokens.length > 0 && (
+                    <div className="mt-3 pt-2 border-t border-purple-800/50">
+                      <p className="text-xs text-purple-300/70 mb-1">Recent rugs involving these wallets:</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {ruggedTokens.map((t, i) => (
+                          <span key={i} className="px-2 py-0.5 rounded text-[10px] bg-red-900/40 text-red-300 border border-red-800/50">
+                            ${t.symbol} ({t.daysAgo}d ago)
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             )}
 
@@ -2804,6 +3019,27 @@ export default function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Bundle Network Graph Modal */}
+      {showBundleNetwork && analysisResult && analysisResult.bundles.wallets && analysisResult.bundles.wallets.length > 0 && (
+        <BundleNetworkGraph
+          tokenSymbol={analysisResult.token.symbol}
+          tokenAddress={analysisResult.token.address}
+          wallets={(() => {
+            const walletsFromApi = analysisResult.bundles.walletsWithHoldings || [];
+            return analysisResult.bundles.wallets.map(addr => {
+              const apiWallet = walletsFromApi.find(w => w.address === addr);
+              if (apiWallet && apiWallet.percent > 0) {
+                return { address: addr, percent: apiWallet.percent, isHolder: true };
+              }
+              const holderMatch = analysisResult.holders.top10.find(h => h.address === addr);
+              return { address: addr, percent: holderMatch?.percent || 0, isHolder: !!holderMatch || (apiWallet?.percent || 0) > 0 };
+            });
+          })()}
+          controlPercent={analysisResult.bundles.controlPercent || 0}
+          onClose={() => setShowBundleNetwork(false)}
+        />
       )}
     </div>
   );

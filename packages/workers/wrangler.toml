@@ -59,6 +59,11 @@ binding = "BUNDLE_DB"
 database_name = "argus-bundle-network"
 database_id = "9cd48296-20f5-4e15-bb81-5b86877bc117"
 
+# Cron Triggers for background jobs
+# Runs every 6 hours to check if tracked tokens have rugged
+[triggers]
+crons = ["0 */6 * * *"]
+
 # Development environment
 [env.dev]
 name = "argusguard-api-dev"
