@@ -34,7 +34,11 @@ export type Bindings = {
   BITNET_ENDPOINT?: string; // Future BitNet inference endpoint
   AI_PROVIDER?: 'together' | 'bitnet' | 'local-bitnet' | 'hybrid'; // AI provider selection
   DATA_PROVIDER_MODE?: 'ON_CHAIN' | 'HYBRID' | 'LEGACY'; // Data source mode
-  SOLANA_RPC_URL?: string; // Optional custom RPC endpoint
+  // Multi-RPC endpoints (automatic failover)
+  SOLANA_RPC_URL?: string; // Custom primary RPC endpoint
+  QUICKNODE_RPC_URL?: string; // QuickNode RPC (free tier: 10M req/month)
+  ALCHEMY_RPC_URL?: string; // Alchemy RPC (free tier: 300M CU/month)
+  TRITON_RPC_URL?: string; // Triton community RPC (unlimited)
   ENVIRONMENT: string;
 };
 

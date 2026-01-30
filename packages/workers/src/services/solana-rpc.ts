@@ -428,3 +428,46 @@ export class SolanaRpcClient {
 
 // Default instance using public RPC
 export const defaultRpc = new SolanaRpcClient();
+
+import { createMultiRpcClient, type MultiRpcClient } from './multi-rpc';
+
+/**
+ * SolanaRpcClient with Multi-RPC fallback support
+ * Automatically rotates through endpoints on failure
+ */
+export class MultiRpcSolanaClient extends SolanaRpcClient {
+  private multiRpc: MultiRpcClient;
+
+  constructor(multiRpc: MultiRpcClient) {
+    super(multiRpc.getPrimaryEndpoint());
+    this.multiRpc = multiRpc;
+  }
+
+  /**
+   * Override call to use multi-RPC with fallback
+   */
+  override async call<T>(method: string, params: unknown[] = []): Promise<T> {
+    return this.multiRpc.call<T>(method, params);
+  }
+
+  /**
+   * Get status of all RPC endpoints
+   */
+  getRpcStatus() {
+    return this.multiRpc.getStatus();
+  }
+}
+
+/**
+ * Create a SolanaRpcClient with multi-RPC fallback support
+ */
+export function createSolanaRpcClientFromEnv(env: {
+  HELIUS_API_KEY?: string;
+  QUICKNODE_RPC_URL?: string;
+  ALCHEMY_RPC_URL?: string;
+  TRITON_RPC_URL?: string;
+  SOLANA_RPC_URL?: string;
+}): MultiRpcSolanaClient {
+  const multiRpc = createMultiRpcClient(env);
+  return new MultiRpcSolanaClient(multiRpc);
+}

@@ -30,6 +30,14 @@ cpu_ms = 50
 #    wrangler secret put TELEGRAM_CHANNEL_ID
 #    wrangler secret put ADMIN_SECRET          # For training data API access
 #
+# 3b. RPC Providers (optional - uses free public RPC by default)
+#    Multi-RPC with automatic failover. Set any/all of these:
+#    wrangler secret put QUICKNODE_RPC_URL     # Free: 10M req/month
+#    wrangler secret put ALCHEMY_RPC_URL       # Free: 300M CU/month
+#    wrangler secret put TRITON_RPC_URL        # Community RPC (unlimited)
+#    wrangler secret put HELIUS_API_KEY        # Paid (used as fallback)
+#    wrangler secret put SOLANA_RPC_URL        # Custom RPC endpoint
+#
 # 4. For local development, create .dev.vars file:
 #    cp .dev.vars.example .dev.vars
 #    Then fill in your API keys

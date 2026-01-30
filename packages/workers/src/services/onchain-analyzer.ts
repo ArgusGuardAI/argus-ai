@@ -100,9 +100,15 @@ export class OnChainAnalyzer {
   private rpcEndpoint: string;
   private solPrice: number = 200;
 
-  constructor(rpcEndpoint?: string) {
-    this.rpcEndpoint = rpcEndpoint || 'https://api.mainnet-beta.solana.com';
-    this.rpc = new SolanaRpcClient(this.rpcEndpoint);
+  constructor(rpcEndpointOrClient?: string | SolanaRpcClient) {
+    if (typeof rpcEndpointOrClient === 'string' || rpcEndpointOrClient === undefined) {
+      this.rpcEndpoint = rpcEndpointOrClient || 'https://api.mainnet-beta.solana.com';
+      this.rpc = new SolanaRpcClient(this.rpcEndpoint);
+    } else {
+      // Use pre-constructed RPC client (e.g., MultiRpcSolanaClient)
+      this.rpc = rpcEndpointOrClient;
+      this.rpcEndpoint = 'multi-rpc'; // Placeholder - actual endpoints managed by client
+    }
   }
 
   /**

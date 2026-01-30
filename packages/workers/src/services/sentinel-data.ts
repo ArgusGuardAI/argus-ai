@@ -12,6 +12,7 @@ import { type DataProviderMode } from './data-provider';
 import { OnChainAnalyzer } from './onchain-analyzer';
 import { fetchDexScreenerData } from './dexscreener';
 import { fetchHeliusTokenMetadata, analyzeTokenTransactions, analyzeDevSelling } from './helius';
+import { SolanaRpcClient, createSolanaRpcClientFromEnv } from './solana-rpc';
 
 // ============================================
 // INTERFACES (matching sentinel.ts expectations)
@@ -101,11 +102,11 @@ export class SentinelDataFetcher {
 
   constructor(
     mode: DataProviderMode = 'HYBRID',
-    rpcEndpoint?: string,
+    rpcEndpointOrClient?: string | SolanaRpcClient,
     heliusKey?: string
   ) {
     this.mode = mode;
-    this.onChain = new OnChainAnalyzer(rpcEndpoint);
+    this.onChain = new OnChainAnalyzer(rpcEndpointOrClient);
     this.heliusKey = heliusKey;
   }
 
@@ -446,12 +447,14 @@ export function createSentinelDataFetcher(env: {
   DATA_PROVIDER_MODE?: string;
   HELIUS_API_KEY?: string;
   SOLANA_RPC_URL?: string;
+  QUICKNODE_RPC_URL?: string;
+  ALCHEMY_RPC_URL?: string;
+  TRITON_RPC_URL?: string;
 }): SentinelDataFetcher {
   const mode = (env.DATA_PROVIDER_MODE || 'ON_CHAIN') as DataProviderMode;
 
-  const rpcEndpoint = env.HELIUS_API_KEY
-    ? `https://mainnet.helius-rpc.com/?api-key=${env.HELIUS_API_KEY}`
-    : env.SOLANA_RPC_URL || undefined;
+  // Use multi-RPC client with automatic failover
+  const multiRpcClient = createSolanaRpcClientFromEnv(env);
 
-  return new SentinelDataFetcher(mode, rpcEndpoint, env.HELIUS_API_KEY);
+  return new SentinelDataFetcher(mode, multiRpcClient, env.HELIUS_API_KEY);
 }
