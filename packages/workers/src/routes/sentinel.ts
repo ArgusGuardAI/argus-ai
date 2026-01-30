@@ -2481,6 +2481,7 @@ sentinelRoutes.post('/analyze', async (c) => {
         mintRevoked: !mintAuthorityActive,
         freezeRevoked: !freezeAuthorityActive,
         lpLockedPct,
+        isPumpFun,
       },
       network,
       analysis,

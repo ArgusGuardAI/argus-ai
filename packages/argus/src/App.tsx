@@ -343,6 +343,7 @@ interface AnalysisResult {
     mintAuthorityRevoked: boolean;
     freezeAuthorityRevoked: boolean;
     lpLockedPercent: number;
+    isPumpFun: boolean;
   };
   market: {
     price: number;
@@ -684,6 +685,7 @@ export default function App() {
             mintAuthorityRevoked: data.security?.mintRevoked ?? true,
             freezeAuthorityRevoked: data.security?.freezeRevoked ?? true,
             lpLockedPercent: data.security?.lpLockedPct ?? 0,
+            isPumpFun: data.security?.isPumpFun ?? false,
           },
           market: {
             price: data.tokenInfo?.price || 0,
@@ -943,7 +945,9 @@ export default function App() {
     ? (analysisResult.market.marketCap > 50_000_000 || analysisResult.market.liquidity > 1_000_000)
     : false;
   // LP lock only meaningful when there's real value locked (>$1K), skip check for mature tokens
-  const hasRealLockedValue = isMatureToken || lpLockedValue >= 1000;
+  // Pump.fun bonding curve tokens don't have traditional LP locks - the bonding curve IS the liquidity mechanism
+  const isPumpFunToken = analysisResult?.security.isPumpFun ?? false;
+  const hasRealLockedValue = isMatureToken || isPumpFunToken || lpLockedValue >= 1000;
 
   const criticalIssueCount = analysisResult ? [
     !analysisResult.security.mintAuthorityRevoked,
@@ -1463,7 +1467,12 @@ export default function App() {
                   )}
                   {/* Show LP locked value - color based on actual value locked */}
                   {/* Hide LP badge for mature tokens with no data (shows N/A in security card) */}
-                  {!(isMatureToken && lpLockedValue === 0) && (
+                  {/* For pump.fun tokens, show "BONDING CURVE" instead of LP locked */}
+                  {analysisResult.security.isPumpFun ? (
+                    <span className="px-2.5 py-1 rounded-lg text-xs font-bold border bg-blue-800/60 text-blue-300 border-blue-700/50">
+                      BONDING CURVE
+                    </span>
+                  ) : !(isMatureToken && lpLockedValue === 0) && (
                     <span className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${
                       hasRealLockedValue
                         ? 'bg-emerald-800/60 text-emerald-300 border-emerald-700/50'
@@ -1560,20 +1569,26 @@ export default function App() {
                       )}
                     </span>
                   </div>
-                  {/* Show LP locked value */}
+                  {/* Show LP locked value - or "Bonding Curve" for pump.fun tokens */}
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-zinc-500">LP Locked</span>
+                    <span className="text-sm text-zinc-500">{analysisResult.security.isPumpFun ? 'LP Status' : 'LP Locked'}</span>
                     <span className={`text-sm font-semibold ${
-                      isMatureToken && lpLockedValue === 0
-                        ? 'text-zinc-400'
-                        : hasRealLockedValue ? 'text-green-500' : 'text-red-500'
+                      analysisResult.security.isPumpFun
+                        ? 'text-blue-400'
+                        : isMatureToken && lpLockedValue === 0
+                          ? 'text-zinc-400'
+                          : hasRealLockedValue ? 'text-green-500' : 'text-red-500'
                     }`}>
-                      {isMatureToken && lpLockedValue === 0 ? 'N/A' : fmt(lpLockedValue)}
+                      {analysisResult.security.isPumpFun
+                        ? 'Bonding Curve'
+                        : isMatureToken && lpLockedValue === 0
+                          ? 'N/A'
+                          : fmt(lpLockedValue)}
                     </span>
                   </div>
                 </div>
-                {/* Show RUG RISK warning when locked value is insignificant */}
-                {!hasRealLockedValue && (
+                {/* Show RUG RISK warning when locked value is insignificant (but not for pump.fun bonding curve) */}
+                {!analysisResult.security.isPumpFun && !hasRealLockedValue && (
                   <div className="mt-3 pt-3 border-t border-red-800/30">
                     <p className="text-xs text-red-400 font-semibold flex items-center gap-1.5">
                       <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
