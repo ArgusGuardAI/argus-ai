@@ -17,6 +17,9 @@
  * - OutcomeLearner: Self-improvement through outcome tracking
  */
 
+// Import for internal use
+import { AgentCoordinator as Coordinator } from './core/AgentCoordinator';
+
 // Core - Classes
 export { BaseAgent } from './core/BaseAgent';
 export { MessageBus } from './core/MessageBus';
@@ -76,7 +79,7 @@ export async function createArgusNetwork(config: {
   maxDailyTrades?: number;
   maxPositionSize?: number;
 }) {
-  const coordinator = new AgentCoordinator({
+  const coordinator = new Coordinator({
     rpcEndpoint: config.rpcEndpoint,
     enableTrading: config.enableTrading || false,
     scouts: config.scouts || 2,
