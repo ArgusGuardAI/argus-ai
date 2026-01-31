@@ -9,9 +9,9 @@
  * - Autonomous reasoning loops
  */
 
-import { BitNetEngine, ReasoningOutput, ClassifierOutput } from '../reasoning/BitNetEngine';
+import { BitNetEngine, ClassifierOutput } from '../reasoning/BitNetEngine';
 import { AgentMemory } from './AgentMemory';
-import { MessageBus, Message } from './MessageBus';
+import { MessageBus } from './MessageBus';
 
 export interface Tool {
   name: string;
