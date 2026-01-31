@@ -11,6 +11,7 @@ import { twitterRoutes } from './routes/twitter';
 import { telegramRoutes } from './routes/telegram';
 import { trainingRoutes } from './routes/training';
 import { onchainRoutes } from './routes/onchain';
+import { agentRoutes } from './routes/agents';
 
 export type Bindings = {
   SCAN_CACHE: KVNamespace;
@@ -185,6 +186,7 @@ app.route('/twitter', twitterRoutes);
 app.route('/telegram', telegramRoutes);
 app.route('/training', trainingRoutes);
 app.route('/onchain', onchainRoutes);
+app.route('/agents', agentRoutes);
 
 // 404 handler
 app.notFound((c) => {

@@ -1,2524 +1,1003 @@
-import { useState, useEffect, useRef } from 'react';
-
-// Set this to the $ARGUS token mint address once launched
-const ARGUS_TOKEN_MINT = '';
-
-function formatMarketCap(n: number): string {
-  if (n >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
-  if (n >= 1e6) return `$${(n / 1e6).toFixed(2)}M`;
-  if (n >= 1e3) return `$${(n / 1e3).toFixed(1)}K`;
-  return `$${n.toFixed(0)}`;
-}
-
-function formatPrice(p: number): string {
-  if (p >= 1) return `$${p.toFixed(2)}`;
-  if (p >= 0.01) return `$${p.toFixed(4)}`;
-  return `$${p.toFixed(6)}`;
-}
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 const styles = `
-  /* --- DESIGN TOKENS (DARK THEME) --- */
-  .landing-page {
-    --bg-body: #09090B;
-    --bg-card: #111113;
-    --bg-elevated: #18181B;
-    --text-main: #FAFAFA;
-    --text-muted: #A1A1AA;
-    --primary: #FFFFFF;
-    --accent: #10B981;
-    --accent-glow: rgba(16, 185, 129, 0.15);
-    --border: #27272A;
-    --border-light: #1F1F23;
-    --radius-sm: 8px;
-    --radius-md: 12px;
-    --radius-lg: 16px;
-    --font-main: 'Inter', -apple-system, sans-serif;
-    --max-width: 1200px;
+  /* ============================================
+     ARGUS IMMERSIVE LANDING - THE WATCHER
+     ============================================ */
 
-    background-color: var(--bg-body);
+  /* --- DESIGN TOKENS --- */
+  .argus-landing {
+    --bg-void: #020202;
+    --bg-dark: #050505;
+    --bg-card: #0A0A0C;
+    --text-main: #F0F0F0;
+    --text-muted: #8A8A95;
+    --text-dim: #4A4A55;
+    --accent: #DC2626;
+    --accent-glow: rgba(220, 38, 38, 0.6);
+    --accent-dim: rgba(220, 38, 38, 0.15);
+    --purple: #7C3AED;
+    --amber: #F59E0B;
+    --emerald: #22C55E;
+    --font-main: 'Inter', -apple-system, sans-serif;
+
+    background: var(--bg-void);
     color: var(--text-main);
     font-family: var(--font-main);
-    line-height: 1.5;
-    -webkit-font-smoothing: antialiased;
     min-height: 100vh;
-    position: relative;
     overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
   }
 
-  .landing-page * { box-sizing: border-box; }
-  .landing-page a { text-decoration: none; color: inherit; transition: all 0.2s; }
-  .landing-page ul { list-style: none; margin: 0; padding: 0; }
+  .argus-landing * { box-sizing: border-box; }
 
-  .landing-page .container {
-    max-width: var(--max-width);
-    margin: 0 auto;
-    padding: 0 24px;
-  }
-
-  .landing-page .btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 14px 28px;
-    border-radius: var(--radius-md);
-    font-size: 0.95rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    letter-spacing: -0.01em;
-  }
-
-  .landing-page .btn-primary {
-    background: linear-gradient(135deg, #10B981 0%, #059669 100%);
-    color: white;
-    border: none;
-    box-shadow: 0 4px 20px rgba(16, 185, 129, 0.3);
-  }
-
-  .landing-page .btn-primary:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 30px rgba(16, 185, 129, 0.4);
-  }
-
-  .landing-page .btn-outline {
-    background-color: transparent;
-    color: var(--text-main);
-    border: 1px solid var(--border);
-  }
-
-  .landing-page .btn-outline:hover {
-    border-color: var(--accent);
-    background: var(--accent-glow);
-  }
-
-  .landing-page .badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 16px;
-    background: linear-gradient(135deg, #10B981 0%, #059669 100%);
-    color: white;
-    border-radius: 99px;
-    font-size: 0.8rem;
-    font-weight: 600;
-    margin-bottom: 24px;
-    letter-spacing: 0.02em;
-  }
-
-  .landing-page .badge-dot {
-    width: 8px;
-    height: 8px;
-    background: white;
-    border-radius: 50%;
-    animation: pulse 2s infinite;
-  }
-
-  @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
-  }
-
-  @keyframes countUp {
-    from { opacity: 0; transform: translateY(20px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-
-  @keyframes glowPulse {
-    0%, 100% { box-shadow: 0 0 20px rgba(16, 185, 129, 0.3); }
-    50% { box-shadow: 0 0 40px rgba(16, 185, 129, 0.6); }
-  }
-
-  .landing-page .stat-highlight {
-    animation: countUp 0.6s ease-out forwards, glowPulse 3s ease-in-out infinite;
-  }
-
-  /* --- HEADER --- */
-  .landing-page header {
-    position: sticky;
-    top: 0;
-    width: 100%;
-    z-index: 100;
-    background: rgba(9, 9, 11, 0.85);
-    backdrop-filter: blur(12px);
-    border-bottom: 1px solid var(--border);
-  }
-
-  .landing-page nav {
-    height: 70px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .landing-page .logo {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    font-weight: 800;
-    font-size: 1.3rem;
-    letter-spacing: -0.03em;
-  }
-
-  .landing-page .logo-icon {
-    width: 44px;
-    height: 44px;
-    background: linear-gradient(135deg, #18181B 0%, #09090B 100%);
-    border-radius: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid #27272A;
-  }
-
-  .landing-page .nav-links {
-    display: flex;
-    gap: 32px;
-  }
-
-  .landing-page .nav-links a {
-    font-size: 0.9rem;
-    color: var(--text-muted);
-    font-weight: 500;
-  }
-
-  .landing-page .nav-links a:hover { color: var(--text-main); }
-
-  /* --- HAMBURGER + MOBILE MENU --- */
-  .landing-page .hamburger {
-    display: none;
-    flex-direction: column;
-    gap: 5px;
-    cursor: pointer;
-    padding: 8px;
-    z-index: 200;
-  }
-  .landing-page .hamburger span {
-    display: block;
-    width: 22px;
-    height: 2px;
-    background: var(--text-main);
-    border-radius: 2px;
-    transition: all 0.3s ease;
-  }
-  .landing-page .hamburger.open span:nth-child(1) {
-    transform: rotate(45deg) translate(5px, 5px);
-  }
-  .landing-page .hamburger.open span:nth-child(2) {
-    opacity: 0;
-  }
-  .landing-page .hamburger.open span:nth-child(3) {
-    transform: rotate(-45deg) translate(5px, -5px);
-  }
-
-  .landing-page .mobile-menu {
+  /* ============================================
+     INTRO SCREEN - THE EYE
+     ============================================ */
+  .intro-screen {
     position: fixed;
     top: 0;
     left: 0;
-    width: 100%;
+    width: 100vw;
     height: 100vh;
-    background: rgba(9, 9, 11, 0.97);
-    backdrop-filter: blur(20px);
-    z-index: 150;
+    background: var(--bg-void);
     display: flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 32px;
+    z-index: 1000;
+    cursor: pointer;
+    transition: opacity 0.8s ease, transform 1.2s ease;
+  }
+
+  .intro-screen.diving {
     opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.3s ease;
-  }
-  .landing-page .mobile-menu.open {
-    opacity: 1;
-    pointer-events: all;
-  }
-  .landing-page .mobile-menu a {
-    font-size: 1.3rem;
-    font-weight: 600;
-    color: var(--text-muted);
-    transition: color 0.2s;
-  }
-  .landing-page .mobile-menu a:hover {
-    color: var(--accent);
+    transform: scale(3);
   }
 
-  /* --- HERO --- */
-  .landing-page .hero {
-    padding: 100px 0 60px;
+  .intro-screen.hidden {
+    display: none;
+  }
+
+  .intro-content {
     text-align: center;
+    transform: translateY(-20px);
+  }
+
+  .intro-hint {
+    position: absolute;
+    bottom: 60px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    animation: pulse-hint 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-hint {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 1; }
+  }
+
+  /* The Argus Eye SVG */
+  .argus-eye {
+    width: 200px;
+    height: 200px;
+    filter: drop-shadow(0 0 60px var(--accent-glow)) drop-shadow(0 0 120px var(--accent-dim));
+    animation: eye-pulse 3s ease-in-out infinite, eye-float 6s ease-in-out infinite;
+    transition: transform 0.3s ease, filter 0.3s ease;
+  }
+
+  .argus-eye:hover {
+    transform: scale(1.1);
+    filter: drop-shadow(0 0 80px var(--accent-glow)) drop-shadow(0 0 160px rgba(220, 38, 38, 0.3));
+  }
+
+  @keyframes eye-pulse {
+    0%, 100% {
+      filter: drop-shadow(0 0 60px var(--accent-glow)) drop-shadow(0 0 120px var(--accent-dim));
+    }
+    50% {
+      filter: drop-shadow(0 0 100px var(--accent-glow)) drop-shadow(0 0 200px rgba(220, 38, 38, 0.4));
+    }
+  }
+
+  @keyframes eye-float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+  }
+
+  .intro-title {
+    margin-top: 40px;
+    font-size: 1rem;
+    letter-spacing: 0.4em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    font-weight: 400;
+  }
+
+  /* Particles around the eye */
+  .intro-particles {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    overflow: hidden;
+  }
+
+  .particle {
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: var(--accent);
+    border-radius: 50%;
+    opacity: 0;
+    animation: particle-drift 8s linear infinite;
+  }
+
+  @keyframes particle-drift {
+    0% {
+      opacity: 0;
+      transform: translateY(100vh) scale(0);
+    }
+    10% {
+      opacity: 0.6;
+    }
+    90% {
+      opacity: 0.6;
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(-100px) scale(1);
+    }
+  }
+
+  /* ============================================
+     MAIN JOURNEY
+     ============================================ */
+  .journey {
+    opacity: 0;
+    transition: opacity 1s ease 0.5s;
+  }
+
+  .journey.visible {
+    opacity: 1;
+  }
+
+  /* Narrative sections */
+  .narrative-section {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     position: relative;
+    padding: 60px 24px;
   }
 
-  .landing-page .hero h1 {
-    font-size: 4rem;
-    line-height: 1.1;
-    font-weight: 800;
-    letter-spacing: -0.04em;
+  .narrative-content {
+    max-width: 900px;
+    text-align: center;
+    opacity: 0;
+    transform: translateY(60px);
+    transition: opacity 0.8s ease, transform 0.8s ease;
+  }
+
+  .narrative-content.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .narrative-label {
+    font-size: 0.75rem;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--accent);
     margin-bottom: 24px;
-    color: var(--primary);
+    font-weight: 500;
   }
 
-  .landing-page .hero h1 span {
-    background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+  .narrative-title {
+    font-size: clamp(2rem, 6vw, 4rem);
+    font-weight: 700;
+    line-height: 1.1;
+    margin-bottom: 24px;
+    background: linear-gradient(180deg, var(--text-main) 0%, var(--text-muted) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
   }
 
-  .landing-page .hero p {
-    font-size: 1.2rem;
+  .narrative-title span {
+    background: linear-gradient(135deg, var(--accent) 0%, #EF4444 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .narrative-text {
+    font-size: 1.15rem;
+    line-height: 1.8;
     color: var(--text-muted);
-    font-weight: 400;
-    max-width: 560px;
-    margin: 0 auto 40px;
-    line-height: 1.7;
-  }
-
-  .landing-page .hero .container {
-    position: relative;
-    z-index: 1;
-  }
-
-  /* --- HERO BACKGROUND LOGO --- */
-  .landing-page .hero-bg-logo {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 1000px;
-    height: 1000px;
-    opacity: 0.10;
-    pointer-events: none;
-    z-index: 0;
-    will-change: transform, opacity;
-  }
-
-  .landing-page .hero-bg-logo svg {
-    width: 100%;
-    height: 100%;
-  }
-
-  /* --- TOKEN TICKER --- */
-  .landing-page .token-ticker {
-    display: inline-flex;
-    align-items: center;
-    gap: 24px;
-    padding: 16px 32px;
-    background: rgba(17, 17, 19, 0.8);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    backdrop-filter: blur(12px);
-    margin-bottom: 32px;
-  }
-
-  .landing-page .ticker-stat {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
-  }
-
-  .landing-page .ticker-label {
-    font-size: 0.7rem;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    font-weight: 600;
-  }
-
-  .landing-page .ticker-value {
-    font-size: 1.25rem;
-    font-weight: 700;
-    color: var(--text-main);
-    font-variant-numeric: tabular-nums;
-  }
-
-  .landing-page .ticker-value.green { color: var(--accent); }
-  .landing-page .ticker-value.red { color: #EF4444; }
-
-  .landing-page .ticker-divider {
-    width: 1px;
-    height: 32px;
-    background: var(--border);
-  }
-
-  .landing-page .ticker-coming-soon {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 0.95rem;
-    font-weight: 600;
-    color: var(--accent);
-    letter-spacing: 0.02em;
-  }
-
-  .landing-page .hero-actions {
-    display: flex;
-    justify-content: center;
-    gap: 16px;
-    margin-bottom: 60px;
-  }
-
-  /* --- UI MOCKUP --- */
-  .landing-page .ui-mockup {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    box-shadow: 0 24px 48px -12px rgba(0,0,0,0.1);
-    max-width: 900px;
+    max-width: 600px;
     margin: 0 auto;
-    overflow: hidden;
   }
 
-  .landing-page .ui-header {
-    height: 48px;
-    border-bottom: 1px solid var(--border);
+  /* Section: The Darkness */
+  .section-darkness {
+    background:
+      radial-gradient(ellipse at 50% 100%, rgba(220, 38, 38, 0.05) 0%, transparent 50%),
+      var(--bg-void);
+  }
+
+  .darkness-stats {
     display: flex;
-    align-items: center;
-    padding: 0 16px;
-    justify-content: space-between;
-    background: var(--bg-elevated);
-  }
-
-  .landing-page .ui-dots { display: flex; gap: 6px; }
-  .landing-page .ui-dot { width: 10px; height: 10px; border-radius: 50%; }
-  .landing-page .ui-dot.red { background: #FCA5A5; }
-  .landing-page .ui-dot.yellow { background: #FCD34D; }
-  .landing-page .ui-dot.green { background: #6EE7B7; }
-
-  .landing-page .ui-body {
-    padding: 24px;
-    background: var(--bg-card);
-  }
-
-  /* Search Bar */
-  .landing-page .ui-search {
-    display: flex;
-    gap: 12px;
-    margin-bottom: 24px;
-  }
-
-  .landing-page .ui-search-input {
-    flex: 1;
-    padding: 14px 16px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    font-size: 0.9rem;
-    color: var(--text-muted);
-    background: var(--bg-elevated);
-  }
-
-  .landing-page .ui-search-btn {
-    padding: 14px 24px;
-    background: linear-gradient(135deg, #10B981 0%, #059669 100%);
-    color: white;
-    border-radius: var(--radius-sm);
-    font-weight: 600;
-    font-size: 0.9rem;
-  }
-
-  /* Token Header */
-  .landing-page .ui-token-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-    padding-bottom: 20px;
-    border-bottom: 1px solid var(--border-light);
-  }
-
-  .landing-page .ui-token-info {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-  }
-
-  .landing-page .ui-token-icon {
-    width: 48px;
-    height: 48px;
-    background: linear-gradient(135deg, #09090B 0%, #27272A 100%);
-    border-radius: 12px;
-    display: flex;
-    align-items: center;
     justify-content: center;
-    color: white;
-    font-weight: 700;
-    font-size: 1rem;
+    gap: 60px;
+    margin-top: 60px;
+    flex-wrap: wrap;
   }
 
-  .landing-page .ui-token-name {
-    font-size: 1.25rem;
-    font-weight: 700;
+  .darkness-stat {
+    text-align: center;
   }
 
-  .landing-page .ui-token-addr {
-    font-size: 0.75rem;
-    color: var(--text-muted);
-    font-family: monospace;
-  }
-
-  .landing-page .ui-signal {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .landing-page .ui-signal-badge {
-    padding: 6px 12px;
-    background: #10B981;
-    color: white;
-    border-radius: 6px;
-    font-size: 0.75rem;
-    font-weight: 700;
-  }
-
-  .landing-page .ui-score {
-    font-size: 2rem;
+  .darkness-stat-value {
+    font-size: 3rem;
     font-weight: 800;
-    color: #10B981;
+    color: var(--accent);
+    line-height: 1;
   }
 
-  /* Cards Grid */
-  .landing-page .ui-cards {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 16px;
-    margin-bottom: 20px;
-  }
-
-  .landing-page .ui-card {
-    background: var(--bg-elevated);
-    border-radius: var(--radius-sm);
-    padding: 16px;
-  }
-
-  .landing-page .ui-card-title {
-    font-size: 0.7rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--text-muted);
-    font-weight: 600;
-    margin-bottom: 12px;
-  }
-
-  .landing-page .ui-card-row {
-    display: flex;
-    justify-content: space-between;
-    font-size: 0.85rem;
-    margin-bottom: 8px;
-  }
-
-  .landing-page .ui-card-row:last-child { margin-bottom: 0; }
-
-  .landing-page .ui-card-label { color: var(--text-muted); }
-  .landing-page .ui-card-value { font-weight: 600; }
-  .landing-page .ui-card-value.green { color: #10B981; }
-  .landing-page .ui-card-value.red { color: #EF4444; }
-
-  /* Holders Section */
-  .landing-page .ui-holders {
-    background: var(--bg-elevated);
-    border-radius: var(--radius-sm);
-    padding: 16px;
-    margin-bottom: 20px;
-  }
-
-  .landing-page .ui-holders-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 16px;
-  }
-
-  .landing-page .ui-bundle-badge {
-    padding: 4px 10px;
-    background: #FEE2E2;
-    color: #DC2626;
-    border-radius: 6px;
-    font-size: 0.7rem;
-    font-weight: 700;
-  }
-
-  .landing-page .ui-holder-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 10px;
-  }
-
-  .landing-page .ui-holder-bar {
-    flex: 1;
-    height: 8px;
-    background: var(--border);
-    border-radius: 4px;
-    overflow: hidden;
-  }
-
-  .landing-page .ui-holder-fill {
-    height: 100%;
-    border-radius: 4px;
-  }
-
-  .landing-page .ui-holder-fill.normal { background: var(--accent); }
-  .landing-page .ui-holder-fill.bundle { background: #EF4444; }
-
-  .landing-page .ui-holder-pct {
+  .darkness-stat-label {
     font-size: 0.8rem;
-    font-weight: 600;
-    width: 50px;
-    text-align: right;
+    color: var(--text-dim);
+    margin-top: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
   }
 
-  .landing-page .ui-holder-pct.bundle { color: #EF4444; }
-
-  /* Buy Controls */
-  .landing-page .ui-buy {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+  /* Section: The Awakening */
+  .section-awakening {
+    background:
+      radial-gradient(ellipse at 50% 0%, rgba(220, 38, 38, 0.08) 0%, transparent 60%),
+      var(--bg-void);
   }
 
-  .landing-page .ui-amounts {
-    display: flex;
-    gap: 8px;
+  .awakening-eye {
+    width: 120px;
+    height: 120px;
+    margin: 0 auto 40px;
+    filter: drop-shadow(0 0 40px var(--accent-glow));
+    animation: awakening-glow 2s ease-in-out infinite;
   }
 
-  .landing-page .ui-amount {
-    padding: 10px 16px;
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    font-size: 0.85rem;
-    font-weight: 500;
-    color: var(--text-muted);
+  @keyframes awakening-glow {
+    0%, 100% { filter: drop-shadow(0 0 40px var(--accent-glow)); }
+    50% { filter: drop-shadow(0 0 80px var(--accent-glow)); }
   }
 
-  .landing-page .ui-amount.active {
-    background: var(--accent);
-    color: white;
-    border-color: var(--accent);
+  /* Section: The Swarm (Agents) */
+  .section-swarm {
+    background: var(--bg-void);
+    padding: 100px 24px;
   }
 
-  .landing-page .ui-buy-btn {
-    padding: 12px 32px;
-    background: linear-gradient(135deg, #10B981 0%, #059669 100%);
-    color: white;
-    border-radius: var(--radius-sm);
-    font-weight: 700;
-    font-size: 0.9rem;
+  .agents-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 24px;
+    margin-top: 60px;
+    max-width: 1200px;
+    margin-left: auto;
+    margin-right: auto;
   }
 
-  /* --- MOCKUP ANIMATION --- */
-  .landing-page .ui-search-input.typing {
-    color: var(--text-main);
-    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
-    font-size: 0.78rem;
-  }
-  .landing-page .ui-search-btn.analyzing {
-    animation: btn-pulse 0.6s ease-in-out infinite;
-  }
-  @keyframes btn-pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.6; }
-  }
-  .landing-page .mockup-results {
+  .agent-card {
+    background: var(--bg-card);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 16px;
+    padding: 32px;
+    text-align: left;
     opacity: 0;
-    transform: translateY(10px);
-    transition: opacity 0.5s ease, transform 0.5s ease;
+    transform: translateY(40px);
+    transition: opacity 0.6s ease, transform 0.6s ease, border-color 0.3s ease, box-shadow 0.3s ease;
   }
-  .landing-page .mockup-results.visible {
+
+  .agent-card.visible {
     opacity: 1;
     transform: translateY(0);
   }
-  .landing-page .mockup-results .ui-card {
-    opacity: 0;
-    transform: translateY(8px);
-    transition: opacity 0.4s ease, transform 0.4s ease;
-  }
-  .landing-page .mockup-results.visible .ui-card:nth-child(1) { opacity: 1; transform: translateY(0); transition-delay: 0.15s; }
-  .landing-page .mockup-results.visible .ui-card:nth-child(2) { opacity: 1; transform: translateY(0); transition-delay: 0.3s; }
-  .landing-page .mockup-results.visible .ui-card:nth-child(3) { opacity: 1; transform: translateY(0); transition-delay: 0.45s; }
-  .landing-page .mockup-analyzing {
-    text-align: center;
-    padding: 40px 0;
-    color: var(--accent);
-    font-size: 0.9rem;
-    font-weight: 600;
+
+  .agent-card:hover {
+    border-color: rgba(255, 255, 255, 0.1);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
   }
 
-  /* --- FEATURES GRID --- */
-  .landing-page .features {
-    padding: 100px 0;
-    border-top: 1px solid var(--border);
-  }
+  .agent-card:nth-child(1) { transition-delay: 0.1s; }
+  .agent-card:nth-child(2) { transition-delay: 0.2s; }
+  .agent-card:nth-child(3) { transition-delay: 0.3s; }
+  .agent-card:nth-child(4) { transition-delay: 0.4s; }
 
-  .landing-page .section-header {
-    text-align: center;
-    margin-bottom: 60px;
-  }
-
-  .landing-page .section-header h2 {
-    font-size: 2.5rem;
-    font-weight: 800;
-    letter-spacing: -0.03em;
-    margin-bottom: 16px;
-    color: var(--accent);
-  }
-
-  .landing-page .section-header p {
-    font-size: 1.1rem;
-    color: var(--text-muted);
-    max-width: 500px;
-    margin: 0 auto;
-  }
-
-  .landing-page .feature-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 24px;
-  }
-
-  .landing-page .feature-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    padding: 32px;
-    border-radius: var(--radius-lg);
-    transition: all 0.2s;
-  }
-
-  .landing-page .feature-card:hover {
-    border-color: var(--accent);
-    transform: translateY(-4px);
-    box-shadow: 0 12px 40px rgba(16, 185, 129, 0.15);
-  }
-
-  .landing-page .icon-bg {
-    width: 52px;
-    height: 52px;
-    background: var(--accent-glow);
-    border-radius: 12px;
+  .agent-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 14px;
     display: flex;
     align-items: center;
     justify-content: center;
     margin-bottom: 20px;
-    color: var(--accent);
   }
 
-  .landing-page .card-title {
-    font-size: 1.15rem;
+  .agent-icon.scout { background: linear-gradient(135deg, var(--purple) 0%, #5B21B6 100%); }
+  .agent-icon.analyst { background: linear-gradient(135deg, var(--accent) 0%, #991B1B 100%); }
+  .agent-icon.hunter { background: linear-gradient(135deg, var(--amber) 0%, #D97706 100%); }
+  .agent-icon.trader { background: linear-gradient(135deg, var(--emerald) 0%, #16A34A 100%); }
+
+  .agent-name {
+    font-size: 1.25rem;
     font-weight: 700;
-    margin-bottom: 10px;
-    letter-spacing: -0.01em;
-    color: var(--accent);
+    margin-bottom: 8px;
+    color: var(--text-main);
   }
 
-  .landing-page .card-desc {
+  .agent-role {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 16px;
+  }
+
+  .agent-desc {
     font-size: 0.95rem;
     color: var(--text-muted);
     line-height: 1.6;
   }
 
-  /* --- STATS --- */
-  .landing-page .stats {
-    padding: 60px 0;
-    background: var(--bg-elevated);
-    border-top: 1px solid var(--border);
-    border-bottom: 1px solid var(--border);
+  /* Section: The Hunt (How it works) */
+  .section-hunt {
+    background:
+      radial-gradient(ellipse at 30% 50%, rgba(124, 58, 237, 0.05) 0%, transparent 50%),
+      radial-gradient(ellipse at 70% 50%, rgba(220, 38, 38, 0.05) 0%, transparent 50%),
+      var(--bg-void);
   }
 
-  .landing-page .stats-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 32px;
-    text-align: center;
+  .hunt-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+    margin-top: 60px;
+    max-width: 700px;
+    margin-left: auto;
+    margin-right: auto;
   }
 
-  .landing-page .stat-value {
-    font-size: 2.5rem;
-    font-weight: 800;
-    letter-spacing: -0.03em;
-    margin-bottom: 4px;
-    color: var(--accent);
+  .hunt-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 24px;
+    text-align: left;
+    opacity: 0;
+    transform: translateX(-40px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
   }
 
-  .landing-page .stat-label {
-    font-size: 0.9rem;
-    color: var(--text-muted);
-    font-weight: 500;
+  .hunt-step.visible {
+    opacity: 1;
+    transform: translateX(0);
   }
 
-  /* --- TOKEN TEASER --- */
-  .landing-page .token-teaser {
-    padding: 80px 0;
-    background: linear-gradient(135deg, #09090B 0%, #18181B 100%);
-    border-top: 1px solid var(--border);
-    border-bottom: 1px solid var(--border);
-  }
+  .hunt-step:nth-child(1) { transition-delay: 0.1s; }
+  .hunt-step:nth-child(2) { transition-delay: 0.2s; }
+  .hunt-step:nth-child(3) { transition-delay: 0.3s; }
+  .hunt-step:nth-child(4) { transition-delay: 0.4s; }
 
-  .landing-page .teaser-content {
-    max-width: 800px;
-    margin: 0 auto;
-    text-align: center;
-  }
-
-  .landing-page .teaser-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 16px;
-    background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);
+  .hunt-step-num {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--accent);
     color: white;
-    border-radius: 99px;
-    font-size: 0.8rem;
     font-weight: 700;
-    margin-bottom: 24px;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
+    font-size: 1.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    box-shadow: 0 0 30px var(--accent-dim);
   }
 
-  .landing-page .teaser-content h2 {
-    font-size: 2.5rem;
-    font-weight: 800;
-    margin-bottom: 16px;
-    letter-spacing: -0.03em;
-    color: var(--accent);
-  }
-
-  .landing-page .teaser-content p {
+  .hunt-step-content h4 {
     font-size: 1.1rem;
-    color: var(--text-muted);
-    margin-bottom: 32px;
-    line-height: 1.7;
-  }
-
-  .landing-page .ca-box {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    padding: 24px;
-    margin-bottom: 32px;
-  }
-
-  .landing-page .ca-label {
-    font-size: 0.85rem;
-    color: var(--text-muted);
-    margin-bottom: 12px;
     font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+    margin-bottom: 8px;
+    color: var(--text-main);
   }
 
-  .landing-page .ca-address {
-    font-family: 'Courier New', monospace;
-    font-size: 1.1rem;
-    color: var(--accent);
-    font-weight: 700;
-    word-break: break-all;
+  .hunt-step-content p {
+    font-size: 0.95rem;
+    color: var(--text-muted);
+    line-height: 1.6;
   }
 
-  .landing-page .teaser-benefits {
+  /* Section: The Arsenal (Features) */
+  .section-arsenal {
+    background: var(--bg-dark);
+    padding: 100px 24px;
+  }
+
+  .arsenal-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 24px;
-    margin-bottom: 32px;
+    gap: 16px;
+    margin-top: 60px;
+    max-width: 1000px;
+    margin-left: auto;
+    margin-right: auto;
   }
 
-  .landing-page .benefit-item {
+  @media (max-width: 900px) {
+    .arsenal-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  @media (max-width: 600px) {
+    .arsenal-grid { grid-template-columns: 1fr; }
+  }
+
+  .arsenal-item {
     background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    padding: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.03);
+    border-radius: 12px;
+    padding: 24px;
+    opacity: 0;
+    transform: scale(0.95);
+    transition: opacity 0.5s ease, transform 0.5s ease, border-color 0.3s ease;
   }
 
-  .landing-page .benefit-icon {
-    font-size: 1.5rem;
-    margin-bottom: 12px;
-    color: var(--accent);
+  .arsenal-item.visible {
+    opacity: 1;
+    transform: scale(1);
   }
 
-  .landing-page .benefit-title {
+  .arsenal-item:hover {
+    border-color: rgba(220, 38, 38, 0.3);
+  }
+
+  .arsenal-item h5 {
     font-size: 0.95rem;
-    font-weight: 700;
-    color: var(--accent);
-    margin-bottom: 6px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--text-main);
   }
 
-  .landing-page .benefit-desc {
+  .arsenal-item p {
     font-size: 0.85rem;
     color: var(--text-muted);
     line-height: 1.5;
   }
 
-  /* --- FOOTER --- */
-  .landing-page footer {
-    padding: 60px 0 40px;
-    text-align: center;
+  /* Section: The Compression Engine */
+  .section-engine {
+    background:
+      radial-gradient(ellipse at 50% 100%, rgba(220, 38, 38, 0.1) 0%, transparent 50%),
+      var(--bg-void);
+    padding: 100px 24px;
   }
 
-  .landing-page .footer-logo {
-    display: inline-flex;
-    align-items: center;
-    gap: 12px;
-    font-weight: 800;
-    font-size: 1.4rem;
-    margin-bottom: 24px;
-  }
-
-  .landing-page .footer-links {
-    display: flex;
-    justify-content: center;
-    gap: 32px;
-    margin-bottom: 32px;
-  }
-
-  .landing-page .footer-links a {
-    font-size: 0.9rem;
-    color: var(--text-muted);
-    font-weight: 500;
-  }
-
-  .landing-page .footer-links a:hover { color: var(--text-main); }
-
-  .landing-page .copyright {
-    font-size: 0.85rem;
-    color: #A1A1AA;
-  }
-
-  /* --- HOW IT WORKS --- */
-  .landing-page .how-it-works {
-    padding: 100px 0;
-    background: var(--bg-elevated);
-    border-top: 1px solid var(--border);
-  }
-
-  .landing-page .steps-grid {
+  .engine-stats {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 32px;
-    position: relative;
+    gap: 24px;
+    margin-top: 60px;
+    max-width: 900px;
+    margin-left: auto;
+    margin-right: auto;
   }
 
-  .landing-page .steps-grid::before {
-    content: '';
-    position: absolute;
-    top: 40px;
-    left: 60px;
-    right: 60px;
-    height: 2px;
-    background: var(--border);
+  @media (max-width: 700px) {
+    .engine-stats { grid-template-columns: repeat(2, 1fr); }
   }
 
-  .landing-page .step {
+  .engine-stat {
     text-align: center;
-    position: relative;
-  }
-
-  .landing-page .step-number {
-    width: 80px;
-    height: 80px;
-    background: linear-gradient(135deg, #09090B 0%, #27272A 100%);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin: 0 auto 24px;
-    font-size: 1.5rem;
-    font-weight: 800;
-    color: white;
-    position: relative;
-    z-index: 1;
-  }
-
-  .landing-page .step-title {
-    font-size: 1.1rem;
-    font-weight: 700;
-    margin-bottom: 8px;
-    color: var(--accent);
-  }
-
-  .landing-page .step-desc {
-    font-size: 0.9rem;
-    color: var(--text-muted);
-    line-height: 1.6;
-  }
-
-  /* --- TOKENOMICS --- */
-  .landing-page .tokenomics {
-    padding: 100px 0;
-    border-top: 1px solid var(--border);
-  }
-
-  .landing-page .token-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 60px;
-    align-items: center;
-  }
-
-  .landing-page .token-info h3 {
-    font-size: 1.8rem;
-    font-weight: 800;
-    margin-bottom: 16px;
-    letter-spacing: -0.02em;
-    color: var(--accent);
-  }
-
-  .landing-page .token-info p {
-    font-size: 1rem;
-    color: var(--text-muted);
-    line-height: 1.7;
-    margin-bottom: 24px;
-  }
-
-  .landing-page .token-stats {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 16px;
-  }
-
-  .landing-page .token-stat {
-    background: var(--bg-elevated);
-    padding: 20px;
-    border-radius: var(--radius-md);
-    border: 1px solid var(--border);
-  }
-
-  .landing-page .token-stat-value {
-    font-size: 1.5rem;
-    font-weight: 800;
-    color: var(--accent);
-    margin-bottom: 4px;
-  }
-
-  .landing-page .token-stat-label {
-    font-size: 0.85rem;
-    color: var(--text-muted);
-  }
-
-  .landing-page .token-chart {
+    padding: 32px 16px;
     background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    padding: 32px;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.03);
+    opacity: 0;
+    transform: translateY(30px);
+    transition: opacity 0.5s ease, transform 0.5s ease;
   }
 
-  .landing-page .chart-title {
-    font-size: 1rem;
-    font-weight: 700;
-    margin-bottom: 24px;
-    text-align: center;
-    color: var(--accent);
+  .engine-stat.visible {
+    opacity: 1;
+    transform: translateY(0);
   }
 
-  .landing-page .chart-bars {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
+  .engine-stat-value {
+    font-size: 2.5rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--accent) 0%, #EF4444 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    line-height: 1;
+    margin-bottom: 8px;
   }
 
-  .landing-page .chart-bar {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-  }
-
-  .landing-page .chart-label {
-    width: 120px;
-    font-size: 0.85rem;
+  .engine-stat-label {
+    font-size: 0.8rem;
     color: var(--text-muted);
   }
 
-  .landing-page .chart-track {
-    flex: 1;
-    height: 24px;
-    background: var(--border);
-    border-radius: 12px;
-    overflow: hidden;
+  /* Section: Pricing */
+  .section-pricing {
+    background: var(--bg-dark);
+    padding: 100px 24px;
   }
 
-  .landing-page .chart-fill {
-    height: 100%;
-    border-radius: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    padding-right: 12px;
-    font-size: 0.75rem;
-    font-weight: 700;
-    color: white;
-  }
-
-  .landing-page .chart-fill.community { background: linear-gradient(135deg, #10B981 0%, #059669 100%); }
-  .landing-page .chart-fill.development { background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%); }
-  .landing-page .chart-fill.team { background: linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%); }
-  .landing-page .chart-fill.liquidity { background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%); }
-  .landing-page .chart-fill.reserve { background: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%); }
-
-  /* --- ROADMAP --- */
-  .landing-page .roadmap {
-    padding: 100px 0;
-    background: var(--bg-elevated);
-    border-top: 1px solid var(--border);
-  }
-
-  /* Timeline spine */
-  .landing-page .roadmap-timeline {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 48px;
-    padding: 0 40px;
-    position: relative;
-  }
-
-  .landing-page .roadmap-node {
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    position: relative;
-    z-index: 1;
-  }
-
-  .landing-page .roadmap-node.done {
-    background: linear-gradient(135deg, #10B981, #059669);
-    box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
-  }
-
-  .landing-page .roadmap-node.active {
-    background: transparent;
-    border: 3px solid #10B981;
-    box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
-    animation: roadmap-pulse 2s ease-in-out infinite;
-  }
-  .landing-page .roadmap-node.active::after {
-    content: '';
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    background: #10B981;
-  }
-
-  .landing-page .roadmap-node.upcoming {
-    background: transparent;
-    border: 2px solid #3F3F46;
-  }
-  .landing-page .roadmap-node.upcoming::after {
-    content: '';
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: #3F3F46;
-  }
-
-  @keyframes roadmap-pulse {
-    0%, 100% { box-shadow: 0 0 20px rgba(16, 185, 129, 0.3); }
-    50% { box-shadow: 0 0 30px rgba(16, 185, 129, 0.6), 0 0 60px rgba(16, 185, 129, 0.2); }
-  }
-
-  .landing-page .roadmap-segment {
-    flex: 1;
-    height: 2px;
-    max-width: 200px;
-  }
-  .landing-page .roadmap-segment.done {
-    background: linear-gradient(90deg, #10B981, #059669);
-  }
-  .landing-page .roadmap-segment.upcoming {
-    background: repeating-linear-gradient(
-      90deg,
-      #3F3F46 0px,
-      #3F3F46 8px,
-      transparent 8px,
-      transparent 16px
-    );
-  }
-
-  .landing-page .roadmap-node-label {
-    position: absolute;
-    top: -28px;
-    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
-    font-size: 0.65rem;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    white-space: nowrap;
-    color: var(--text-muted);
-  }
-  .landing-page .roadmap-node.done .roadmap-node-label { color: #10B981; }
-  .landing-page .roadmap-node.active .roadmap-node-label { color: #10B981; }
-
-  /* Phase cards */
-  .landing-page .roadmap-phases {
+  .pricing-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 24px;
+    margin-top: 60px;
+    max-width: 1000px;
+    margin-left: auto;
+    margin-right: auto;
   }
 
-  .landing-page .roadmap-card {
+  @media (max-width: 900px) {
+    .pricing-grid { grid-template-columns: 1fr; max-width: 400px; }
+  }
+
+  .pricing-card {
     background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    padding: 28px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 16px;
+    padding: 32px;
+    text-align: center;
+    opacity: 0;
+    transform: translateY(30px);
+    transition: opacity 0.5s ease, transform 0.5s ease, border-color 0.3s ease;
+  }
+
+  .pricing-card.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .pricing-card:nth-child(1) { transition-delay: 0.1s; }
+  .pricing-card:nth-child(2) { transition-delay: 0.2s; }
+  .pricing-card:nth-child(3) { transition-delay: 0.3s; }
+
+  .pricing-card.featured {
+    border-color: var(--accent);
+    box-shadow: 0 0 40px var(--accent-dim);
     position: relative;
   }
 
-  .landing-page .roadmap-card.active-card {
-    border-color: rgba(16, 185, 129, 0.4);
-    background: linear-gradient(180deg, rgba(16, 185, 129, 0.04) 0%, var(--bg-card) 100%);
+  .pricing-card.featured::before {
+    content: 'RECOMMENDED';
+    position: absolute;
+    top: -12px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--accent);
+    color: white;
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 4px 12px;
+    border-radius: 4px;
+    letter-spacing: 0.1em;
   }
 
-  .landing-page .roadmap-phase-label {
-    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
-    font-size: 0.72rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
+  .pricing-tier {
+    font-size: 0.8rem;
     text-transform: uppercase;
-    color: var(--text-muted);
-    margin-bottom: 6px;
-  }
-  .landing-page .roadmap-card.active-card .roadmap-phase-label { color: #10B981; }
-
-  .landing-page .roadmap-title {
-    font-size: 1.2rem;
-    font-weight: 700;
-    color: var(--text-main);
-    margin-bottom: 12px;
-  }
-
-  .landing-page .roadmap-status {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 10px;
-    border-radius: 6px;
-    font-size: 0.68rem;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--text-dim);
     margin-bottom: 16px;
   }
-  .landing-page .roadmap-status.complete {
-    background: rgba(16, 185, 129, 0.12);
-    color: #10B981;
-  }
-  .landing-page .roadmap-status.in-progress {
-    background: rgba(245, 158, 11, 0.12);
-    color: #F59E0B;
-  }
-  .landing-page .roadmap-status.upcoming-status {
-    background: rgba(113, 113, 122, 0.12);
-    color: #71717A;
-  }
 
-  .landing-page .roadmap-status-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-  }
-  .landing-page .roadmap-status.complete .roadmap-status-dot { background: #10B981; }
-  .landing-page .roadmap-status.in-progress .roadmap-status-dot { background: #F59E0B; animation: pulse 2s infinite; }
-  .landing-page .roadmap-status.upcoming-status .roadmap-status-dot { background: #71717A; }
-
-  /* Progress bar */
-  .landing-page .roadmap-progress {
-    width: 100%;
-    height: 3px;
-    background: #27272A;
-    border-radius: 2px;
-    margin-bottom: 20px;
-    overflow: hidden;
-  }
-  .landing-page .roadmap-progress-fill {
-    height: 100%;
-    border-radius: 2px;
-    background: linear-gradient(90deg, #10B981, #059669);
-    transition: width 1s ease;
-  }
-
-  /* Items */
-  .landing-page .roadmap-list {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .landing-page .roadmap-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 0.85rem;
-    color: var(--text-main);
-  }
-
-  .landing-page .roadmap-badge {
-    display: inline-flex;
-    padding: 2px 7px;
-    border-radius: 4px;
-    font-size: 0.6rem;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    flex-shrink: 0;
-    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
-  }
-  .landing-page .roadmap-badge.shipped {
-    background: rgba(16, 185, 129, 0.12);
-    color: #10B981;
-  }
-  .landing-page .roadmap-badge.building {
-    background: rgba(245, 158, 11, 0.12);
-    color: #F59E0B;
-  }
-  .landing-page .roadmap-badge.planned {
-    background: rgba(113, 113, 122, 0.1);
-    color: #52525B;
-  }
-
-  .landing-page .roadmap-item.dim {
-    color: var(--text-muted);
-  }
-
-  /* --- TEAM --- */
-  .landing-page .team {
-    padding: 100px 0;
-    border-top: 1px solid var(--border);
-  }
-
-  .landing-page .team-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 24px;
-    max-width: 900px;
-    margin: 0 auto;
-  }
-
-  .landing-page .team-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    padding: 36px;
-    display: flex;
-    gap: 24px;
-    align-items: flex-start;
-    transition: border-color 0.2s;
-  }
-  .landing-page .team-card:hover {
-    border-color: rgba(16, 185, 129, 0.3);
-  }
-
-  .landing-page .team-avatar {
-    width: 64px;
-    height: 64px;
-    background: linear-gradient(135deg, var(--bg-elevated) 0%, var(--border) 100%);
-    border-radius: 16px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.4rem;
+  .pricing-price {
+    font-size: 2.5rem;
     font-weight: 800;
-    color: var(--accent);
-    border: 1px solid var(--border);
-    flex-shrink: 0;
-  }
-
-  .landing-page .team-info {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .landing-page .team-name {
-    font-size: 1.15rem;
-    font-weight: 700;
-    margin-bottom: 4px;
     color: var(--text-main);
+    line-height: 1;
+    margin-bottom: 8px;
   }
 
-  .landing-page .team-role {
-    display: inline-block;
-    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
-    font-size: 0.74rem;
-    font-weight: 600;
-    color: var(--accent);
-    background: rgba(16, 185, 129, 0.1);
-    padding: 3px 10px;
-    border-radius: 4px;
-    margin-bottom: 12px;
-  }
-
-  .landing-page .team-bio {
-    font-size: 0.92rem;
+  .pricing-price span {
+    font-size: 1rem;
+    font-weight: 400;
     color: var(--text-muted);
-    line-height: 1.6;
-    margin-bottom: 14px;
   }
 
-  .landing-page .team-social {
-    display: flex;
-    gap: 8px;
+  .pricing-desc {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-bottom: 24px;
   }
 
-  .landing-page .team-social a {
-    width: 30px;
-    height: 30px;
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
-    border-radius: 8px;
+  .pricing-features {
+    text-align: left;
+    margin-bottom: 24px;
+  }
+
+  .pricing-features li {
     display: flex;
     align-items: center;
-    justify-content: center;
+    gap: 10px;
+    font-size: 0.9rem;
     color: var(--text-muted);
-    transition: all 0.2s;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
   }
 
-  .landing-page .team-social a:hover {
-    background: var(--accent);
-    border-color: var(--accent);
+  .pricing-features li:last-child {
+    border-bottom: none;
+  }
+
+  .pricing-features .check {
+    color: var(--emerald);
+    font-size: 0.8rem;
+  }
+
+  .pricing-features .limit {
+    color: var(--text-dim);
+  }
+
+  .pricing-cta {
+    display: block;
+    padding: 14px 24px;
+    border-radius: 10px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: all 0.2s ease;
+  }
+
+  .pricing-cta-primary {
+    background: linear-gradient(135deg, var(--accent) 0%, #991B1B 100%);
     color: white;
   }
 
-  /* --- CTA SECTION --- */
-  .landing-page .cta {
-    padding: 100px 0;
-    background: linear-gradient(135deg, #09090B 0%, #18181B 100%);
+  .pricing-cta-primary:hover {
+    box-shadow: 0 4px 20px var(--accent-dim);
+    transform: translateY(-2px);
+  }
+
+  .pricing-cta-outline {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-muted);
+  }
+
+  .pricing-cta-outline:hover {
+    border-color: var(--accent);
+    color: var(--text-main);
+  }
+
+  .pricing-note {
     text-align: center;
-  }
-
-  .landing-page .cta h2 {
-    font-size: 2.5rem;
-    font-weight: 800;
-    color: var(--accent);
-    margin-bottom: 16px;
-    letter-spacing: -0.03em;
-  }
-
-  .landing-page .cta p {
-    font-size: 1.1rem;
-    color: #A1A1AA;
-    margin-bottom: 32px;
+    margin-top: 40px;
+    font-size: 0.85rem;
+    color: var(--text-dim);
     max-width: 500px;
     margin-left: auto;
     margin-right: auto;
   }
 
-  .landing-page .cta .btn-accent {
-    background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+  /* Section: Join */
+  .section-join {
+    background: var(--bg-void);
+    padding: 120px 24px;
+    text-align: center;
+  }
+
+  .join-eye {
+    width: 80px;
+    height: 80px;
+    margin: 0 auto 40px;
+    filter: drop-shadow(0 0 30px var(--accent-glow));
+    animation: awakening-glow 2s ease-in-out infinite;
+  }
+
+  .join-cta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 18px 48px;
+    background: linear-gradient(135deg, var(--accent) 0%, #991B1B 100%);
     color: white;
-    padding: 16px 40px;
     font-size: 1rem;
-  }
-
-  .landing-page .cta .btn-accent:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 24px rgba(16, 185, 129, 0.3);
-  }
-
-  /* --- COMPARISON SECTION --- */
-  .landing-page .comparison {
-    padding: 100px 0;
-    border-top: 1px solid var(--border-light);
-  }
-
-  .landing-page .category-badge {
-    display: inline-block;
-    padding: 6px 14px;
-    background: var(--accent-glow);
-    border: 1px solid rgba(16, 185, 129, 0.3);
-    border-radius: 20px;
-    font-size: 0.8rem;
     font-weight: 600;
-    color: var(--accent);
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    margin-bottom: 16px;
+    border-radius: 12px;
+    margin-top: 40px;
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    text-decoration: none;
+    box-shadow: 0 4px 30px var(--accent-dim);
   }
 
-  .landing-page .comparison-table-wrap {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    margin: 0 -24px;
-    padding: 0 24px;
+  .join-cta:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 40px var(--accent-glow);
   }
 
-  .landing-page .comparison-table {
-    width: 100%;
-    min-width: 700px;
-    border-collapse: collapse;
-    font-size: 0.9rem;
-  }
-
-  .landing-page .comparison-table th {
-    padding: 14px 16px;
-    text-align: center;
-    font-weight: 600;
-    font-size: 0.85rem;
-    color: var(--text-muted);
-    border-bottom: 1px solid var(--border);
-    white-space: nowrap;
-  }
-
-  .landing-page .comparison-table th:first-child {
-    text-align: left;
-    color: var(--text-main);
-    font-size: 0.9rem;
-  }
-
-  .landing-page .comparison-table th.highlight {
-    color: var(--accent);
-    position: relative;
-  }
-
-  .landing-page .comparison-table td {
-    padding: 14px 16px;
-    text-align: center;
-    border-bottom: 1px solid var(--border-light);
-    color: var(--text-muted);
-  }
-
-  .landing-page .comparison-table td:first-child {
-    text-align: left;
-    color: var(--text-main);
-    font-weight: 500;
-  }
-
-  .landing-page .comparison-table td.highlight {
-    background: rgba(16, 185, 129, 0.04);
-  }
-
-  .landing-page .comparison-table tr:last-child td {
-    border-bottom: none;
-  }
-
-  .landing-page .comparison-table .check {
-    color: var(--accent);
-    font-size: 1.1rem;
-  }
-
-  .landing-page .comparison-table .dash {
-    color: #3F3F46;
-  }
-
-  .landing-page .comparison-table .exclusive {
-    color: var(--accent);
-    font-weight: 600;
-    font-size: 0.8rem;
-    letter-spacing: 0.02em;
-  }
-
-  /* Stagger reveal on comparison rows */
-  .landing-page .comparison-table tbody tr {
-    opacity: 0;
-    transform: translateY(12px);
-    transition: opacity 0.4s ease, transform 0.4s ease;
-  }
-  .landing-page .comparison.visible .comparison-table tbody tr {
-    opacity: 1;
-    transform: translateY(0);
-  }
-  .landing-page .comparison.visible .comparison-table tbody tr:nth-child(1) { transition-delay: 0.1s; }
-  .landing-page .comparison.visible .comparison-table tbody tr:nth-child(2) { transition-delay: 0.2s; }
-  .landing-page .comparison.visible .comparison-table tbody tr:nth-child(3) { transition-delay: 0.3s; }
-  .landing-page .comparison.visible .comparison-table tbody tr:nth-child(4) { transition-delay: 0.4s; }
-  .landing-page .comparison.visible .comparison-table tbody tr:nth-child(5) { transition-delay: 0.5s; }
-  .landing-page .comparison.visible .comparison-table tbody tr:nth-child(6) { transition-delay: 0.6s; }
-  .landing-page .comparison.visible .comparison-table tbody tr:nth-child(7) { transition-delay: 0.7s; }
-
-  .landing-page .comparison-callout {
-    display: flex;
-    align-items: flex-start;
-    gap: 20px;
-    margin-top: 48px;
-    padding: 28px 32px;
-    background: linear-gradient(135deg, rgba(16, 185, 129, 0.06) 0%, rgba(16, 185, 129, 0.02) 100%);
-    border: 1px solid rgba(16, 185, 129, 0.15);
-    border-radius: var(--radius-lg);
-  }
-
-  .landing-page .callout-icon {
-    flex-shrink: 0;
-    width: 48px;
-    height: 48px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--accent-glow);
-    border-radius: var(--radius-md);
-    color: var(--accent);
-    font-size: 1.2rem;
-  }
-
-  .landing-page .callout-content h4 {
-    font-size: 1.05rem;
-    font-weight: 600;
-    margin: 0 0 6px;
-    color: var(--text-main);
-  }
-
-  .landing-page .callout-content p {
-    font-size: 0.9rem;
-    color: var(--text-muted);
-    margin: 0;
-    line-height: 1.6;
-  }
-
-  /* --- TRADING SHOWCASE --- */
-  .landing-page .trading-showcase {
-    padding: 100px 0;
-    background: var(--bg-body);
-    border-top: 1px solid var(--border);
-  }
-
-  .landing-page .trading-showcase .ui-mockup {
-    position: relative;
-    z-index: 1;
-  }
-
-  .landing-page .ui-trade-row {
-    display: flex;
+  .join-secondary {
+    display: inline-flex;
     align-items: center;
     gap: 8px;
-    flex-wrap: wrap;
-    margin-bottom: 16px;
-  }
-
-  .landing-page .ui-trade-row-label {
-    font-size: 0.85rem;
+    padding: 14px 28px;
+    background: transparent;
     color: var(--text-muted);
+    font-size: 0.9rem;
     font-weight: 500;
-    margin-right: 4px;
-    white-space: nowrap;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    margin-top: 16px;
+    margin-left: 12px;
+    cursor: pointer;
+    transition: border-color 0.2s ease, color 0.2s ease;
+    text-decoration: none;
   }
 
-  .landing-page .ui-trade-btn {
-    padding: 8px 14px;
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: var(--text-muted);
-  }
-
-  .landing-page .ui-trade-btn.active {
-    background: var(--accent);
-    color: white;
+  .join-secondary:hover {
     border-color: var(--accent);
-  }
-
-  .landing-page .ui-trade-btn.active-red {
-    background: #EF4444;
-    color: white;
-    border-color: #EF4444;
-  }
-
-  .landing-page .ui-trade-actions {
-    display: flex;
-    gap: 8px;
-    margin-left: auto;
-  }
-
-  .landing-page .ui-action-sell {
-    padding: 10px 24px;
-    background: #EF4444;
-    color: white;
-    border-radius: var(--radius-sm);
-    font-weight: 700;
-    font-size: 0.85rem;
-  }
-
-  .landing-page .ui-action-buy {
-    padding: 10px 24px;
-    background: linear-gradient(135deg, #10B981 0%, #059669 100%);
-    color: white;
-    border-radius: var(--radius-sm);
-    font-weight: 700;
-    font-size: 0.85rem;
-  }
-
-  .landing-page .ui-settings-row {
-    display: flex;
-    gap: 40px;
-    margin-bottom: 16px;
-    flex-wrap: wrap;
-  }
-
-  .landing-page .ui-settings-group {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    flex: 1;
-    min-width: 200px;
-  }
-
-  .landing-page .ui-settings-label {
-    font-size: 0.75rem;
-    color: var(--text-muted);
-    font-weight: 500;
-  }
-
-  .landing-page .ui-settings-options {
-    display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
-  }
-
-  .landing-page .ui-autosell {
-    background: var(--bg-elevated);
-    border-radius: var(--radius-sm);
-    padding: 16px;
-    margin-bottom: 20px;
-  }
-
-  .landing-page .ui-autosell-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 14px;
-  }
-
-  .landing-page .ui-autosell-title {
-    font-size: 0.85rem;
-    font-weight: 600;
     color: var(--text-main);
   }
 
-  .landing-page .ui-toggle {
-    width: 40px;
-    height: 22px;
-    background: var(--accent);
-    border-radius: 11px;
-    position: relative;
+  /* Footer */
+  .landing-footer {
+    background: var(--bg-dark);
+    border-top: 1px solid rgba(255, 255, 255, 0.03);
+    padding: 40px 24px;
+    text-align: center;
   }
 
-  .landing-page .ui-toggle::after {
-    content: '';
-    position: absolute;
-    top: 3px;
-    right: 3px;
-    width: 16px;
-    height: 16px;
-    background: white;
-    border-radius: 50%;
-  }
-
-  .landing-page .ui-autosell-groups {
+  .footer-links {
     display: flex;
-    gap: 24px;
-    flex-wrap: wrap;
-  }
-
-  .landing-page .ui-autosell-group {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .landing-page .ui-autosell-group-label {
-    font-size: 0.7rem;
-    color: var(--text-muted);
-    font-weight: 500;
-  }
-
-  .landing-page .ui-autosell-options {
-    display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
-  }
-
-  .landing-page .ui-positions {
-    margin-top: 20px;
-  }
-
-  .landing-page .ui-positions-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 16px;
-  }
-
-  .landing-page .ui-positions-title {
-    font-size: 1.1rem;
-    font-weight: 700;
-    color: var(--accent);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .landing-page .ui-positions-badge {
-    width: 20px;
-    height: 20px;
-    background: var(--accent);
-    color: white;
-    border-radius: 50%;
-    font-size: 0.7rem;
-    font-weight: 700;
-    display: flex;
-    align-items: center;
     justify-content: center;
+    gap: 32px;
+    flex-wrap: wrap;
+    margin-bottom: 24px;
   }
 
-  .landing-page .ui-positions-summary {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    font-size: 0.8rem;
+  .footer-links a {
     color: var(--text-muted);
-  }
-
-  .landing-page .ui-positions-pnl {
-    color: #EF4444;
-    font-weight: 600;
-  }
-
-  .landing-page .ui-pos-actions {
-    display: flex;
-    gap: 8px;
-  }
-
-  .landing-page .ui-pos-action-btn {
-    padding: 6px 14px;
-    border-radius: var(--radius-sm);
-    font-size: 0.75rem;
-    font-weight: 600;
-  }
-
-  .landing-page .ui-pos-action-btn.sell {
-    background: #EF4444;
-    color: white;
-  }
-
-  .landing-page .ui-pos-action-btn.clear {
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
-    color: var(--text-main);
-  }
-
-  .landing-page .ui-positions-table {
-    width: 100%;
-    border-collapse: collapse;
-  }
-
-  .landing-page .ui-positions-table th {
-    padding: 10px 12px;
-    text-align: left;
-    font-size: 0.7rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--text-muted);
-    font-weight: 600;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .landing-page .ui-positions-table td {
-    padding: 14px 12px;
     font-size: 0.85rem;
+    text-decoration: none;
+    transition: color 0.2s ease;
+  }
+
+  .footer-links a:hover {
     color: var(--text-main);
-    font-weight: 500;
-    border-bottom: 1px solid var(--border-light);
   }
 
-  .landing-page .ui-positions-table td.token-name {
-    font-weight: 700;
-  }
-
-  .landing-page .ui-positions-table td.pnl-positive {
-    color: var(--accent);
-    font-weight: 700;
-  }
-
-  .landing-page .ui-pos-sell-btn {
-    padding: 6px 16px;
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
+  .footer-copy {
     font-size: 0.8rem;
-    font-weight: 600;
-    color: var(--text-main);
+    color: var(--text-dim);
   }
 
-  /* --- PRICING SECTION --- */
-  .landing-page .pricing {
-    padding: 100px 0;
-    border-top: 1px solid var(--border);
-  }
-
-  .landing-page .pricing-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 24px;
-    margin-top: 48px;
-  }
-
-  .landing-page .pricing-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    padding: 32px;
-    position: relative;
-    transition: all 0.3s ease;
-  }
-
-  .landing-page .pricing-card:hover {
-    transform: translateY(-4px);
-    border-color: var(--border-light);
-  }
-
-  .landing-page .pricing-card.featured {
-    border-color: var(--accent);
-    background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(16, 185, 129, 0.02) 100%);
-  }
-
-  .landing-page .pricing-card.featured::before {
-    content: 'BEST VALUE';
-    position: absolute;
-    top: -12px;
+  /* Scroll indicator */
+  .scroll-indicator {
+    position: fixed;
+    bottom: 30px;
     left: 50%;
     transform: translateX(-50%);
-    background: linear-gradient(135deg, #10B981 0%, #059669 100%);
-    color: white;
-    padding: 4px 16px;
-    border-radius: 20px;
-    font-size: 0.7rem;
-    font-weight: 700;
-    letter-spacing: 0.05em;
-  }
-
-  .landing-page .pricing-tier {
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-bottom: 8px;
-  }
-
-  .landing-page .pricing-card.featured .pricing-tier {
-    color: var(--accent);
-  }
-
-  .landing-page .pricing-price {
-    font-size: 2.5rem;
-    font-weight: 800;
-    color: var(--text-main);
-    margin-bottom: 8px;
-    letter-spacing: -0.02em;
-  }
-
-  .landing-page .pricing-price span {
-    font-size: 1rem;
-    font-weight: 500;
-    color: var(--text-muted);
-  }
-
-  .landing-page .pricing-desc {
-    font-size: 0.9rem;
-    color: var(--text-muted);
-    margin-bottom: 24px;
-    min-height: 44px;
-  }
-
-  .landing-page .pricing-features {
-    list-style: none;
-    padding: 0;
-    margin: 0 0 24px 0;
-  }
-
-  .landing-page .pricing-features li {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 0;
-    font-size: 0.9rem;
-    color: var(--text-muted);
-    border-bottom: 1px solid var(--border-light);
-  }
-
-  .landing-page .pricing-features li:last-child {
-    border-bottom: none;
-  }
-
-  .landing-page .pricing-features .check {
-    color: var(--accent);
-    font-size: 1rem;
-  }
-
-  .landing-page .pricing-features .limit {
-    color: #EAB308;
-  }
-
-  .landing-page .pricing-cta {
-    width: 100%;
-    padding: 14px 24px;
-    border-radius: var(--radius-md);
-    font-size: 0.9rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    text-align: center;
-    display: block;
-  }
-
-  .landing-page .pricing-cta-primary {
-    background: linear-gradient(135deg, #10B981 0%, #059669 100%);
-    color: white;
-    border: none;
-    box-shadow: 0 4px 20px rgba(16, 185, 129, 0.3);
-  }
-
-  .landing-page .pricing-cta-primary:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 30px rgba(16, 185, 129, 0.4);
-  }
-
-  .landing-page .pricing-cta-outline {
-    background: transparent;
-    color: var(--text-main);
-    border: 1px solid var(--border);
-  }
-
-  .landing-page .pricing-cta-outline:hover {
-    border-color: var(--accent);
-    background: var(--accent-glow);
-  }
-
-  .landing-page .pricing-note {
-    text-align: center;
-    margin-top: 32px;
-    font-size: 0.85rem;
-    color: var(--text-muted);
-  }
-
-  .landing-page .pricing-note strong {
-    color: var(--accent);
-  }
-
-  /* --- RESPONSIVE --- */
-  @media (max-width: 900px) {
-    .landing-page .hero h1 { font-size: 2.5rem; }
-    .landing-page .ui-cards { grid-template-columns: 1fr; }
-    .landing-page .feature-grid { grid-template-columns: 1fr; }
-    .landing-page .stats-grid { grid-template-columns: repeat(2, 1fr); }
-    .landing-page .token-ticker { gap: 16px; padding: 12px 20px; }
-    .landing-page .ticker-value { font-size: 1rem; }
-    .landing-page .nav-links { display: none; }
-    .landing-page .hamburger { display: flex; }
-    .landing-page .steps-grid { grid-template-columns: repeat(2, 1fr); }
-    .landing-page .steps-grid::before { display: none; }
-    .landing-page .token-grid { grid-template-columns: 1fr; }
-    .landing-page .roadmap-phases { grid-template-columns: 1fr; }
-    .landing-page .roadmap-timeline { flex-direction: column; gap: 0; padding: 0 0 0 20px; align-items: flex-start; margin-bottom: 32px; }
-    .landing-page .roadmap-segment { width: 2px; height: 40px; max-width: none; }
-    .landing-page .roadmap-node-label { position: static; margin-left: 16px; display: inline-block; }
-    .landing-page .team-grid { grid-template-columns: 1fr; }
-    .landing-page .teaser-benefits { grid-template-columns: 1fr; }
-    .landing-page .pricing-grid { grid-template-columns: 1fr; }
-    .landing-page .pricing-card.featured { order: -1; }
-    .landing-page .comparison-callout { flex-direction: column; gap: 12px; padding: 20px; }
-    .landing-page .comparison-table { font-size: 0.8rem; }
-    .landing-page .comparison-table th,
-    .landing-page .comparison-table td { padding: 10px 10px; }
-    .landing-page .ui-trade-actions { margin-left: 0; width: 100%; }
-    .landing-page .ui-action-sell, .landing-page .ui-action-buy { flex: 1; text-align: center; }
-    .landing-page .ui-settings-row { gap: 16px; }
-    .landing-page .ui-autosell-groups { gap: 16px; }
-    .landing-page .ui-positions-summary { font-size: 0.7rem; }
-    .landing-page .ui-positions-table { font-size: 0.75rem; }
-    .landing-page .ui-positions-table th, .landing-page .ui-positions-table td { padding: 8px 6px; }
-  }
-
-  /* --- SCROLL REVEAL ANIMATIONS --- */
-  .landing-page .reveal {
+    z-index: 100;
     opacity: 0;
-    transform: translateY(40px);
-    transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1), transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-  .landing-page .reveal.visible {
-    opacity: 1;
-    transform: translateY(0);
-  }
-  .landing-page .reveal-left {
-    opacity: 0;
-    transform: translateX(-40px);
-    transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1), transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-  .landing-page .reveal-left.visible {
-    opacity: 1;
-    transform: translateX(0);
-  }
-  .landing-page .reveal-right {
-    opacity: 0;
-    transform: translateX(40px);
-    transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1), transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-  .landing-page .reveal-right.visible {
-    opacity: 1;
-    transform: translateX(0);
+    transition: opacity 0.3s ease;
+    pointer-events: none;
   }
 
-  /* Stagger children in grids */
-  .landing-page .stagger-children.visible > * {
+  .scroll-indicator.visible {
     opacity: 1;
-    transform: translateY(0);
-  }
-  .landing-page .stagger-children > * {
-    opacity: 0;
-    transform: translateY(25px);
-    transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1), transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-  .landing-page .stagger-children.visible > *:nth-child(1) { transition-delay: 0.0s; }
-  .landing-page .stagger-children.visible > *:nth-child(2) { transition-delay: 0.08s; }
-  .landing-page .stagger-children.visible > *:nth-child(3) { transition-delay: 0.16s; }
-  .landing-page .stagger-children.visible > *:nth-child(4) { transition-delay: 0.24s; }
-  .landing-page .stagger-children.visible > *:nth-child(5) { transition-delay: 0.32s; }
-  .landing-page .stagger-children.visible > *:nth-child(6) { transition-delay: 0.40s; }
-  .landing-page .stagger-children.visible > *:nth-child(7) { transition-delay: 0.48s; }
-  .landing-page .stagger-children.visible > *:nth-child(8) { transition-delay: 0.56s; }
-
-  /* --- TYPEWRITER --- */
-  .landing-page .typewriter-text {
-    color: var(--accent);
-    display: inline;
-  }
-  .landing-page .typewriter-cursor {
-    display: inline-block;
-    width: 3px;
-    height: 0.9em;
-    background: var(--accent);
-    margin-left: 2px;
-    vertical-align: text-bottom;
-    animation: cursor-blink 0.7s step-end infinite;
-  }
-  @keyframes cursor-blink {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0; }
   }
 
-  /* --- ANIMATED COUNTER --- */
-  .landing-page .stat-value {
-    transition: none;
+  .scroll-indicator svg {
+    width: 24px;
+    height: 24px;
+    color: var(--text-dim);
+    animation: scroll-bounce 2s ease-in-out infinite;
   }
 
-  /* --- TERMINAL / CONSOLE --- */
-  .landing-page .terminal-section {
-    padding: 80px 0;
+  @keyframes scroll-bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(8px); }
   }
-  .landing-page .terminal-section .section-header {
-    text-align: center;
-    margin-bottom: 48px;
-  }
-  .landing-page .terminal-section h2 {
-    font-size: 2rem;
-    font-weight: 700;
-    margin: 0 0 12px 0;
-  }
-  .landing-page .terminal-section p {
-    color: var(--text-muted);
-    font-size: 1.05rem;
-    margin: 0 auto;
-    text-align: center;
-  }
-  .landing-page .terminal {
-    background: #0a0a0c;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    padding: 0;
-    max-width: 720px;
-    margin: 0 auto;
+
+  /* Terminal preview */
+  .terminal-preview {
+    background: #0A0A0C;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
     overflow: hidden;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    max-width: 700px;
+    margin: 60px auto 0;
+    text-align: left;
   }
-  .landing-page .terminal-titlebar {
+
+  .terminal-header {
+    background: rgba(255, 255, 255, 0.03);
+    padding: 12px 16px;
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 12px 16px;
-    background: #111113;
-    border-bottom: 1px solid var(--border);
   }
-  .landing-page .terminal-dot {
+
+  .terminal-dot {
     width: 12px;
     height: 12px;
     border-radius: 50%;
   }
-  .landing-page .terminal-dot.red { background: #EF4444; }
-  .landing-page .terminal-dot.yellow { background: #F59E0B; }
-  .landing-page .terminal-dot.green { background: #10B981; }
-  .landing-page .terminal-title {
-    flex: 1;
-    text-align: center;
+
+  .terminal-dot.red { background: #EF4444; }
+  .terminal-dot.yellow { background: #F59E0B; }
+  .terminal-dot.green { background: #22C55E; }
+
+  .terminal-title {
+    margin-left: 12px;
     font-size: 0.75rem;
-    color: var(--text-muted);
-    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    color: var(--text-dim);
   }
-  .landing-page .terminal-body {
-    padding: 20px 24px;
-    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
-    font-size: 0.82rem;
-    line-height: 1.9;
-    min-height: 280px;
+
+  .terminal-body {
+    padding: 20px;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.8rem;
+    line-height: 1.8;
   }
-  .landing-page .terminal-line {
+
+  .terminal-line {
     opacity: 0;
-    transform: translateY(8px);
-    transition: opacity 0.4s ease, transform 0.4s ease;
-    white-space: nowrap;
-    overflow: hidden;
+    transform: translateY(10px);
+    transition: opacity 0.3s ease, transform 0.3s ease;
   }
-  .landing-page .terminal-line.visible {
+
+  .terminal-line.visible {
     opacity: 1;
     transform: translateY(0);
   }
-  .landing-page .terminal-line .green { color: #10B981; }
-  .landing-page .terminal-line .red { color: #EF4444; }
-  .landing-page .terminal-line .yellow { color: #F59E0B; }
-  .landing-page .terminal-line .cyan { color: #06B6D4; }
-  .landing-page .terminal-line .white { color: #FAFAFA; font-weight: 600; }
-  .landing-page .terminal-line .dim { color: #52525B; }
-  .landing-page .terminal-line .accent { color: #10B981; font-weight: 600; }
 
+  .terminal-line .dim { color: var(--text-dim); }
+  .terminal-line .white { color: var(--text-main); }
+  .terminal-line .red { color: #EF4444; }
+  .terminal-line .amber { color: #F59E0B; }
+  .terminal-line .purple { color: #A78BFA; }
+  .terminal-line .green { color: #22C55E; }
+  .terminal-line .cyan { color: #22D3EE; }
+
+  /* Responsive */
   @media (max-width: 768px) {
-    .landing-page .terminal-body { font-size: 0.7rem; padding: 16px; }
-    .landing-page .terminal-section h2 { font-size: 1.5rem; }
-  }
-
-  /* --- NETWORK GRAPH CANVAS --- */
-  .landing-page .network-canvas {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 0;
-    pointer-events: none;
-  }
-  .landing-page .hero {
-    position: relative;
-  }
-  .landing-page .hero .container {
-    position: relative;
-    z-index: 1;
-  }
-
-
-  /* --- LIVE THREAT TICKER --- */
-  .landing-page .threat-ticker {
-    width: 100%;
-    overflow: hidden;
-    background: linear-gradient(90deg, rgba(16, 185, 129, 0.05) 0%, rgba(16, 185, 129, 0.02) 50%, rgba(16, 185, 129, 0.05) 100%);
-    border-top: 1px solid rgba(16, 185, 129, 0.15);
-    border-bottom: 1px solid rgba(16, 185, 129, 0.15);
-    padding: 12px 0;
-    white-space: nowrap;
-  }
-  .landing-page .ticker-track {
-    display: inline-flex;
-    animation: ticker-scroll 35s linear infinite;
-  }
-  .landing-page .ticker-track:hover {
-    animation-play-state: paused;
-  }
-  @keyframes ticker-scroll {
-    0% { transform: translateX(0); }
-    100% { transform: translateX(-50%); }
-  }
-  .landing-page .ticker-item {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 0 32px;
-    font-size: 0.82rem;
-    color: var(--text-muted);
-    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
-  }
-  .landing-page .ticker-item .ticker-symbol {
-    color: var(--text-main);
-    font-weight: 600;
-  }
-  .landing-page .ticker-item .ticker-danger {
-    color: #EF4444;
-    font-weight: 600;
-  }
-  .landing-page .ticker-item .ticker-warn {
-    color: #F59E0B;
-    font-weight: 600;
-  }
-  .landing-page .ticker-item .ticker-safe {
-    color: #10B981;
-    font-weight: 600;
-  }
-  .landing-page .ticker-separator {
-    display: inline-block;
-    width: 4px;
-    height: 4px;
-    border-radius: 50%;
-    background: var(--border);
-    vertical-align: middle;
-  }
-
-  /* --- COMPRESSION STATS RESPONSIVE --- */
-  @media (max-width: 900px) {
-    .landing-page .compression-stats-grid {
-      grid-template-columns: repeat(2, 1fr) !important;
-    }
-  }
-  @media (max-width: 600px) {
-    .landing-page .compression-stats-grid {
-      grid-template-columns: 1fr !important;
-    }
-    .landing-page .compression-visual {
-      flex-direction: column !important;
-    }
+    .darkness-stats { gap: 40px; }
+    .darkness-stat-value { font-size: 2.5rem; }
+    .agents-grid { grid-template-columns: 1fr; }
+    .hunt-step { flex-direction: column; text-align: center; }
+    .hunt-step-num { margin: 0 auto; }
+    .engine-stats { grid-template-columns: repeat(2, 1fr); gap: 16px; }
+    .engine-stat-value { font-size: 2rem; }
+    .join-cta, .join-secondary { display: block; width: 100%; max-width: 300px; margin: 16px auto 0; }
   }
 `;
 
-const Logo = () => (
-  <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
-    <path d="M16 4L28 26H4L16 4Z" stroke="white" strokeWidth="2" fill="none"/>
-    <ellipse cx="16" cy="16" rx="6" ry="4" stroke="white" strokeWidth="1.5" fill="none"/>
-    <circle cx="16" cy="16" r="2" fill="white"/>
+// Argus Eye SVG Component
+const ArgusEye = ({ className }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+    {/* Outer triangle */}
+    <path
+      d="M50 8L92 85H8L50 8Z"
+      stroke="#DC2626"
+      strokeWidth="1.5"
+      fill="none"
+      opacity="0.8"
+    />
+    {/* Inner triangle glow */}
+    <path
+      d="M50 20L80 75H20L50 20Z"
+      stroke="#DC2626"
+      strokeWidth="0.5"
+      fill="none"
+      opacity="0.4"
+    />
+    {/* Eye outer */}
+    <ellipse
+      cx="50"
+      cy="50"
+      rx="22"
+      ry="12"
+      stroke="#DC2626"
+      strokeWidth="1.5"
+      fill="none"
+    />
+    {/* Eye inner glow */}
+    <ellipse
+      cx="50"
+      cy="50"
+      rx="18"
+      ry="9"
+      fill="rgba(220, 38, 38, 0.1)"
+    />
+    {/* Pupil */}
+    <circle
+      cx="50"
+      cy="50"
+      r="8"
+      fill="#DC2626"
+    />
+    {/* Pupil inner */}
+    <circle
+      cx="50"
+      cy="50"
+      r="4"
+      fill="#0A0A0A"
+    />
+    {/* Highlight */}
+    <circle
+      cx="47"
+      cy="48"
+      r="2"
+      fill="rgba(255, 255, 255, 0.6)"
+    />
   </svg>
 );
 
 export default function Landing() {
-  const [menuOpen, setMenuOpen] = useState(false);
+  // Intro state
+  const [introVisible, setIntroVisible] = useState(true);
+  const [introDiving, setIntroDiving] = useState(false);
+  const [journeyVisible, setJourneyVisible] = useState(false);
 
-  // ============================================
-  // HERO MOCKUP ANIMATION
-  // ============================================
-  const mockupAddress = 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263';
-  const [mockupTyped, setMockupTyped] = useState('');
-  const [mockupPhase, setMockupPhase] = useState<'idle' | 'typing' | 'analyzing' | 'done'>('idle');
+  // Section visibility
+  const [visibleSections, setVisibleSections] = useState<Set<string>>(new Set());
+  const sectionRefs = useRef<{ [key: string]: HTMLElement | null }>({});
 
-  useEffect(() => {
-    // Start after 1.5s
-    const startTimer = setTimeout(() => {
-      setMockupPhase('typing');
-    }, 1500);
+  // Terminal animation
+  const [terminalLines, setTerminalLines] = useState(0);
+  const terminalRef = useRef<HTMLDivElement>(null);
 
-    return () => clearTimeout(startTimer);
+  // Handle intro click
+  const handleIntroClick = useCallback(() => {
+    setIntroDiving(true);
+    setTimeout(() => {
+      setIntroVisible(false);
+      setJourneyVisible(true);
+    }, 1000);
   }, []);
 
+  // Intersection observer for sections
   useEffect(() => {
-    if (mockupPhase !== 'typing') return;
+    if (!journeyVisible) return;
 
-    if (mockupTyped.length < mockupAddress.length) {
-      const timer = setTimeout(() => {
-        setMockupTyped(mockupAddress.slice(0, mockupTyped.length + 1));
-      }, 35);
-      return () => clearTimeout(timer);
-    } else {
-      // Typing complete — show analyzing state
-      const timer = setTimeout(() => setMockupPhase('analyzing'), 300);
-      return () => clearTimeout(timer);
-    }
-  }, [mockupPhase, mockupTyped]);
-
-  useEffect(() => {
-    if (mockupPhase !== 'analyzing') return;
-    const timer = setTimeout(() => setMockupPhase('done'), 1200);
-    return () => clearTimeout(timer);
-  }, [mockupPhase]);
-
-  const [tokenData, setTokenData] = useState<{
-    marketCap: number;
-    price: number;
-    priceChange24h: number;
-  } | null>(null);
-
-  useEffect(() => {
-    if (!ARGUS_TOKEN_MINT) return;
-
-    const fetchTokenData = async () => {
-      try {
-        const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${ARGUS_TOKEN_MINT}`);
-        if (!res.ok) return;
-        const data = await res.json();
-        const pair = data.pairs?.[0];
-        if (pair) {
-          setTokenData({
-            marketCap: pair.marketCap || pair.fdv || 0,
-            price: parseFloat(pair.priceUsd) || 0,
-            priceChange24h: pair.priceChange?.h24 || 0,
-          });
-        }
-      } catch {
-        // Silently fail — ticker just won't update
-      }
-    };
-
-    fetchTokenData();
-    const interval = setInterval(fetchTokenData, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const bgRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleScroll = () => {
-      if (!bgRef.current) return;
-      const y = window.scrollY;
-      bgRef.current.style.transform = `translate(-50%, calc(-50% + ${y * 0.08}px))`;
-    };
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
-  // ============================================
-  // SCROLL REVEAL - Intersection Observer
-  // ============================================
-  useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
-            entry.target.classList.add('visible');
+            setVisibleSections((prev) => new Set([...prev, entry.target.id]));
           }
         });
       },
-      { threshold: 0.1, rootMargin: '0px 0px -40px 0px' }
+      { threshold: 0.2 }
     );
 
-    const revealEls = document.querySelectorAll('.reveal, .reveal-left, .reveal-right, .stagger-children');
-    revealEls.forEach((el) => observer.observe(el));
+    Object.values(sectionRefs.current).forEach((ref) => {
+      if (ref) observer.observe(ref);
+    });
 
     return () => observer.disconnect();
-  }, []);
+  }, [journeyVisible]);
 
-  // ============================================
-  // TYPEWRITER EFFECT
-  // ============================================
-  const typewriterPhrases = [
-    'A hundred eyes, always watching',
-    'Exposing pump syndicates',
-    'Scanning dev wallets',
-    'Detecting coordinated wallets',
-    'Nothing hides from Argus',
-  ];
-  const [typewriterText, setTypewriterText] = useState('');
-  const [phraseIndex, setPhraseIndex] = useState(0);
-  const [charIndex, setCharIndex] = useState(0);
-  const [isDeleting, setIsDeleting] = useState(false);
-
+  // Terminal animation
   useEffect(() => {
-    const currentPhrase = typewriterPhrases[phraseIndex];
-
-    const timeout = setTimeout(() => {
-      if (!isDeleting) {
-        setTypewriterText(currentPhrase.slice(0, charIndex + 1));
-        setCharIndex((prev) => prev + 1);
-
-        if (charIndex + 1 === currentPhrase.length) {
-          setTimeout(() => setIsDeleting(true), 2000);
-        }
-      } else {
-        setTypewriterText(currentPhrase.slice(0, charIndex - 1));
-        setCharIndex((prev) => prev - 1);
-
-        if (charIndex - 1 === 0) {
-          setIsDeleting(false);
-          setPhraseIndex((prev) => (prev + 1) % typewriterPhrases.length);
-        }
-      }
-    }, isDeleting ? 30 : 70);
-
-    return () => clearTimeout(timeout);
-  }, [charIndex, isDeleting, phraseIndex]);
-
-  // ============================================
-  // ANIMATED COUNTERS
-  // ============================================
-  const statsRef = useRef<HTMLDivElement>(null);
-  const [countersStarted, setCountersStarted] = useState(false);
-  const [counterValues, setCounterValues] = useState({ tokens: 0, bundles: 0 });
-
-  useEffect(() => {
-    if (!statsRef.current) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && !countersStarted) {
-          setCountersStarted(true);
-        }
-      },
-      { threshold: 0.3 }
-    );
-
-    observer.observe(statsRef.current);
-    return () => observer.disconnect();
-  }, [countersStarted]);
-
-  useEffect(() => {
-    if (!countersStarted) return;
-
-    const targets = { tokens: 10000, bundles: 500 };
-    const duration = 2000;
-    const startTime = Date.now();
-
-    const animate = () => {
-      const elapsed = Date.now() - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      // Ease out cubic
-      const eased = 1 - Math.pow(1 - progress, 3);
-
-      setCounterValues({
-        tokens: Math.floor(eased * targets.tokens),
-        bundles: Math.floor(eased * targets.bundles),
-      });
-
-      if (progress < 1) {
-        requestAnimationFrame(animate);
-      }
-    };
-
-    requestAnimationFrame(animate);
-  }, [countersStarted]);
-
-  // ============================================
-  // TERMINAL LOG ANIMATION
-  // ============================================
-  const terminalRef = useRef<HTMLDivElement>(null);
-  const [terminalStarted, setTerminalStarted] = useState(false);
-  const [visibleLines, setVisibleLines] = useState(0);
-
-  const terminalLines = [
-    { text: '$ argus scan 7xKp...pump', classes: 'white' },
-    { text: '[Argus] Fetching on-chain data...', classes: 'dim' },
-    { text: '[Argus] DexScreener: $31.2K mcap, $6.2K liquidity', classes: 'cyan' },
-    { text: '[Argus] Helius RPC: 20 holders, mint revoked', classes: 'cyan' },
-    { text: '[Argus] Bundle scan: 6 wallets, MEDIUM confidence', classes: 'yellow' },
-    { text: '[Argus] Dev wallet: holds 22.6%, sold 0%', classes: 'yellow' },
-    { text: '[Argus] AI analysis: risk score 65/100', classes: 'accent' },
-    { text: '[Argus] Signal: HOLD — coordinated wallet risk', classes: 'accent' },
-    { text: '[Argus] Posting alert to Twitter + Telegram...', classes: 'dim' },
-    { text: '[Argus] Done in 2.8s', classes: 'green' },
-  ];
-
-  useEffect(() => {
-    if (!terminalRef.current) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && !terminalStarted) {
-          setTerminalStarted(true);
-        }
-      },
-      { threshold: 0.3 }
-    );
-
-    observer.observe(terminalRef.current);
-    return () => observer.disconnect();
-  }, [terminalStarted]);
-
-  useEffect(() => {
-    if (!terminalStarted) return;
+    if (!visibleSections.has('hunt')) return;
 
     const interval = setInterval(() => {
-      setVisibleLines((prev) => {
-        if (prev >= terminalLines.length) {
+      setTerminalLines((prev) => {
+        if (prev >= 8) {
           clearInterval(interval);
           return prev;
         }
@@ -2527,1326 +1006,436 @@ export default function Landing() {
     }, 400);
 
     return () => clearInterval(interval);
-  }, [terminalStarted]);
+  }, [visibleSections]);
 
-  // ============================================
-  // NETWORK GRAPH CANVAS
-  // ============================================
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    let animationId: number;
-    const particles: { x: number; y: number; vx: number; vy: number; r: number }[] = [];
-    const PARTICLE_COUNT = 60;
-    const CONNECTION_DIST = 180;
-
-    const resize = () => {
-      canvas.width = canvas.offsetWidth * window.devicePixelRatio;
-      canvas.height = canvas.offsetHeight * window.devicePixelRatio;
-      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
-    };
-
-    resize();
-
-    // Initialize particles
-    const w = canvas.offsetWidth;
-    const h = canvas.offsetHeight;
-    for (let i = 0; i < PARTICLE_COUNT; i++) {
-      particles.push({
-        x: Math.random() * w,
-        y: Math.random() * h,
-        vx: (Math.random() - 0.5) * 0.4,
-        vy: (Math.random() - 0.5) * 0.4,
-        r: Math.random() * 2 + 1,
-      });
-    }
-
-    const draw = () => {
-      const cw = canvas.offsetWidth;
-      const ch = canvas.offsetHeight;
-      ctx.clearRect(0, 0, cw, ch);
-
-      // Update + draw particles
-      for (const p of particles) {
-        p.x += p.vx;
-        p.y += p.vy;
-
-        if (p.x < 0 || p.x > cw) p.vx *= -1;
-        if (p.y < 0 || p.y > ch) p.vy *= -1;
-
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(16, 185, 129, 0.7)';
-        ctx.fill();
-      }
-
-      // Draw connections
-      for (let i = 0; i < particles.length; i++) {
-        for (let j = i + 1; j < particles.length; j++) {
-          const dx = particles[i].x - particles[j].x;
-          const dy = particles[i].y - particles[j].y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < CONNECTION_DIST) {
-            const opacity = (1 - dist / CONNECTION_DIST) * 0.3;
-            ctx.beginPath();
-            ctx.moveTo(particles[i].x, particles[i].y);
-            ctx.lineTo(particles[j].x, particles[j].y);
-            ctx.strokeStyle = `rgba(16, 185, 129, ${opacity})`;
-            ctx.lineWidth = 0.8;
-            ctx.stroke();
-          }
-        }
-      }
-
-      animationId = requestAnimationFrame(draw);
-    };
-
-    draw();
-
-    window.addEventListener('resize', resize);
-    return () => {
-      cancelAnimationFrame(animationId);
-      window.removeEventListener('resize', resize);
-    };
-  }, []);
-
-  // ============================================
-  // THREAT TICKER DATA
-  // ============================================
-  const threatTickerItems = [
-    { symbol: 'RUGX', score: 92, level: 'danger', action: 'AVOID' },
-    { symbol: 'SAFEMOON2', score: 87, level: 'danger', action: 'AVOID' },
-    { symbol: 'BONK', score: 28, level: 'safe', action: 'BUY' },
-    { symbol: 'PUMPKIN', score: 71, level: 'warn', action: 'HOLD' },
-    { symbol: 'DUMPIT', score: 95, level: 'danger', action: 'AVOID' },
-    { symbol: 'WIF', score: 22, level: 'safe', action: 'BUY' },
-    { symbol: 'SCAMCOIN', score: 89, level: 'danger', action: 'AVOID' },
-    { symbol: 'MYRO', score: 35, level: 'safe', action: 'BUY' },
-    { symbol: 'INSIDER', score: 78, level: 'warn', action: 'HOLD' },
-    { symbol: 'DEVDUMP', score: 91, level: 'danger', action: 'AVOID' },
-    { symbol: 'POPCAT', score: 31, level: 'safe', action: 'BUY' },
-    { symbol: 'BUNDLED', score: 83, level: 'danger', action: 'AVOID' },
+  const terminalContent = [
+    { text: '$ argus hunt 7xKp...pump', class: 'white' },
+    { text: '[SCOUT-1] Target acquired. Scanning mempool...', class: 'purple' },
+    { text: '[ANALYST-1] Compressing 2.1MB → 116 bytes', class: 'cyan' },
+    { text: '[ANALYST-1] Pattern: BUNDLE_COORDINATOR (87%)', class: 'amber' },
+    { text: '[HUNTER-1] WARNING: 3 wallets linked to previous rug', class: 'red' },
+    { text: '[HUNTER-1] Syndicate network: 8 tokens, 75% rug rate', class: 'red' },
+    { text: '[TRADER-1] Auto-exit engaged. Position protected.', class: 'green' },
+    { text: '[ARGUS] The shadows remember. Target flagged.', class: 'dim' },
   ];
+
+  // Generate particles
+  const particles = Array.from({ length: 30 }, () => ({
+    left: `${Math.random() * 100}%`,
+    animationDelay: `${Math.random() * 8}s`,
+    animationDuration: `${6 + Math.random() * 4}s`,
+  }));
 
   return (
     <>
       <style>{styles}</style>
-      <div className="landing-page">
-        {/* NAVIGATION */}
-        <header>
-          <div className="container">
-            <nav>
-              <div className="logo">
-                <div className="logo-icon">
-                  <Logo />
-                </div>
-                <span>ARGUS<span style={{ color: '#71717A', fontWeight: 300 }}>AI</span></span>
-              </div>
-              <div className="nav-links">
-                <a href="#features">Features</a>
-                <a href="#how-it-works">How It Works</a>
-                <a href="#compare">Compare</a>
-                <a href="#pricing">Pricing</a>
-                <a href="#token">Token</a>
-                <a href="#roadmap">Roadmap</a>
-              </div>
-              <div className={`hamburger ${menuOpen ? 'open' : ''}`} onClick={() => setMenuOpen(!menuOpen)}>
-                <span /><span /><span />
-              </div>
-              <a href="https://app.argusguard.io" className="btn btn-primary">Launch App</a>
-            </nav>
+      <div className="argus-landing">
+        {/* ===== INTRO SCREEN ===== */}
+        {introVisible && (
+          <div
+            className={`intro-screen ${introDiving ? 'diving' : ''}`}
+            onClick={handleIntroClick}
+          >
+            <div className="intro-particles">
+              {particles.map((p, i) => (
+                <div
+                  key={i}
+                  className="particle"
+                  style={{
+                    left: p.left,
+                    animationDelay: p.animationDelay,
+                    animationDuration: p.animationDuration,
+                  }}
+                />
+              ))}
+            </div>
+            <div className="intro-content">
+              <ArgusEye className="argus-eye" />
+              <div className="intro-title">Argus AI</div>
+            </div>
+            <div className="intro-hint">Click to enter</div>
           </div>
-        </header>
+        )}
 
-        {/* MOBILE MENU */}
-        <div className={`mobile-menu ${menuOpen ? 'open' : ''}`}>
-          <a href="#features" onClick={() => setMenuOpen(false)}>Features</a>
-          <a href="#how-it-works" onClick={() => setMenuOpen(false)}>How It Works</a>
-          <a href="#compare" onClick={() => setMenuOpen(false)}>Compare</a>
-          <a href="#pricing" onClick={() => setMenuOpen(false)}>Pricing</a>
-          <a href="#token" onClick={() => setMenuOpen(false)}>Token</a>
-          <a href="#roadmap" onClick={() => setMenuOpen(false)}>Roadmap</a>
-          <a href="https://app.argusguard.io" className="btn btn-primary" style={{ marginTop: 16 }}>Launch App</a>
-        </div>
+        {/* ===== MAIN JOURNEY ===== */}
+        <div className={`journey ${journeyVisible ? 'visible' : ''}`}>
 
-        {/* BACKGROUND LOGO (parallax) */}
-        <div className="hero-bg-logo" ref={bgRef}>
-          <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M16 4L28 26H4L16 4Z" stroke="#10B981" strokeWidth="0.7" fill="none"/>
-            <ellipse cx="16" cy="16" rx="6" ry="4" stroke="#10B981" strokeWidth="0.5" fill="none"/>
-            <circle cx="16" cy="16" r="2" fill="#10B981"/>
-          </svg>
-        </div>
-
-        {/* HERO SECTION */}
-        <section className="hero">
-          <canvas className="network-canvas" ref={canvasRef} />
-          <div className="container">
-            <div className="badge">
-              <span className="badge-dot"></span>
-              World's First Edge-Native Crypto AI
-            </div>
-            <h1>17,000x Data Compression<br/><span>13ms AI Inference</span></h1>
-            <p className="hero-typewriter">
-              <span className="typewriter-text">{typewriterText}</span>
-              <span className="typewriter-cursor" />
-            </p>
-            <p>
-              We compress 2MB of blockchain data into 116 bytes. Our AI runs entirely on Cloudflare's edge —
-              no GPUs, no servers, no API costs. Just pure, instant intelligence.
-            </p>
-
-            <div className="token-ticker">
-              {ARGUS_TOKEN_MINT && tokenData ? (
-                <>
-                  <div className="ticker-stat">
-                    <span className="ticker-label">Market Cap</span>
-                    <span className="ticker-value">{formatMarketCap(tokenData.marketCap)}</span>
-                  </div>
-                  <div className="ticker-divider" />
-                  <div className="ticker-stat">
-                    <span className="ticker-label">Price</span>
-                    <span className="ticker-value">{formatPrice(tokenData.price)}</span>
-                  </div>
-                  <div className="ticker-divider" />
-                  <div className="ticker-stat">
-                    <span className="ticker-label">24h</span>
-                    <span className={`ticker-value ${tokenData.priceChange24h >= 0 ? 'green' : 'red'}`}>
-                      {tokenData.priceChange24h >= 0 ? '+' : ''}{tokenData.priceChange24h.toFixed(1)}%
-                    </span>
-                  </div>
-                </>
-              ) : (
-                <div className="ticker-coming-soon">
-                  <span className="badge-dot"></span>
-                  $ARGUS — Token Launching Soon
+          {/* Section: The Darkness */}
+          <section
+            id="darkness"
+            className="narrative-section section-darkness"
+            ref={(el) => (sectionRefs.current['darkness'] = el)}
+          >
+            <div className={`narrative-content ${visibleSections.has('darkness') ? 'visible' : ''}`}>
+              <div className="narrative-label">Chapter I</div>
+              <h1 className="narrative-title">
+                In the shadows,<br /><span>scammers lurk</span>
+              </h1>
+              <p className="narrative-text">
+                Every day, thousands of traders lose millions to coordinated pump-and-dump schemes,
+                honeypots, and rug pulls. The predators hide in plain sight, moving from token to token,
+                leaving devastation in their wake.
+              </p>
+              <div className="darkness-stats">
+                <div className="darkness-stat">
+                  <div className="darkness-stat-value">$2.8B</div>
+                  <div className="darkness-stat-label">Lost to rugs in 2024</div>
                 </div>
-              )}
-            </div>
-
-            <div className="hero-actions">
-              <a href="https://app.argusguard.io" className="btn btn-primary">Start Detecting Bundles</a>
-              <a href="https://github.com/ArgusGuardAI/argus-ai" target="_blank" rel="noopener noreferrer" className="btn btn-outline">
-                <svg style={{ marginRight: 8 }} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg>
-                View Source
-              </a>
-            </div>
-
-            {/* UI MOCKUP */}
-            <div className="ui-mockup">
-              <div className="ui-header">
-                <div className="ui-dots">
-                  <div className="ui-dot red"></div>
-                  <div className="ui-dot yellow"></div>
-                  <div className="ui-dot green"></div>
+                <div className="darkness-stat">
+                  <div className="darkness-stat-value">47%</div>
+                  <div className="darkness-stat-label">Tokens are scams</div>
                 </div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 500 }}>Argus AI</div>
-              </div>
-              <div className="ui-body">
-                {/* Search Bar */}
-                <div className="ui-search">
-                  <div className={`ui-search-input ${mockupTyped ? 'typing' : ''}`}>
-                    {mockupTyped || 'Enter token address...'}
-                    {mockupPhase === 'typing' && <span className="typewriter-cursor" />}
-                  </div>
-                  <div className={`ui-search-btn ${mockupPhase === 'analyzing' ? 'analyzing' : ''}`}>
-                    {mockupPhase === 'analyzing' ? 'Scanning...' : 'Analyze'}
-                  </div>
-                </div>
-
-                {/* Analyzing state */}
-                {mockupPhase === 'analyzing' && (
-                  <div className="mockup-analyzing">Fetching on-chain data...</div>
-                )}
-
-                {/* Results */}
-                <div className={`mockup-results ${mockupPhase === 'done' ? 'visible' : ''}`} style={mockupPhase === 'done' ? {} : { display: 'none' }}>
-                  {/* Token Header */}
-                  <div className="ui-token-header">
-                    <div className="ui-token-info">
-                      <div className="ui-token-icon">BO</div>
-                      <div>
-                        <div className="ui-token-name">$BONK</div>
-                        <div className="ui-token-addr">DezX...5gkR</div>
-                      </div>
-                    </div>
-                    <div className="ui-signal">
-                      <div className="ui-signal-badge">BUY</div>
-                      <div className="ui-score">72</div>
-                    </div>
-                  </div>
-
-                  {/* Cards */}
-                  <div className="ui-cards">
-                    <div className="ui-card">
-                      <div className="ui-card-title">Security</div>
-                      <div className="ui-card-row">
-                        <span className="ui-card-label">Mint Authority</span>
-                        <span className="ui-card-value green">Revoked</span>
-                      </div>
-                      <div className="ui-card-row">
-                        <span className="ui-card-label">Freeze Authority</span>
-                        <span className="ui-card-value green">Revoked</span>
-                      </div>
-                      <div className="ui-card-row">
-                        <span className="ui-card-label">LP Locked</span>
-                        <span className="ui-card-value">100%</span>
-                      </div>
-                    </div>
-
-                    <div className="ui-card">
-                      <div className="ui-card-title">Market</div>
-                      <div className="ui-card-row">
-                        <span className="ui-card-label">Market Cap</span>
-                        <span className="ui-card-value">$1.2B</span>
-                      </div>
-                      <div className="ui-card-row">
-                        <span className="ui-card-label">Liquidity</span>
-                        <span className="ui-card-value">$45.2M</span>
-                      </div>
-                      <div className="ui-card-row">
-                        <span className="ui-card-label">24h Change</span>
-                        <span className="ui-card-value green">+12.5%</span>
-                      </div>
-                    </div>
-
-                    <div className="ui-card">
-                      <div className="ui-card-title">Activity</div>
-                      <div className="ui-card-row">
-                        <span className="ui-card-label">Buys (1h)</span>
-                        <span className="ui-card-value green">1,234</span>
-                      </div>
-                      <div className="ui-card-row">
-                        <span className="ui-card-label">Sells (1h)</span>
-                        <span className="ui-card-value red">456</span>
-                      </div>
-                      <div className="ui-card-row">
-                        <span className="ui-card-label">Buy Ratio</span>
-                        <span className="ui-card-value">2.7:1</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Holders */}
-                  <div className="ui-holders">
-                    <div className="ui-holders-header">
-                      <div className="ui-card-title" style={{ marginBottom: 0 }}>Top Holders</div>
-                      <div className="ui-bundle-badge">2 BUNDLES</div>
-                    </div>
-                    <div className="ui-holder-row">
-                      <div className="ui-holder-bar"><div className="ui-holder-fill normal" style={{ width: '45%' }}></div></div>
-                      <span className="ui-holder-pct">24.5%</span>
-                    </div>
-                    <div className="ui-holder-row">
-                      <div className="ui-holder-bar"><div className="ui-holder-fill normal" style={{ width: '24%' }}></div></div>
-                      <span className="ui-holder-pct">12.1%</span>
-                    </div>
-                    <div className="ui-holder-row">
-                      <div className="ui-holder-bar"><div className="ui-holder-fill bundle" style={{ width: '16%' }}></div></div>
-                      <span className="ui-holder-pct bundle">8.3%</span>
-                    </div>
-                    <div className="ui-holder-row">
-                      <div className="ui-holder-bar"><div className="ui-holder-fill bundle" style={{ width: '16%' }}></div></div>
-                      <span className="ui-holder-pct bundle">8.2%</span>
-                    </div>
-                  </div>
-
-                  {/* Buy Controls */}
-                  <div className="ui-buy">
-                    <div className="ui-amounts">
-                      <div className="ui-amount">0.01 SOL</div>
-                      <div className="ui-amount active">0.05 SOL</div>
-                      <div className="ui-amount">0.1 SOL</div>
-                      <div className="ui-amount">0.25 SOL</div>
-                    </div>
-                    <div className="ui-buy-btn">Buy $BONK</div>
-                  </div>
+                <div className="darkness-stat">
+                  <div className="darkness-stat-value">3.2s</div>
+                  <div className="darkness-stat-label">Average rug time</div>
                 </div>
               </div>
             </div>
-          </div>
-        </section>
+          </section>
 
-        {/* LIVE THREAT TICKER */}
-        <div className="threat-ticker">
-          <div className="ticker-track">
-            {[...threatTickerItems, ...threatTickerItems].map((item, i) => (
-              <span key={i} className="ticker-item">
-                <span className="ticker-symbol">${item.symbol}</span>
-                <span>Score: {item.score}</span>
-                <span className={`ticker-${item.level}`}>{item.action}</span>
-                {i < threatTickerItems.length * 2 - 1 && <span className="ticker-separator" />}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        {/* STATS */}
-        <section className="stats reveal" ref={statsRef}>
-          <div className="container">
-            <div className="stats-grid stagger-children">
-              <div>
-                <div className="stat-value">{countersStarted ? `${counterValues.tokens.toLocaleString()}+` : '0'}</div>
-                <div className="stat-label">Tokens Analyzed</div>
-              </div>
-              <div>
-                <div className="stat-value">{countersStarted ? `${counterValues.bundles}+` : '0'}</div>
-                <div className="stat-label">Bundles Detected</div>
-              </div>
-              <div>
-                <div className="stat-value">&lt;3s</div>
-                <div className="stat-label">Analysis Time</div>
-              </div>
-              <div>
-                <div className="stat-value">100%</div>
-                <div className="stat-label">Free Data</div>
-              </div>
+          {/* Section: The Awakening */}
+          <section
+            id="awakening"
+            className="narrative-section section-awakening"
+            ref={(el) => (sectionRefs.current['awakening'] = el)}
+          >
+            <div className={`narrative-content ${visibleSections.has('awakening') ? 'visible' : ''}`}>
+              <ArgusEye className="awakening-eye" />
+              <div className="narrative-label">Chapter II</div>
+              <h1 className="narrative-title">
+                Until the <span>eye opened</span>
+              </h1>
+              <p className="narrative-text">
+                Argus AI emerged from the void — a hundred-eyed watcher that never sleeps.
+                Compressing 2MB of blockchain data into 116 bytes. Running inference in 13 milliseconds.
+                Seeing patterns humans cannot perceive. Remembering every scammer who dared to rug.
+              </p>
             </div>
-          </div>
-        </section>
+          </section>
 
-        {/* FEATURES */}
-        <section id="features" className="features">
-          <div className="container">
-            <div className="section-header reveal">
-              <h2>Stop Getting Rugged</h2>
-              <p>29 neural features compressed into 116 bytes. 13ms inference. Zero API costs. This is the future of crypto intelligence.</p>
+          {/* Section: The Swarm */}
+          <section
+            id="swarm"
+            className="narrative-section section-swarm"
+            ref={(el) => (sectionRefs.current['swarm'] = el)}
+          >
+            <div className={`narrative-content ${visibleSections.has('swarm') ? 'visible' : ''}`}>
+              <div className="narrative-label">Chapter III</div>
+              <h1 className="narrative-title">
+                Four agents<br /><span>emerged from darkness</span>
+              </h1>
+              <p className="narrative-text">
+                A coordinated swarm of autonomous AI agents, each with a specialized purpose.
+                Working together. Sharing intelligence. Hunting as one.
+              </p>
             </div>
-
-            <div className="feature-grid stagger-children reveal">
-              <div className="feature-card">
-                <div className="icon-bg">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                </div>
-                <div className="card-title">Argus Syndicate Scanner</div>
-                <div className="card-desc">Expose pump syndicates via same-block transaction analysis. Interactive network graph shows coordinated wallets and their holding status in real-time.</div>
-              </div>
-
-              <div className="feature-card">
-                <div className="icon-bg">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-                </div>
-                <div className="card-title">Argus AutoGuard</div>
-                <div className="card-desc">Set take profit, stop loss, and trailing stops to automatically exit positions. Lock in gains and limit losses while you sleep.</div>
-              </div>
-
-              <div className="feature-card">
-                <div className="icon-bg">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                </div>
-                <div className="card-title">Argus Security Check</div>
-                <div className="card-desc">Instant checks on mint/freeze authority, LP lock percentage, and contract risks. Know if the token can be rugpulled.</div>
-              </div>
-
-              <div className="feature-card">
-                <div className="icon-bg">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-                </div>
-                <div className="card-title">Argus Quick Trade</div>
-                <div className="card-desc">Buy tokens directly from the dashboard with your dedicated trading wallet. No popup confirmations, just instant execution.</div>
-              </div>
-
-              <div className="feature-card" style={{ background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, var(--bg-card) 100%)', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
-                <div className="icon-bg" style={{ background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)' }}>
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
-                </div>
-                <div className="card-title">Argus Compression Engine</div>
-                <div className="card-desc">17,000x data compression. 2MB of blockchain data → 116 bytes. 13ms CPU inference. Gini coefficient analysis. The world's first edge-native crypto AI.</div>
-              </div>
-
-              <div className="feature-card">
-                <div className="icon-bg">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
-                </div>
-                <div className="card-title">Argus Portfolio</div>
-                <div className="card-desc">Monitor all your positions with real-time P&L, entry/exit prices, and easy sell controls. Everything in one dashboard.</div>
-              </div>
-
-              <div className="feature-card">
-                <div className="icon-bg">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                </div>
-                <div className="card-title">Argus Vault</div>
-                <div className="card-desc">Your private keys are isolated in a separate secure origin, protected from malicious extensions and XSS attacks. Bank-grade key isolation.</div>
-              </div>
-
-              <div className="feature-card">
-                <div className="icon-bg">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-                </div>
-                <div className="card-title">Argus On-Chain</div>
-                <div className="card-desc">Direct Solana RPC analysis — no third-party APIs. Real-time holder data, transaction patterns, and wallet ages straight from the blockchain.</div>
-              </div>
-
-              <div className="feature-card">
-                <div className="icon-bg">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                </div>
-                <div className="card-title">Argus Dev Tracker</div>
-                <div className="card-desc">Analyzes creator wallet age, deployment history, and activity patterns. Unknown or brand-new deployer wallets trigger automatic risk escalation.</div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* COMPRESSION ENGINE */}
-        <section className="tech-stack reveal" style={{ padding: '100px 0', borderTop: '1px solid var(--border)', background: 'linear-gradient(180deg, var(--bg-body) 0%, #0a0f0a 100%)' }}>
-          <div className="container">
-            <div className="section-header" style={{ marginBottom: 60 }}>
-              <div className="badge" style={{ marginBottom: 16 }}>
-                <span className="badge-dot"></span>
-                Patent-Pending Technology
-              </div>
-              <h2 style={{ fontSize: '2.5rem' }}>The Compression Engine</h2>
-              <p style={{ maxWidth: 600, margin: '0 auto' }}>We don't just analyze tokens. We compress the entire blockchain state into a neural fingerprint.</p>
-            </div>
-
-            {/* Big Stats */}
-            <div className="compression-stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 24, marginBottom: 60 }}>
-              <div style={{ textAlign: 'center', padding: '32px 16px', background: 'var(--bg-card)', borderRadius: 16, border: '1px solid var(--border)' }}>
-                <div style={{ fontSize: '3rem', fontWeight: 800, background: 'linear-gradient(135deg, #10B981 0%, #34D399 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', marginBottom: 8 }}>17,000x</div>
-                <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Data Compression</div>
-              </div>
-              <div style={{ textAlign: 'center', padding: '32px 16px', background: 'var(--bg-card)', borderRadius: 16, border: '1px solid var(--border)' }}>
-                <div style={{ fontSize: '3rem', fontWeight: 800, background: 'linear-gradient(135deg, #10B981 0%, #34D399 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', marginBottom: 8 }}>13ms</div>
-                <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>AI Inference</div>
-              </div>
-              <div style={{ textAlign: 'center', padding: '32px 16px', background: 'var(--bg-card)', borderRadius: 16, border: '1px solid var(--border)' }}>
-                <div style={{ fontSize: '3rem', fontWeight: 800, background: 'linear-gradient(135deg, #10B981 0%, #34D399 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', marginBottom: 8 }}>29</div>
-                <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Neural Features</div>
-              </div>
-              <div style={{ textAlign: 'center', padding: '32px 16px', background: 'var(--bg-card)', borderRadius: 16, border: '1px solid var(--border)' }}>
-                <div style={{ fontSize: '3rem', fontWeight: 800, background: 'linear-gradient(135deg, #10B981 0%, #34D399 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', marginBottom: 8 }}>$0</div>
-                <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Monthly AI Cost</div>
-              </div>
-            </div>
-
-            {/* Compression Visual */}
-            <div style={{ background: 'var(--bg-card)', borderRadius: 20, padding: 40, border: '1px solid var(--border)', marginBottom: 60 }}>
-              <div className="compression-visual" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 40, flexWrap: 'wrap' }}>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: '1rem', color: 'var(--text-muted)', marginBottom: 12 }}>Raw Blockchain Data</div>
-                  <div style={{ width: 120, height: 120, borderRadius: 16, background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
-                    <span style={{ fontSize: '1.5rem', fontWeight: 700, color: 'white' }}>~2MB</span>
-                  </div>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Holders, txns, metadata...</div>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-                  <svg width="60" height="24" viewBox="0 0 60 24" fill="none">
-                    <path d="M0 12H50M50 12L40 6M50 12L40 18" stroke="#10B981" strokeWidth="2"/>
+            <div className="agents-grid">
+              <div className={`agent-card ${visibleSections.has('swarm') ? 'visible' : ''}`}>
+                <div className="agent-icon scout">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M12 16v-4M12 8h.01"/>
                   </svg>
-                  <span style={{ fontSize: '0.75rem', color: '#10B981', fontWeight: 600 }}>COMPRESS</span>
                 </div>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: '1rem', color: 'var(--text-muted)', marginBottom: 12 }}>Feature Vector</div>
-                  <div style={{ width: 60, height: 60, borderRadius: 12, background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
-                    <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'white' }}>116B</span>
-                  </div>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>29 dense floats</div>
+                <div className="agent-name">Scout</div>
+                <div className="agent-role">Mempool Patrol</div>
+                <div className="agent-desc">
+                  Prowls the mempool 24/7, detecting new token launches within milliseconds.
+                  Performs rapid triage scans and flags suspicious activity before others even notice.
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-                  <svg width="60" height="24" viewBox="0 0 60 24" fill="none">
-                    <path d="M0 12H50M50 12L40 6M50 12L40 18" stroke="#10B981" strokeWidth="2"/>
+              </div>
+              <div className={`agent-card ${visibleSections.has('swarm') ? 'visible' : ''}`}>
+                <div className="agent-icon analyst">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+                    <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
+                    <circle cx="12" cy="12" r="3"/>
                   </svg>
-                  <span style={{ fontSize: '0.75rem', color: '#10B981', fontWeight: 600 }}>INFER</span>
                 </div>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: '1rem', color: 'var(--text-muted)', marginBottom: 12 }}>Risk Score</div>
-                  <div style={{ width: 80, height: 80, borderRadius: '50%', background: 'linear-gradient(135deg, #10B981 0%, #34D399 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', boxShadow: '0 0 40px rgba(16, 185, 129, 0.4)' }}>
-                    <span style={{ fontSize: '1.8rem', fontWeight: 800, color: 'white' }}>72</span>
-                  </div>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Instant verdict</div>
+                <div className="agent-name">Analyst</div>
+                <div className="agent-role">Deep Investigation</div>
+                <div className="agent-desc">
+                  Dissects contracts, traces fund flows, and builds complete threat profiles.
+                  Compresses raw blockchain data into dense feature vectors for pattern matching.
+                </div>
+              </div>
+              <div className={`agent-card ${visibleSections.has('swarm') ? 'visible' : ''}`}>
+                <div className="agent-icon hunter">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+                    <circle cx="11" cy="11" r="8"/>
+                    <path d="m21 21-4.35-4.35"/>
+                  </svg>
+                </div>
+                <div className="agent-name">Hunter</div>
+                <div className="agent-role">Network Tracker</div>
+                <div className="agent-desc">
+                  Tracks scammer wallets across tokens, building profiles of repeat offenders.
+                  Maintains a database of syndicate networks and alerts when they resurface.
+                </div>
+              </div>
+              <div className={`agent-card ${visibleSections.has('swarm') ? 'visible' : ''}`}>
+                <div className="agent-icon trader">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+                    <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                  </svg>
+                </div>
+                <div className="agent-name">Trader</div>
+                <div className="agent-role">Position Guardian</div>
+                <div className="agent-desc">
+                  Executes autonomous trades based on swarm intelligence. Auto-exits positions
+                  when danger signals emerge. Your guardian while you sleep.
                 </div>
               </div>
             </div>
+          </section>
 
-            {/* Tech Cards */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 24 }}>
-              <div style={{ background: 'var(--bg-card)', borderRadius: 16, padding: 32, border: '1px solid var(--border)' }}>
-                <div style={{ width: 48, height: 48, borderRadius: 12, background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
-                  <i className="fa-solid fa-compress" style={{ fontSize: 22, color: 'white' }}></i>
-                </div>
-                <div style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: 8, color: 'var(--text-main)' }}>Feature Compression</div>
-                <div style={{ color: 'var(--text-muted)', fontSize: '0.95rem', lineHeight: 1.6 }}>
-                  29 normalized features: market metrics, holder Gini coefficient, bundle patterns, security flags, and temporal decay — all in 116 bytes.
-                </div>
-              </div>
-              <div style={{ background: 'var(--bg-card)', borderRadius: 16, padding: 32, border: '1px solid var(--border)' }}>
-                <div style={{ width: 48, height: 48, borderRadius: 12, background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
-                  <i className="fa-solid fa-brain" style={{ fontSize: 22, color: 'white' }}></i>
-                </div>
-                <div style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: 8, color: 'var(--text-main)' }}>Edge AI Engine</div>
-                <div style={{ color: 'var(--text-muted)', fontSize: '0.95rem', lineHeight: 1.6 }}>
-                  CPU-based inference on Cloudflare Workers. No GPUs, no cold starts, no API keys. Runs in 200+ cities worldwide at $0/month.
-                </div>
-              </div>
-              <div style={{ background: 'var(--bg-card)', borderRadius: 16, padding: 32, border: '1px solid var(--border)' }}>
-                <div style={{ width: 48, height: 48, borderRadius: 12, background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
-                  <i className="fa-solid fa-chart-line" style={{ fontSize: 22, color: 'white' }}></i>
-                </div>
-                <div style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: 8, color: 'var(--text-main)' }}>Gini Analysis</div>
-                <div style={{ color: 'var(--text-muted)', fontSize: '0.95rem', lineHeight: 1.6 }}>
-                  We calculate the Gini coefficient of holder distribution. A token with 1000 holders but Gini=0.95 is more dangerous than 100 holders at Gini=0.3.
-                </div>
-              </div>
-              <div style={{ background: 'var(--bg-card)', borderRadius: 16, padding: 32, border: '1px solid var(--border)' }}>
-                <div style={{ width: 48, height: 48, borderRadius: 12, background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
-                  <i className="fa-solid fa-bolt" style={{ fontSize: 22, color: 'white' }}></i>
-                </div>
-                <div style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: 8, color: 'var(--text-main)' }}>Multi-RPC Routing</div>
-                <div style={{ color: 'var(--text-muted)', fontSize: '0.95rem', lineHeight: 1.6 }}>
-                  Smart load balancing across QuickNode, Alchemy, and Helius. Light calls use free tier, heavy operations route to premium — automatic failover.
-                </div>
-              </div>
-              <div style={{ background: 'var(--bg-card)', borderRadius: 16, padding: 32, border: '1px solid var(--border)' }}>
-                <div style={{ width: 48, height: 48, borderRadius: 12, background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
-                  <i className="fa-solid fa-database" style={{ fontSize: 22, color: 'white' }}></i>
-                </div>
-                <div style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: 8, color: 'var(--text-main)' }}>Syndicate Memory</div>
-                <div style={{ color: 'var(--text-muted)', fontSize: '0.95rem', lineHeight: 1.6 }}>
-                  Every bundle wallet is stored in our network map. Scan a new token and we'll tell you if these wallets rugged before — with receipts.
-                </div>
-              </div>
-              <div style={{ background: 'var(--bg-card)', borderRadius: 16, padding: 32, border: '1px solid var(--border)' }}>
-                <div style={{ width: 48, height: 48, borderRadius: 12, background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
-                  <i className="fa-solid fa-code" style={{ fontSize: 22, color: 'white' }}></i>
-                </div>
-                <div style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: 8, color: 'var(--text-main)' }}>100% Open Source</div>
-                <div style={{ color: 'var(--text-muted)', fontSize: '0.95rem', lineHeight: 1.6 }}>
-                  Every line of code is on GitHub under MIT license. Fork it, audit it, improve it. We believe transparency is the best security.
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
+          {/* Section: The Hunt */}
+          <section
+            id="hunt"
+            className="narrative-section section-hunt"
+            ref={(el) => (sectionRefs.current['hunt'] = el)}
+          >
+            <div className={`narrative-content ${visibleSections.has('hunt') ? 'visible' : ''}`}>
+              <div className="narrative-label">Chapter IV</div>
+              <h1 className="narrative-title">
+                Now they <span>hunt as one</span>
+              </h1>
+              <p className="narrative-text">
+                Watch the swarm coordinate in real-time as they expose a threat.
+              </p>
 
-        {/* TRADING SHOWCASE */}
-        <section className="trading-showcase reveal">
-          <div className="container">
-            <div className="section-header">
-              <h2>Trade With Protection</h2>
-              <p>Auto-sell shields your positions while you sleep</p>
-            </div>
-
-            <div className="ui-mockup" style={{ maxWidth: 900, margin: '0 auto' }}>
-              <div className="ui-header">
-                <div className="ui-dots">
-                  <div className="ui-dot red"></div>
-                  <div className="ui-dot yellow"></div>
-                  <div className="ui-dot green"></div>
+              {/* Terminal Preview */}
+              <div className="terminal-preview" ref={terminalRef}>
+                <div className="terminal-header">
+                  <div className="terminal-dot red" />
+                  <div className="terminal-dot yellow" />
+                  <div className="terminal-dot green" />
+                  <div className="terminal-title">argus-swarm — threat detection</div>
                 </div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 500 }}>Trading Panel</div>
-              </div>
-              <div className="ui-body">
-                {/* Trading Controls */}
-                <div className="ui-trade-row">
-                  <span className="ui-trade-row-label">Amount:</span>
-                  <div className="ui-trade-btn active">0.05 SOL</div>
-                  <div className="ui-trade-btn">0.1 SOL</div>
-                  <div className="ui-trade-btn">0.2 SOL</div>
-                  <div className="ui-trade-btn">0.5 SOL</div>
-                  <div className="ui-trade-btn">1 SOL</div>
-                  <div className="ui-trade-btn">Custom</div>
-                  <div className="ui-trade-actions">
-                    <div className="ui-action-sell">Sell STARTUP</div>
-                    <div className="ui-action-buy">Buy STARTUP</div>
-                  </div>
-                </div>
-
-                {/* Settings */}
-                <div className="ui-settings-row">
-                  <div className="ui-settings-group">
-                    <div className="ui-settings-label">Max Slippage</div>
-                    <div className="ui-settings-options">
-                      <div className="ui-trade-btn">1%</div>
-                      <div className="ui-trade-btn active">3%</div>
-                      <div className="ui-trade-btn">5%</div>
-                      <div className="ui-trade-btn">10%</div>
+                <div className="terminal-body">
+                  {terminalContent.map((line, i) => (
+                    <div
+                      key={i}
+                      className={`terminal-line ${i < terminalLines ? 'visible' : ''}`}
+                      style={{ transitionDelay: `${i * 0.05}s` }}
+                    >
+                      <span className={line.class}>{line.text}</span>
                     </div>
-                  </div>
-                  <div className="ui-settings-group">
-                    <div className="ui-settings-label">Reserve Balance</div>
-                    <div className="ui-settings-options">
-                      <div className="ui-trade-btn">0.05 SOL</div>
-                      <div className="ui-trade-btn active">0.1 SOL</div>
-                      <div className="ui-trade-btn">0.2 SOL</div>
-                      <div className="ui-trade-btn">0.5 SOL</div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Auto-Sell */}
-                <div className="ui-autosell">
-                  <div className="ui-autosell-header">
-                    <div className="ui-autosell-title">Auto-Sell</div>
-                    <div className="ui-toggle"></div>
-                  </div>
-                  <div className="ui-autosell-groups">
-                    <div className="ui-autosell-group">
-                      <div className="ui-autosell-group-label">Take Profit</div>
-                      <div className="ui-autosell-options">
-                        <div className="ui-trade-btn active">+50%</div>
-                        <div className="ui-trade-btn">+100%</div>
-                        <div className="ui-trade-btn">+200%</div>
-                        <div className="ui-trade-btn">+500%</div>
-                      </div>
-                    </div>
-                    <div className="ui-autosell-group">
-                      <div className="ui-autosell-group-label">Stop Loss</div>
-                      <div className="ui-autosell-options">
-                        <div className="ui-trade-btn">-20%</div>
-                        <div className="ui-trade-btn active-red">-30%</div>
-                        <div className="ui-trade-btn">-50%</div>
-                        <div className="ui-trade-btn">-70%</div>
-                      </div>
-                    </div>
-                    <div className="ui-autosell-group">
-                      <div className="ui-autosell-group-label">Trailing Stop</div>
-                      <div className="ui-autosell-options">
-                        <div className="ui-trade-btn">Off</div>
-                        <div className="ui-trade-btn">-10%</div>
-                        <div className="ui-trade-btn">-20%</div>
-                        <div className="ui-trade-btn active-red">-30%</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Positions */}
-                <div className="ui-positions">
-                  <div className="ui-positions-header">
-                    <div className="ui-positions-title">
-                      Your Positions
-                      <span className="ui-positions-badge">1</span>
-                    </div>
-                    <div className="ui-positions-summary">
-                      <span>25 trades</span>
-                      <span className="ui-positions-pnl">-0.1706 SOL</span>
-                      <div className="ui-pos-actions">
-                        <div className="ui-pos-action-btn sell">Sell All</div>
-                        <div className="ui-pos-action-btn clear">Clear All</div>
-                      </div>
-                    </div>
-                  </div>
-                  <table className="ui-positions-table">
-                    <thead>
-                      <tr>
-                        <th>Token</th>
-                        <th>Entry</th>
-                        <th>Current</th>
-                        <th>P&L</th>
-                        <th>Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td className="token-name">STARTUP</td>
-                        <td>0.0522 SOL</td>
-                        <td>0.0564 SOL</td>
-                        <td className="pnl-positive">+8.1%</td>
-                        <td><div className="ui-pos-sell-btn">Sell</div></td>
-                      </tr>
-                    </tbody>
-                  </table>
+                  ))}
                 </div>
               </div>
             </div>
-          </div>
-        </section>
 
-        {/* HOW IT WORKS */}
-        <section id="how-it-works" className="how-it-works reveal">
-          <div className="container">
-            <div className="section-header">
-              <h2>How It Works</h2>
-              <p>Four steps. A hundred eyes. Zero blind spots.</p>
-            </div>
-
-            <div className="steps-grid">
-              <div className="step">
-                <div className="step-number">1</div>
-                <div className="step-title">Paste Address</div>
-                <div className="step-desc">Enter any Solana token mint address into the search bar</div>
+            <div className="hunt-steps">
+              <div className={`hunt-step ${visibleSections.has('hunt') ? 'visible' : ''}`}>
+                <div className="hunt-step-num">1</div>
+                <div className="hunt-step-content">
+                  <h4>Mark the Target</h4>
+                  <p>Submit a token address. The hunt begins.</p>
+                </div>
               </div>
-              <div className="step">
-                <div className="step-number">2</div>
-                <div className="step-title">Detect Syndicates</div>
-                <div className="step-desc">Argus scans every wallet for same-block sniping and coordinated pump groups</div>
+              <div className={`hunt-step ${visibleSections.has('hunt') ? 'visible' : ''}`}>
+                <div className="hunt-step-num">2</div>
+                <div className="hunt-step-content">
+                  <h4>Deploy the Swarm</h4>
+                  <p>Scouts scan, Analysts dissect, Hunters trace wallet networks across tokens.</p>
+                </div>
               </div>
-              <div className="step">
-                <div className="step-number">3</div>
-                <div className="step-title">Review Analysis</div>
-                <div className="step-desc">See security status, bundle warnings, and risk assessment</div>
+              <div className={`hunt-step ${visibleSections.has('hunt') ? 'visible' : ''}`}>
+                <div className="hunt-step-num">3</div>
+                <div className="hunt-step-content">
+                  <h4>Expose the Threat</h4>
+                  <p>Pattern matching reveals syndicates, honeypots, and repeat offenders.</p>
+                </div>
               </div>
-              <div className="step">
-                <div className="step-number">4</div>
-                <div className="step-title">Trade Smart</div>
-                <div className="step-desc">Buy with confidence or avoid the rug—your choice</div>
+              <div className={`hunt-step ${visibleSections.has('hunt') ? 'visible' : ''}`}>
+                <div className="hunt-step-num">4</div>
+                <div className="hunt-step-content">
+                  <h4>Execute or Retreat</h4>
+                  <p>Trade with intelligence or walk away. The choice is yours.</p>
+                </div>
               </div>
             </div>
-          </div>
-        </section>
+          </section>
 
-        {/* LIVE TERMINAL */}
-        <section className="terminal-section" ref={terminalRef}>
-          <div className="container">
-            <div className="section-header reveal">
-              <h2>See It In Action</h2>
-              <p>Watch Argus AI analyze a token in real time</p>
+          {/* Section: The Engine */}
+          <section
+            id="engine"
+            className="narrative-section section-engine"
+            ref={(el) => (sectionRefs.current['engine'] = el)}
+          >
+            <div className={`narrative-content ${visibleSections.has('engine') ? 'visible' : ''}`}>
+              <div className="narrative-label">The Dark Engine</div>
+              <h1 className="narrative-title">
+                BitNet <span>1-bit AI</span>
+              </h1>
+              <p className="narrative-text">
+                We compress the entire blockchain state into a neural fingerprint.
+                Every transaction. Every wallet. Every sin — remembered forever.
+              </p>
             </div>
-
-            <div className="terminal reveal">
-              <div className="terminal-titlebar">
-                <div className="terminal-dot red" />
-                <div className="terminal-dot yellow" />
-                <div className="terminal-dot green" />
-                <div className="terminal-title">argus-ai &mdash; token analysis</div>
+            <div className="engine-stats">
+              <div className={`engine-stat ${visibleSections.has('engine') ? 'visible' : ''}`} style={{ transitionDelay: '0.1s' }}>
+                <div className="engine-stat-value">17,000x</div>
+                <div className="engine-stat-label">Data Compression</div>
               </div>
-              <div className="terminal-body">
-                {terminalLines.map((line, i) => (
-                  <div
-                    key={i}
-                    className={`terminal-line ${i < visibleLines ? 'visible' : ''}`}
-                    style={{ transitionDelay: `${i * 0.05}s` }}
-                  >
-                    <span className={line.classes}>{line.text}</span>
-                  </div>
-                ))}
+              <div className={`engine-stat ${visibleSections.has('engine') ? 'visible' : ''}`} style={{ transitionDelay: '0.2s' }}>
+                <div className="engine-stat-value">13ms</div>
+                <div className="engine-stat-label">Inference Time</div>
               </div>
-            </div>
-          </div>
-        </section>
-
-        {/* WHY ARGUS - COMPETITIVE COMPARISON */}
-        <section id="compare" className="comparison reveal">
-          <div className="container">
-            <div className="section-header">
-              <div className="category-badge">The All-Seeing Guardian</div>
-              <h2>One Tool, Not Five</h2>
-              <p>Other traders juggle RugCheck, DexScreener, Bubble Maps, a DEX, and a price tracker. Argus sees it all in a single interface.</p>
-            </div>
-
-            <div className="comparison-table-wrap">
-              <table className="comparison-table">
-                <thead>
-                  <tr>
-                    <th>Capability</th>
-                    <th>RugCheck</th>
-                    <th>DexScreener</th>
-                    <th>Bubble Maps</th>
-                    <th>Sniper Bots</th>
-                    <th className="highlight">Argus</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td><i className="fa-solid fa-shield-halved" style={{ marginRight: 8, color: 'var(--text-muted)' }}></i>Security Analysis</td>
-                    <td><span className="check"><i className="fa-solid fa-check"></i></span></td>
-                    <td><span className="dash">&mdash;</span></td>
-                    <td><span className="dash">&mdash;</span></td>
-                    <td><span className="dash">&mdash;</span></td>
-                    <td className="highlight"><span className="check"><i className="fa-solid fa-check"></i></span></td>
-                  </tr>
-                  <tr>
-                    <td><i className="fa-solid fa-chart-line" style={{ marginRight: 8, color: 'var(--text-muted)' }}></i>Market Data</td>
-                    <td><span className="dash">&mdash;</span></td>
-                    <td><span className="check"><i className="fa-solid fa-check"></i></span></td>
-                    <td><span className="dash">&mdash;</span></td>
-                    <td><span className="dash">&mdash;</span></td>
-                    <td className="highlight"><span className="check"><i className="fa-solid fa-check"></i></span></td>
-                  </tr>
-                  <tr>
-                    <td><i className="fa-solid fa-users-between-lines" style={{ marginRight: 8, color: 'var(--text-muted)' }}></i>Same-Block Bundle Detection</td>
-                    <td><span className="dash">&mdash;</span></td>
-                    <td><span className="dash">&mdash;</span></td>
-                    <td><span className="dash">&mdash;</span></td>
-                    <td><span className="dash">&mdash;</span></td>
-                    <td className="highlight"><span className="exclusive">ONLY ARGUS</span></td>
-                  </tr>
-                  <tr>
-                    <td><i className="fa-solid fa-chart-line" style={{ marginRight: 8, color: 'var(--text-muted)' }}></i>Price Crash Guardrails</td>
-                    <td><span className="dash">&mdash;</span></td>
-                    <td><span className="dash">&mdash;</span></td>
-                    <td><span className="dash">&mdash;</span></td>
-                    <td><span className="dash">&mdash;</span></td>
-                    <td className="highlight"><span className="exclusive">ONLY ARGUS</span></td>
-                  </tr>
-                  <tr>
-                    <td><i className="fa-solid fa-bolt" style={{ marginRight: 8, color: 'var(--text-muted)' }}></i>One-Click Trading</td>
-                    <td><span className="dash">&mdash;</span></td>
-                    <td><span className="dash">&mdash;</span></td>
-                    <td><span className="dash">&mdash;</span></td>
-                    <td><span className="check"><i className="fa-solid fa-check"></i></span></td>
-                    <td className="highlight"><span className="check"><i className="fa-solid fa-check"></i></span></td>
-                  </tr>
-                  <tr>
-                    <td><i className="fa-solid fa-lock" style={{ marginRight: 8, color: 'var(--text-muted)' }}></i>Auto-Sell Protection</td>
-                    <td><span className="dash">&mdash;</span></td>
-                    <td><span className="dash">&mdash;</span></td>
-                    <td><span className="dash">&mdash;</span></td>
-                    <td><span className="dash">&mdash;</span></td>
-                    <td className="highlight"><span className="exclusive">ONLY ARGUS</span></td>
-                  </tr>
-                  <tr>
-                    <td><i className="fa-solid fa-brain" style={{ marginRight: 8, color: 'var(--text-muted)' }}></i>Local AI (BitNet)</td>
-                    <td><span className="dash">&mdash;</span></td>
-                    <td><span className="dash">&mdash;</span></td>
-                    <td><span className="dash">&mdash;</span></td>
-                    <td><span className="dash">&mdash;</span></td>
-                    <td className="highlight"><span className="exclusive">ONLY ARGUS</span></td>
-                  </tr>
-                  <tr>
-                    <td><i className="fa-solid fa-link" style={{ marginRight: 8, color: 'var(--text-muted)' }}></i>Direct RPC (No 3rd Party)</td>
-                    <td><span className="dash">&mdash;</span></td>
-                    <td><span className="dash">&mdash;</span></td>
-                    <td><span className="dash">&mdash;</span></td>
-                    <td><span className="dash">&mdash;</span></td>
-                    <td className="highlight"><span className="exclusive">ONLY ARGUS</span></td>
-                  </tr>
-                  <tr>
-                    <td><i className="fa-solid fa-diagram-project" style={{ marginRight: 8, color: 'var(--text-muted)' }}></i>Bundle Network Graph</td>
-                    <td><span className="dash">&mdash;</span></td>
-                    <td><span className="dash">&mdash;</span></td>
-                    <td><span className="check"><i className="fa-solid fa-check"></i></span></td>
-                    <td><span className="dash">&mdash;</span></td>
-                    <td className="highlight"><span className="exclusive">ONLY ARGUS</span></td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-            <div className="comparison-callout">
-              <div className="callout-icon">
-                <i className="fa-solid fa-lightbulb"></i>
+              <div className={`engine-stat ${visibleSections.has('engine') ? 'visible' : ''}`} style={{ transitionDelay: '0.3s' }}>
+                <div className="engine-stat-value">116B</div>
+                <div className="engine-stat-label">Feature Vector</div>
               </div>
-              <div className="callout-content">
-                <h4>Other tools see fragments. Argus sees everything.</h4>
-                <p>
-                  RugCheck relies on cached data. DexScreener shows charts but no intelligence. Sniper bots trade blind. Argus runs <strong>BitNet AI locally</strong> with <strong>direct Solana RPC</strong>&mdash;no third-party APIs, no stale data, sub-100ms analysis. The first <strong>Research-to-Trade</strong> platform with real-time on-chain intelligence and auto-sell protection.
-                </p>
+              <div className={`engine-stat ${visibleSections.has('engine') ? 'visible' : ''}`} style={{ transitionDelay: '0.4s' }}>
+                <div className="engine-stat-value">$0</div>
+                <div className="engine-stat-label">Monthly AI Cost</div>
               </div>
             </div>
-          </div>
-        </section>
+          </section>
 
-        {/* PRICING */}
-        <section id="pricing" className="pricing reveal">
-          <div className="container">
-            <div className="section-header">
-              <h2>Simple, Transparent Pricing</h2>
-              <p>Start free. Unlock unlimited with $ARGUS tokens.</p>
+          {/* Section: Arsenal */}
+          <section
+            id="arsenal"
+            className="narrative-section section-arsenal"
+            ref={(el) => (sectionRefs.current['arsenal'] = el)}
+          >
+            <div className={`narrative-content ${visibleSections.has('arsenal') ? 'visible' : ''}`}>
+              <div className="narrative-label">The Arsenal</div>
+              <h1 className="narrative-title">
+                Weapons <span>forged in darkness</span>
+              </h1>
             </div>
+            <div className="arsenal-grid">
+              {[
+                { title: 'Syndicate Scanner', desc: 'Same-block transaction analysis exposes coordinated pump groups' },
+                { title: 'Bundle Detection', desc: 'Identify wallet clusters controlling supply before they dump' },
+                { title: 'Security Check', desc: 'Instant checks on mint/freeze authority, LP lock, contract risks' },
+                { title: 'Dev Tracker', desc: 'Analyze creator wallet age, deployment history, activity patterns' },
+                { title: 'AutoGuard', desc: 'Set take profit, stop loss, trailing stops for autonomous exits' },
+                { title: 'Quick Trade', desc: 'One-click Jupiter swaps with dedicated trading wallet' },
+                { title: 'Origin Vault', desc: 'Private keys isolated in separate secure origin, protected from XSS' },
+                { title: 'Pattern Library', desc: '8 known scam patterns with weighted similarity scoring' },
+                { title: 'Outcome Learning', desc: 'Self-improving AI that tracks predictions vs actual outcomes' },
+              ].map((item, i) => (
+                <div
+                  key={i}
+                  className={`arsenal-item ${visibleSections.has('arsenal') ? 'visible' : ''}`}
+                  style={{ transitionDelay: `${i * 0.05}s` }}
+                >
+                  <h5>{item.title}</h5>
+                  <p>{item.desc}</p>
+                </div>
+              ))}
+            </div>
+          </section>
 
+          {/* Section: Pricing */}
+          <section
+            id="pricing"
+            className="narrative-section section-pricing"
+            ref={(el) => (sectionRefs.current['pricing'] = el)}
+          >
+            <div className={`narrative-content ${visibleSections.has('pricing') ? 'visible' : ''}`}>
+              <div className="narrative-label">Access Levels</div>
+              <h1 className="narrative-title">
+                Choose your <span>tier</span>
+              </h1>
+              <p className="narrative-text">
+                Start free. Unlock unlimited power with $ARGUS tokens.
+              </p>
+            </div>
             <div className="pricing-grid">
-              {/* FREE TIER */}
-              <div className="pricing-card">
+              {/* Free */}
+              <div className={`pricing-card ${visibleSections.has('pricing') ? 'visible' : ''}`}>
                 <div className="pricing-tier">Free</div>
                 <div className="pricing-price">$0 <span>/month</span></div>
-                <div className="pricing-desc">Perfect for trying out Argus and casual research</div>
+                <div className="pricing-desc">Try the platform risk-free</div>
                 <ul className="pricing-features">
-                  <li><span className="check"><i className="fa-solid fa-check"></i></span> 10 token scans per day</li>
-                  <li><span className="check"><i className="fa-solid fa-check"></i></span> AI risk analysis</li>
-                  <li><span className="check"><i className="fa-solid fa-check"></i></span> Bundle detection</li>
-                  <li><span className="check"><i className="fa-solid fa-check"></i></span> One-click trading</li>
-                  <li><span className="limit"><i className="fa-solid fa-minus"></i></span> Basic support</li>
+                  <li><span className="check">&#10003;</span> 10 scans per day</li>
+                  <li><span className="check">&#10003;</span> AI risk analysis</li>
+                  <li><span className="check">&#10003;</span> Bundle detection</li>
+                  <li><span className="check">&#10003;</span> One-click trading</li>
+                  <li><span className="limit">—</span> Basic support</li>
                 </ul>
-                <a href="https://app.argusguard.io" className="pricing-cta pricing-cta-outline">Get Started Free</a>
+                <a href="https://app.argusguard.io" className="pricing-cta pricing-cta-outline">Get Started</a>
               </div>
-
-              {/* HOLDER TIER */}
-              <div className="pricing-card featured">
+              {/* Holder */}
+              <div className={`pricing-card featured ${visibleSections.has('pricing') ? 'visible' : ''}`}>
                 <div className="pricing-tier">Holder</div>
                 <div className="pricing-price">1K+ <span>$ARGUS</span></div>
-                <div className="pricing-desc">For active traders who need unlimited access</div>
+                <div className="pricing-desc">For active traders</div>
                 <ul className="pricing-features">
-                  <li><span className="check"><i className="fa-solid fa-check"></i></span> <strong>Unlimited</strong> token scans</li>
-                  <li><span className="check"><i className="fa-solid fa-check"></i></span> AI risk analysis</li>
-                  <li><span className="check"><i className="fa-solid fa-check"></i></span> Bundle detection</li>
-                  <li><span className="check"><i className="fa-solid fa-check"></i></span> One-click trading</li>
-                  <li><span className="check"><i className="fa-solid fa-check"></i></span> Priority support</li>
+                  <li><span className="check">&#10003;</span> <strong>Unlimited</strong> scans</li>
+                  <li><span className="check">&#10003;</span> AI risk analysis</li>
+                  <li><span className="check">&#10003;</span> Bundle detection</li>
+                  <li><span className="check">&#10003;</span> One-click trading</li>
+                  <li><span className="check">&#10003;</span> Priority support</li>
                 </ul>
-                <a href="#token" className="pricing-cta pricing-cta-primary">Get $ARGUS</a>
+                <a href="https://app.argusguard.io" className="pricing-cta pricing-cta-primary">Hold $ARGUS</a>
               </div>
-
-              {/* PRO TIER */}
-              <div className="pricing-card">
+              {/* Pro */}
+              <div className={`pricing-card ${visibleSections.has('pricing') ? 'visible' : ''}`}>
                 <div className="pricing-tier">Pro</div>
                 <div className="pricing-price">10K+ <span>$ARGUS</span></div>
-                <div className="pricing-desc">For power users and professional traders</div>
+                <div className="pricing-desc">For power users</div>
                 <ul className="pricing-features">
-                  <li><span className="check"><i className="fa-solid fa-check"></i></span> <strong>Unlimited</strong> token scans</li>
-                  <li><span className="check"><i className="fa-solid fa-check"></i></span> AI risk analysis</li>
-                  <li><span className="check"><i className="fa-solid fa-check"></i></span> Bundle detection</li>
-                  <li><span className="check"><i className="fa-solid fa-check"></i></span> One-click trading</li>
-                  <li><span className="check"><i className="fa-solid fa-check"></i></span> Early feature access</li>
+                  <li><span className="check">&#10003;</span> <strong>Unlimited</strong> scans</li>
+                  <li><span className="check">&#10003;</span> Syndicate network map</li>
+                  <li><span className="check">&#10003;</span> Early feature access</li>
+                  <li><span className="check">&#10003;</span> API access (coming)</li>
+                  <li><span className="check">&#10003;</span> Direct support</li>
                 </ul>
-                <a href="#token" className="pricing-cta pricing-cta-outline">Get $ARGUS</a>
+                <a href="https://app.argusguard.io" className="pricing-cta pricing-cta-outline">Hold $ARGUS</a>
               </div>
             </div>
-
             <p className="pricing-note">
-              <strong>No subscriptions required.</strong> Hold $ARGUS tokens in your wallet to unlock premium features instantly. Your tokens, your access.
+              <strong>No subscriptions.</strong> Hold $ARGUS tokens in your wallet to unlock premium features instantly.
             </p>
-          </div>
-        </section>
+          </section>
 
-        {/* TOKEN TEASER */}
-        <section id="token" className="token-teaser reveal">
-          <div className="container">
-            <div className="teaser-content">
-              <div className="teaser-badge">
-                🔥 COMING SOON
-              </div>
-              <h2>$ARGUS Token Launch</h2>
-              <p>
-                Early holders gain access to premium features, reduced trading fees, and governance rights.
-                Position yourself before the public launch for maximum upside.
+          {/* Section: Join */}
+          <section
+            id="join"
+            className="narrative-section section-join"
+            ref={(el) => (sectionRefs.current['join'] = el)}
+          >
+            <div className={`narrative-content ${visibleSections.has('join') ? 'visible' : ''}`}>
+              <ArgusEye className="join-eye" />
+              <div className="narrative-label">Chapter V</div>
+              <h1 className="narrative-title">
+                Will you join<br /><span>the watchers?</span>
+              </h1>
+              <p className="narrative-text">
+                The shadows await. Let the agents hunt for you.<br />
+                Nothing escapes the hundred eyes.
               </p>
-
-              <div className="ca-box">
-                <div className="ca-label">Contract Address</div>
-                <div className="ca-address">TBA - Launching Soon</div>
-              </div>
-
-              <div className="teaser-benefits">
-                <div className="benefit-item">
-                  <div className="benefit-icon"><i className="fa-solid fa-gem"></i></div>
-                  <div className="benefit-title">Premium Features</div>
-                  <div className="benefit-desc">Advanced analytics, unlimited scans, priority support</div>
-                </div>
-                <div className="benefit-item">
-                  <div className="benefit-icon"><i className="fa-solid fa-coins"></i></div>
-                  <div className="benefit-title">Revenue Share</div>
-                  <div className="benefit-desc">Earn from platform trading fees as a holder</div>
-                </div>
-                <div className="benefit-item">
-                  <div className="benefit-icon"><i className="fa-solid fa-check-to-slot"></i></div>
-                  <div className="benefit-title">Governance Rights</div>
-                  <div className="benefit-desc">Vote on protocol upgrades and feature priorities</div>
-                </div>
-              </div>
-
-              <p style={{ fontSize: '0.95rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                Regulation tokenomics incoming. Early investors could see significant upside as platform adoption grows.
-              </p>
-            </div>
-          </div>
-        </section>
-
-        {/* TOKENOMICS */}
-        <section id="tokenomics" className="tokenomics reveal">
-          <div className="container">
-            <div className="section-header">
-              <h2>Tokenomics</h2>
-              <p>Fair launch with community-first distribution</p>
-            </div>
-
-            <div className="token-grid">
-              <div className="token-info">
-                <h3>$ARGUS Token</h3>
-                <p>
-                  The $ARGUS token powers the hundred-eyed guardian, granting holders premium features,
-                  reduced trading fees, and governance rights over the protocol's evolution.
-                </p>
-                <div className="token-stats">
-                  <div className="token-stat">
-                    <div className="token-stat-value">1B</div>
-                    <div className="token-stat-label">Total Supply</div>
-                  </div>
-                  <div className="token-stat">
-                    <div className="token-stat-value">0%</div>
-                    <div className="token-stat-label">Buy/Sell Tax</div>
-                  </div>
-                  <div className="token-stat">
-                    <div className="token-stat-value">100%</div>
-                    <div className="token-stat-label">LP Locked</div>
-                  </div>
-                  <div className="token-stat">
-                    <div className="token-stat-value">Revoked</div>
-                    <div className="token-stat-label">Mint Authority</div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="token-chart">
-                <div className="chart-title">Token Distribution</div>
-                <div className="chart-bars">
-                  <div className="chart-bar">
-                    <span className="chart-label">Community</span>
-                    <div className="chart-track">
-                      <div className="chart-fill community" style={{ width: '50%' }}>50%</div>
-                    </div>
-                  </div>
-                  <div className="chart-bar">
-                    <span className="chart-label">Liquidity</span>
-                    <div className="chart-track">
-                      <div className="chart-fill liquidity" style={{ width: '25%' }}>25%</div>
-                    </div>
-                  </div>
-                  <div className="chart-bar">
-                    <span className="chart-label">Development</span>
-                    <div className="chart-track">
-                      <div className="chart-fill development" style={{ width: '15%' }}>15%</div>
-                    </div>
-                  </div>
-                  <div className="chart-bar">
-                    <span className="chart-label">Team</span>
-                    <div className="chart-track">
-                      <div className="chart-fill team" style={{ width: '10%' }}>10%</div>
-                    </div>
-                  </div>
-                </div>
+              <div>
+                <a href="https://app.argusguard.io" className="join-cta">
+                  Enter the Darkness
+                </a>
+                <a href="https://github.com/ArgusGuardAI/argus-ai" target="_blank" rel="noopener noreferrer" className="join-secondary">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                  </svg>
+                  View Source
+                </a>
               </div>
             </div>
-          </div>
-        </section>
+          </section>
 
-        {/* ROADMAP */}
-        <section id="roadmap" className="roadmap reveal">
-          <div className="container">
-            <div className="section-header">
-              <h2>Roadmap</h2>
-              <p>Every eye evolving. Every signal sharpening.</p>
-            </div>
-
-            {/* Timeline Spine */}
-            <div className="roadmap-timeline">
-              <div className="roadmap-node done">
-                <span className="roadmap-node-label">Phase 01</span>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
-              </div>
-              <div className="roadmap-segment done" />
-              <div className="roadmap-node active">
-                <span className="roadmap-node-label">Phase 02</span>
-              </div>
-              <div className="roadmap-segment upcoming" />
-              <div className="roadmap-node upcoming">
-                <span className="roadmap-node-label">Phase 03</span>
-              </div>
-            </div>
-
-            {/* Phase Cards */}
-            <div className="roadmap-phases">
-              {/* Phase 1 */}
-              <div className="roadmap-card">
-                <div className="roadmap-phase-label">Phase_01 // Foundation</div>
-                <div className="roadmap-title">Foundation</div>
-                <div className="roadmap-status complete">
-                  <span className="roadmap-status-dot" />
-                  Complete
-                </div>
-                <div className="roadmap-progress">
-                  <div className="roadmap-progress-fill" style={{ width: '100%' }} />
-                </div>
-                <div className="roadmap-list">
-                  <div className="roadmap-item">
-                    <span className="roadmap-badge shipped">Shipped</span>
-                    <span>Bundle detection engine</span>
-                  </div>
-                  <div className="roadmap-item">
-                    <span className="roadmap-badge shipped">Shipped</span>
-                    <span>AI risk scoring with guardrails</span>
-                  </div>
-                  <div className="roadmap-item">
-                    <span className="roadmap-badge shipped">Shipped</span>
-                    <span>One-click Jupiter trading</span>
-                  </div>
-                  <div className="roadmap-item">
-                    <span className="roadmap-badge shipped">Shipped</span>
-                    <span>Auto-sell protection (TP/SL/trailing)</span>
-                  </div>
-                  <div className="roadmap-item">
-                    <span className="roadmap-badge shipped">Shipped</span>
-                    <span>Twitter + Telegram alert bots</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Phase 2 */}
-              <div className="roadmap-card active-card">
-                <div className="roadmap-phase-label">Phase_02 // Intelligence</div>
-                <div className="roadmap-title">Intelligence</div>
-                <div className="roadmap-status in-progress">
-                  <span className="roadmap-status-dot" />
-                  In Progress
-                </div>
-                <div className="roadmap-progress">
-                  <div className="roadmap-progress-fill" style={{ width: '20%' }} />
-                </div>
-                <div className="roadmap-list">
-                  <div className="roadmap-item">
-                    <span className="roadmap-badge building">Building</span>
-                    <span>$ARGUS token launch</span>
-                  </div>
-                  <div className="roadmap-item dim">
-                    <span className="roadmap-badge planned">Planned</span>
-                    <span>Smart wallet tracking &amp; copy-trade alerts</span>
-                  </div>
-                  <div className="roadmap-item dim">
-                    <span className="roadmap-badge planned">Planned</span>
-                    <span>Real-time price alerts (Telegram + push)</span>
-                  </div>
-                  <div className="roadmap-item dim">
-                    <span className="roadmap-badge planned">Planned</span>
-                    <span>Portfolio dashboard with P&amp;L analytics</span>
-                  </div>
-                  <div className="roadmap-item dim">
-                    <span className="roadmap-badge planned">Planned</span>
-                    <span>Mobile-optimized PWA</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Phase 3 */}
-              <div className="roadmap-card">
-                <div className="roadmap-phase-label">Phase_03 // Domination</div>
-                <div className="roadmap-title">Domination</div>
-                <div className="roadmap-status upcoming-status">
-                  <span className="roadmap-status-dot" />
-                  Upcoming
-                </div>
-                <div className="roadmap-progress">
-                  <div className="roadmap-progress-fill" style={{ width: '0%' }} />
-                </div>
-                <div className="roadmap-list">
-                  <div className="roadmap-item dim">
-                    <span className="roadmap-badge planned">Planned</span>
-                    <span>Multi-chain expansion (Base, ETH L2s)</span>
-                  </div>
-                  <div className="roadmap-item dim">
-                    <span className="roadmap-badge planned">Planned</span>
-                    <span>ML-based rug prediction model</span>
-                  </div>
-                  <div className="roadmap-item dim">
-                    <span className="roadmap-badge planned">Planned</span>
-                    <span>DAO governance for token holders</span>
-                  </div>
-                  <div className="roadmap-item dim">
-                    <span className="roadmap-badge planned">Planned</span>
-                    <span>API access for third-party integrations</span>
-                  </div>
-                  <div className="roadmap-item dim">
-                    <span className="roadmap-badge planned">Planned</span>
-                    <span>Enterprise / institutional tier</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* TEAM */}
-        <section id="team" className="team reveal">
-          <div className="container">
-            <div className="section-header">
-              <h2>Meet the Team</h2>
-              <p>The minds behind the hundred eyes</p>
-            </div>
-
-            <div className="team-grid stagger-children">
-              <div className="team-card">
-                <div className="team-avatar">JH</div>
-                <div className="team-info">
-                  <div className="team-name">Jessie H.</div>
-                  <div className="team-role">Founder & Lead Dev</div>
-                  <div className="team-bio">Full-stack engineer building at the intersection of DeFi and AI. Forged the hundred-eyed guardian from the ground up to protect Solana traders.</div>
-                  <div className="team-social">
-                    <a href="https://x.com/ArgusPanoptes7z" target="_blank" rel="noopener noreferrer" aria-label="Twitter">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
-                    </a>
-                    <a href="https://t.me/ArgusAIAlerts" target="_blank" rel="noopener noreferrer" aria-label="Telegram">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
-                    </a>
-                    <a href="https://github.com/ArgusGuardAI/argus-ai" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
-                    </a>
-                  </div>
-                </div>
-              </div>
-
-              <div className="team-card">
-                <div className="team-avatar">AI</div>
-                <div className="team-info">
-                  <div className="team-name">Claude</div>
-                  <div className="team-role">AI Engineering</div>
-                  <div className="team-bio">Anthropic's AI model powering Argus risk analysis, code generation, and intelligent detection systems.</div>
-                  <div className="team-social">
-                    <a href="https://anthropic.com" target="_blank" rel="noopener noreferrer" aria-label="Website">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-                    </a>
-                  </div>
-                </div>
-              </div>
-
-              <div className="team-card">
-                <div className="team-avatar">OS</div>
-                <div className="team-info">
-                  <div className="team-name">Open Source</div>
-                  <div className="team-role">Community</div>
-                  <div className="team-bio">Fully open-source under MIT. Audit the code, contribute features, or fork your own version.</div>
-                  <div className="team-social">
-                    <a href="https://github.com/ArgusGuardAI/argus-ai" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
-                    </a>
-                  </div>
-                </div>
-              </div>
-
-              <div className="team-card">
-                <div className="team-avatar">+</div>
-                <div className="team-info">
-                  <div className="team-name">You?</div>
-                  <div className="team-role">Contributor</div>
-                  <div className="team-bio">We're looking for developers, designers, and security researchers. Ship code that protects real traders.</div>
-                  <div className="team-social">
-                    <a href="https://github.com/ArgusGuardAI/argus-ai" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
-                    </a>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* CTA */}
-        <section className="cta reveal">
-          <div className="container">
-            <h2>Ready to Stop Getting Rugged?</h2>
-            <p>Start detecting coordinated dumps before they happen.</p>
-            <a href="https://app.argusguard.io" className="btn btn-accent">Launch App</a>
-          </div>
-        </section>
-
-        {/* FOOTER */}
-        <footer>
-          <div className="container">
-            <div className="footer-logo">
-              <div className="logo-icon">
-                <Logo />
-              </div>
-              <span>ARGUS<span style={{ fontWeight: 300 }}>AI</span></span>
-            </div>
+          {/* Footer */}
+          <footer className="landing-footer">
             <div className="footer-links">
-              <a href="#features">Features</a>
-              <a href="#pricing">Pricing</a>
-              <a href="#token">Token</a>
-              <a href="#roadmap">Roadmap</a>
+              <a href="https://app.argusguard.io">Launch App</a>
               <a href="https://github.com/ArgusGuardAI/argus-ai" target="_blank" rel="noopener noreferrer">GitHub</a>
               <a href="https://x.com/ArgusPanoptes7z" target="_blank" rel="noopener noreferrer">Twitter</a>
               <a href="https://t.me/ArgusAIAlerts" target="_blank" rel="noopener noreferrer">Telegram</a>
             </div>
-            <div className="copyright">
-              2026 Argus AI &mdash; The Hundred-Eyed Guardian. Open Source under MIT License.
+            <div className="footer-copy">
+              2026 Argus AI — The Watcher in the Dark. Open Source under MIT License.
             </div>
-          </div>
-        </footer>
+          </footer>
+        </div>
       </div>
     </>
   );

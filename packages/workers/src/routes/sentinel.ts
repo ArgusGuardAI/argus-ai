@@ -10,6 +10,7 @@ import { convertToAnalysisInput, type TokenAnalysisOutput, createAIProvider, Loc
 import { createSentinelDataFetcher } from '../services/sentinel-data';
 import { storeBundleWallets, findRepeatOffenders, type SyndicateNetwork } from '../services/bundle-network';
 import { extractFromSentinelData, toFeatureVector, getFeatureSummary, getFeatureMemorySize } from '../services/feature-extractor';
+import { processTokenScan } from '../services/agent-events';
 
 const HELIUS_RPC_BASE = 'https://mainnet.helius-rpc.com';
 const RUGCHECK_API = 'https://api.rugcheck.xyz/v1';
@@ -1898,6 +1899,20 @@ sentinelRoutes.post('/analyze', async (c) => {
       c.header('X-RateLimit-Reset', rateLimitResult.resetAt.toString());
       c.header('X-User-Tier', tier);
 
+      // Process agent events in background (non-blocking)
+      if (c.env.SCAN_CACHE) {
+        c.executionCtx.waitUntil(
+          processTokenScan(c.env.SCAN_CACHE, {
+            tokenAddress,
+            tokenSymbol: response.tokenInfo.symbol || 'UNKNOWN',
+            score: response.analysis.riskScore,
+            bundleDetected: response.bundleInfo.detected,
+            bundleCount: response.bundleInfo.count,
+            bundleWallets: response.bundleInfo.wallets,
+          }).catch(err => console.error('[AgentEvents] Error processing scan:', err))
+        );
+      }
+
       return c.json(response);
     }
 
@@ -2481,6 +2496,25 @@ sentinelRoutes.post('/analyze', async (c) => {
     c.header('X-RateLimit-Remaining', String(rateLimitResult.remaining));
     c.header('X-RateLimit-Reset', String(rateLimitResult.resetAt));
     c.header('X-User-Tier', tier);
+
+    // Process agent events in background (non-blocking) - LEGACY path
+    if (c.env.SCAN_CACHE) {
+      c.executionCtx.waitUntil(
+        processTokenScan(c.env.SCAN_CACHE, {
+          tokenAddress,
+          tokenSymbol: tokenInfo.symbol || 'UNKNOWN',
+          score: analysis.riskScore,
+          bundleDetected: bundleInfo.detected,
+          bundleCount: bundleInfo.count,
+          bundleWallets: bundleInfo.wallets,
+          syndicateNetwork: syndicateNetwork ? {
+            detected: syndicateNetwork.detected,
+            repeatOffenders: syndicateNetwork.repeatOffenders,
+            rugRate: syndicateNetwork.rugRate,
+          } : undefined,
+        }).catch(err => console.error('[AgentEvents] Error processing scan:', err))
+      );
+    }
 
     return c.json({
       tokenInfo,

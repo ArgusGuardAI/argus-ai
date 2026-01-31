@@ -15,8 +15,11 @@ Development guidance for AI assistants working on the Solana Safeguard AI codeba
 
 ### Core Components
 - **Argus** (`packages/argus`) - Token Research Dashboard (React + Vite)
-- **Sniper** (`packages/sniper`) - Token scanner backend (local dev)
+- **Agents** (`packages/agents`) - Multi-agent AI system for autonomous analysis
 - **Workers** (`packages/workers`) - Cloudflare Workers API (production)
+- **Vault** (`packages/vault`) - Secure key management (isolated origin)
+- **Training** (`packages/training`) - ML training data collection
+- **Sniper** (`packages/sniper`) - Token scanner backend (deprecated, use Workers)
 
 ### Key Features
 - Manual token address input with analysis
@@ -43,20 +46,32 @@ packages/
 │   ├── src/App.tsx      # Main single-page dashboard
 │   ├── src/main.tsx     # Subdomain-aware routing
 │   ├── src/pages/       # Landing page
-│   ├── src/hooks/       # useAutoTrade hook (trading logic)
+│   ├── src/hooks/       # useAutoTrade, useAgentStatus hooks
+│   ├── src/components/  # SwarmStatusPanel, ActivityFeed
 │   ├── src/lib/         # Jupiter swap, trading wallet (vault client)
 │   └── src/contexts/    # Wallet auth context
+├── agents/          # Multi-Agent AI System
+│   ├── src/agents/      # ScoutAgent, AnalystAgent, HunterAgent, TraderAgent
+│   ├── src/core/        # AgentCoordinator, MessageBus, BaseAgent, AgentMemory
+│   ├── src/reasoning/   # BitNetEngine (1-bit quantized AI inference)
+│   ├── src/learning/    # PatternLibrary (8 scam patterns), OutcomeLearner
+│   └── src/tools/       # OnChainTools, AnalysisTools, TradingTools
 ├── vault/           # Secure Key Vault (secure.argusguard.io)
 │   ├── src/vault.ts     # Isolated key management, signing
 │   └── public/_headers  # Strict CSP for origin isolation
-├── sniper/          # Token Scanner Backend (local dev)
-│   ├── src/server.ts    # HTTP + WebSocket server
-│   ├── src/engine/      # Analyzer, pre-filter, launch-filter
-│   └── src/listeners/   # Raydium, Meteora, DexScreener
-└── workers/         # Cloudflare Workers API (production)
-    ├── src/index.ts     # Main worker entry
-    ├── src/routes/      # sentinel, analyze, jupiter, etc.
-    └── src/services/    # Helius, DexScreener, Together AI
+├── workers/         # Cloudflare Workers API (production)
+│   ├── src/index.ts     # Main worker entry
+│   ├── src/routes/      # sentinel, agents, analyze, jupiter, etc.
+│   └── src/services/    # multi-rpc, helius, agent-events, rate-limit
+├── monitor/         # WebSocket Pool Monitor ($0/month)
+│   ├── src/pool-monitor.ts    # WebSocket subscriptions to DEX programs
+│   ├── src/quick-analyzer.ts  # 2-call quick analysis
+│   ├── src/alert-manager.ts   # Telegram + Workers API alerts
+│   └── src/scammer-db.ts      # Local scammer database
+├── training/        # ML Training Data Collection
+│   └── scripts/         # Data collection and feature extraction
+└── sniper/          # Token Scanner (DEPRECATED - uses heavy RPC)
+    └── ...              # Use Workers API instead
 ```
 
 ---
@@ -113,6 +128,11 @@ pnpm dev                  # Start backend at localhost:8788
 # Workers (API)
 cd packages/workers
 pnpm dev                  # Start workers at localhost:8787
+
+# Monitor (WebSocket Pool Detection) - $0/month
+cd packages/monitor
+pnpm install
+RPC_ENDPOINT=wss://mainnet.helius-rpc.com/?api-key=YOUR_KEY pnpm dev
 ```
 
 ---
@@ -138,24 +158,52 @@ pnpm dev                  # Start workers at localhost:8787
 | `src/vault.ts` | Isolated key management: stores encrypted keys, handles signing via postMessage |
 | `public/_headers` | Strict CSP headers for Cloudflare Pages (script-src 'self' only) |
 
-### Sniper Package (`packages/sniper/`)
-
-| File | Purpose |
-|------|---------|
-| `src/server.ts` | HTTP server with `/api/analyze-full` endpoint |
-| `src/engine/analyzer.ts` | AI risk analysis via Sentinel API |
-| `src/engine/pre-filter.ts` | Pre-filtering for trending tokens |
-| `src/engine/launch-filter.ts` | Launch filter for new pools |
-
 ### Workers Package (`packages/workers/`)
 
 | File | Purpose |
 |------|---------|
 | `src/index.ts` | Main worker entry, route handling, CORS config |
-| `src/routes/sentinel.ts` | `/sentinel/analyze` endpoint (production) with structural risk guardrails |
-| `src/routes/analyze.ts` | Token analysis logic |
+| `src/routes/sentinel.ts` | `/sentinel/analyze` endpoint with structural risk guardrails |
+| `src/routes/agents.ts` | `/agents/*` endpoints (status, activity, stats, command) |
 | `src/routes/jupiter.ts` | Jupiter swap proxy |
-| `src/services/rate-limit.ts` | Rate limiting logic (10/day free, unlimited for holders) |
+| `src/services/multi-rpc.ts` | Smart RPC routing across multiple providers |
+| `src/services/agent-events.ts` | KV storage for agent events from scans |
+| `src/services/rate-limit.ts` | Rate limiting (10/day free, unlimited for holders) |
+| `src/services/helius.ts` | Helius API integration (DAS, transactions) |
+
+### Agents Package (`packages/agents/`)
+
+| File | Purpose |
+|------|---------|
+| `src/agents/ScoutAgent.ts` | Monitors for new token launches, quick scans |
+| `src/agents/AnalystAgent.ts` | Deep investigation of flagged tokens |
+| `src/agents/HunterAgent.ts` | Tracks scammer wallets and networks |
+| `src/agents/TraderAgent.ts` | Position management and trade execution |
+| `src/core/AgentCoordinator.ts` | Orchestrates all agents, system status |
+| `src/core/MessageBus.ts` | Pub/sub inter-agent communication |
+| `src/reasoning/BitNetEngine.ts` | Rule-based AI classification (29 features) |
+| `src/learning/PatternLibrary.ts` | 8 known scam patterns with feature weights |
+
+### Monitor Package (`packages/monitor/`) - FREE
+
+WebSocket-based pool monitoring at $0/month. Runs locally or on a cheap VPS.
+
+| File | Purpose |
+|------|---------|
+| `src/index.ts` | Main entry point, orchestrates all components |
+| `src/pool-monitor.ts` | WebSocket subscriptions to Raydium, Orca, Pump.fun, Meteora |
+| `src/quick-analyzer.ts` | 2-call quick analysis (getTokenSupply, getLargestAccounts) |
+| `src/alert-manager.ts` | Push alerts to Workers API, Telegram, console |
+| `src/scammer-db.ts` | Local scammer database with caching |
+
+### Sniper Package (`packages/sniper/`) - DEPRECATED
+
+**WARNING:** Sniper uses WebSocket subscriptions that consume RPC credits rapidly. Use Monitor package instead.
+
+| File | Purpose |
+|------|---------|
+| `src/server.ts` | HTTP server with `/api/analyze-full` endpoint |
+| `src/listeners/` | Real-time pool listeners (expensive) |
 
 ---
 
@@ -169,10 +217,20 @@ Returns: AnalysisResult (direct format)
 ```
 
 ### Production (Workers API)
+
+**Token Analysis:**
 ```
 POST /sentinel/analyze
 Body: { "tokenAddress": "<token_address>" }
 Returns: { tokenInfo, analysis, holderDistribution, bundleInfo, network, creatorInfo }
+```
+
+**Agent Status (polling):**
+```
+GET /agents/status     → { online, agents[], health, lastUpdate }
+GET /agents/activity   → { events[], lastEventId } (cursor: ?after=eventId)
+GET /agents/stats      → { scans, alerts, hunters, traders }
+POST /agents/command   → { type: 'analyze'|'track_wallet', tokenAddress?, walletAddress? }
 ```
 
 The App.tsx `analyzeToken()` function maps the Workers API response to the local `AnalysisResult` interface format.
@@ -258,6 +316,213 @@ The Workers API (`sentinel.ts`) enforces hard minimum scores that override AI an
 | Volume/Liquidity > 8x on token < 24h | 45 |
 
 These are applied **only on the backend** to avoid double-counting with AI prompt guidance. The frontend (`App.tsx`) does NOT apply additional structural penalties.
+
+---
+
+## AI Agent System (`packages/agents`)
+
+A multi-agent AI system for autonomous token analysis and scam detection.
+
+### Agent Types
+
+| Agent | Role | Capabilities |
+|-------|------|--------------|
+| **ScoutAgent** | Monitor | Watch for new token launches, perform quick scans, flag suspicious tokens |
+| **AnalystAgent** | Investigate | Deep investigation of flagged tokens, generate risk reports |
+| **HunterAgent** | Track | Build scammer profiles, detect repeat offenders, map wallet networks |
+| **TraderAgent** | Execute | Position sizing, execute trades based on agent consensus |
+
+### Core Components
+
+| Component | Purpose |
+|-----------|---------|
+| `BitNetEngine` | 1-bit quantized AI for CPU inference, risk classification |
+| `PatternLibrary` | Knowledge base of 8 known scam patterns with rug rates |
+| `AgentMemory` | Vector storage with 17,000x compression for past tokens |
+| `MessageBus` | Pub/sub communication between agents |
+| `AgentCoordinator` | Orchestrates agent lifecycle and inter-agent routing |
+| `OutcomeLearner` | Self-improvement through outcome tracking |
+
+### Known Scam Patterns
+
+| Pattern | Severity | Rug Rate | Description |
+|---------|----------|----------|-------------|
+| `BUNDLE_COORDINATOR` | HIGH | 75% | Multiple wallets coordinating supply distribution |
+| `RUG_PULLER` | CRITICAL | 90% | Creator holds large supply with intent to dump |
+| `WASH_TRADER` | MEDIUM | 60% | Self-trading to inflate volume artificially |
+| `INSIDER` | HIGH | 50% | Wallets with privileged access accumulating early |
+| `PUMP_AND_DUMP` | HIGH | 80% | Coordinated price inflation followed by sell-off |
+| `HONEYPOT` | CRITICAL | 100% | Contract designed to prevent selling |
+| `MICRO_CAP_TRAP` | MEDIUM | 55% | Very low liquidity, easy to manipulate |
+| `LEGITIMATE_VC` | LOW | 5% | Healthy distribution, locked LP (positive pattern) |
+
+### Agent Integration (Event-Driven)
+
+Agents react to user scans without extra RPC calls:
+
+```
+User scans token
+       │
+       ▼
+Workers API fetches data (DexScreener, RugCheck, Helius)
+       │
+       ├──▶ processTokenScan() via waitUntil()
+       │           │
+       │           ├──▶ SCOUT event logged
+       │           ├──▶ ANALYST alert if score < 40
+       │           └──▶ HUNTER alert if bundle/syndicate detected
+       │
+       └──▶ Response returned to user (not blocked)
+```
+
+**Cost:** $0 - reuses data already fetched for the scan.
+
+---
+
+## Feature Compression (17,000x)
+
+Tokens are compressed to 116-byte feature vectors for efficient storage and pattern matching.
+
+### Compression Specs
+
+```
+Raw token data:     ~2 MB (holders, txns, metadata)
+Compressed vector:  116 bytes (29 features × 4 bytes)
+Compression ratio:  17,000x
+Memory per 100K:    11.6 MB
+```
+
+### Feature Vector (29 Dimensions)
+
+| Index | Feature | Description |
+|-------|---------|-------------|
+| 0-4 | Market | liquidityLog, volumeToLiquidity, marketCapLog, priceVelocity, volumeLog |
+| 5-10 | Holders | holderCountLog, top10Concentration, giniCoefficient, freshWalletRatio, whaleCount, topWhalePercent |
+| 11-14 | Security | mintDisabled, freezeDisabled, lpLocked, lpBurned |
+| 15-19 | Bundle | bundleDetected, bundleCountNorm, bundleControlPercent, bundleConfidence, bundleQuality |
+| 20-23 | Trading | buyRatio24h, buyRatio1h, activityLevel, momentum |
+| 24-25 | Time | ageDecay, tradingRecency |
+| 26-28 | Creator | creatorIdentified, creatorRugHistory, creatorHoldings |
+
+### Usage
+
+```typescript
+import { FEATURE_CONSTANTS } from '@argus/agents';
+
+// 116 bytes per token = store millions in KV
+const features = new Float32Array(29);
+// ... extract features from token data
+await memory.storeToken(tokenAddress, features, metadata);
+
+// Fast similarity search
+const similar = await memory.findSimilar(features, 5, 0.85);
+```
+
+---
+
+## Multi-RPC Strategy
+
+Smart routing across multiple Solana RPC endpoints to minimize costs and maximize reliability.
+
+### RPC Providers
+
+| Provider | Tier | Free Limit | Priority | Use Case |
+|----------|------|------------|----------|----------|
+| QuickNode | Free | 10M req/month | 1 | Light/medium calls |
+| Alchemy | Free | 300M CU/month | 2 | Light/medium calls |
+| Triton | Free | Unlimited | 3 | Community fallback |
+| **Helius** | Premium | Paid credits | 3 | Heavy calls only |
+| Solana Public | Free | Rate limited | 10 | Last resort |
+
+### Method Classification
+
+```typescript
+// Light methods → Use free endpoints
+LIGHT: getSlot, getBalance, getLatestBlockhash, getBlockTime
+
+// Medium methods → Prefer free, fallback to premium
+MEDIUM: getAccountInfo, getMultipleAccounts, getTokenSupply, getTokenLargestAccounts
+
+// Heavy methods → Use Helius (premium) when available
+HEAVY: getProgramAccounts, getSignaturesForAddress, getTokenAccountsByOwner
+```
+
+### Configuration
+
+```bash
+# Set via wrangler secrets (priority order)
+wrangler secret put QUICKNODE_RPC_URL     # Priority 1
+wrangler secret put ALCHEMY_RPC_URL       # Priority 2
+wrangler secret put HELIUS_API_KEY        # Premium (heavy calls)
+wrangler secret put SOLANA_RPC_URL        # Custom endpoint
+```
+
+### Auto-Failover
+
+- Tracks latency per endpoint (exponential moving average)
+- Auto-cooldown after 3 consecutive errors (30s)
+- Load balances across similar-performing endpoints
+- Falls back gracefully when endpoints fail
+
+---
+
+## Cost-Free Monitoring Architecture
+
+Strategy for 24/7 autonomous monitoring at $0/month using WebSocket subscriptions.
+
+### Why WebSockets Are Free
+
+- WebSocket = persistent connection, not per-call billing
+- Helius WSS: `wss://mainnet.helius-rpc.com/?api-key=YOUR_KEY`
+- Public WSS: `wss://api.mainnet-beta.solana.com`
+
+**Helius webhooks cost 1 credit per push - DON'T use them for monitoring.**
+
+### Monitoring Strategy
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  WebSocket Subscriptions (FREE)                                 │
+│                                                                 │
+│  Subscribe to DEX program accounts:                             │
+│  - Raydium AMM: CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK   │
+│  - Orca Whirlpool: whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc │
+│  - Pump.fun: 6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P       │
+│  - Meteora: LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo        │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  New Pool Detection (~100-200/day)                              │
+│                                                                 │
+│  On new pool event:                                             │
+│  1. Quick analysis (2 RPC calls: getTokenSupply, getLargest)    │
+│  2. If suspicious → flag for investigation                       │
+│  3. Check local scammer DB (0 RPC calls)                        │
+│  4. Alert if known scammer                                       │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Cost Breakdown                                                 │
+│                                                                 │
+│  WebSocket subscriptions:     0 calls     $0                    │
+│  Quick analysis (200 pools):  400 calls   $0 (free tier)        │
+│  Deep investigation (5%):     30 calls    $0 (free tier)        │
+│  Position monitoring:         288 calls   $0 (batched)          │
+│  ─────────────────────────────────────────────────────────────  │
+│  TOTAL:                       718/day     $0/month              │
+│  Free tier limit:             2.16M/day                         │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Implementation Notes
+
+1. **Don't poll** - Use WebSocket `onProgramAccountChange`
+2. **Filter early** - Only analyze pools with >$1K liquidity
+3. **Batch RPC calls** - Use `getMultipleAccountsInfo` for positions
+4. **Cache aggressively** - Cloudflare KV has 24h TTL on scans
+5. **Local scammer DB** - D1 database lookup is free
 
 ---
 
@@ -398,18 +663,45 @@ const isAppSubdomain = window.location.hostname.startsWith('app.');
 
 ## Environment Variables
 
-### Sniper (.env)
-```env
-HELIUS_API_KEY=          # Required for RPC
-TOGETHER_AI_API_KEY=     # Required for AI analysis
+### Workers Secrets (production)
+
+Set via `wrangler secret put <KEY>`:
+
+```bash
+# Required
+TOGETHER_AI_API_KEY      # AI risk analysis
+
+# RPC Providers (configure multiple for failover)
+HELIUS_API_KEY           # Premium - reserved for heavy calls
+QUICKNODE_RPC_URL        # Free: 10M req/month (priority 1)
+ALCHEMY_RPC_URL          # Free: 300M CU/month (priority 2)
+TRITON_RPC_URL           # Community RPC (unlimited)
+SOLANA_RPC_URL           # Custom endpoint
+
+# Optional
+JUPITER_API_KEY          # Jupiter swap API
+TWITTER_API_KEY          # Auto-tweet high-risk tokens
+TWITTER_API_SECRET
+TWITTER_ACCESS_TOKEN
+TWITTER_ACCESS_TOKEN_SECRET
+TELEGRAM_BOT_TOKEN       # Telegram alerts
+TELEGRAM_CHANNEL_ID
+ADMIN_SECRET             # Training data API access
 ```
 
-### Workers (.dev.vars)
+### Workers Local Development (.dev.vars)
+
 ```env
-TOGETHER_AI_API_KEY=     # Required
-HELIUS_API_KEY=          # Required
-SUPABASE_URL=            # Optional
-SUPABASE_ANON_KEY=       # Optional
+TOGETHER_AI_API_KEY=your-together-ai-api-key
+HELIUS_API_KEY=your-helius-api-key
+QUICKNODE_RPC_URL=https://your-quicknode-endpoint
+# ... other secrets as needed
+```
+
+### Argus Dashboard (.env)
+
+```env
+VITE_HELIUS_API_KEY=your-helius-api-key
 ```
 
 ---
@@ -430,6 +722,43 @@ SUPABASE_ANON_KEY=       # Optional
 |-----|---------|
 | `argus_vault_key` | Encrypted trading wallet keypair (isolated origin) |
 | `argus_vault_name` | Wallet name (synced with main app) |
+
+---
+
+## Cloudflare Storage
+
+### KV Namespace: `SCAN_CACHE`
+
+| Key Pattern | Purpose | TTL |
+|-------------|---------|-----|
+| `scan:{tokenAddress}` | Cached token analysis results | 24h |
+| `rate:{identifier}` | Rate limit counters | 24h |
+| `agents:events` | Recent agent activity events | 24h |
+| `agents:stats` | Aggregate agent statistics | 7d |
+
+### D1 Database: `BUNDLE_DB`
+
+Stores bundle network data for scammer tracking:
+
+```sql
+-- Wallets involved in bundles
+CREATE TABLE bundle_wallets (
+  wallet TEXT PRIMARY KEY,
+  tokens_involved INTEGER,
+  first_seen INTEGER,
+  last_seen INTEGER,
+  rug_count INTEGER DEFAULT 0
+);
+
+-- Token rug outcomes for learning
+CREATE TABLE token_outcomes (
+  token TEXT PRIMARY KEY,
+  launched_at INTEGER,
+  rugged_at INTEGER,
+  creator TEXT,
+  bundle_detected BOOLEAN
+);
+```
 
 ---
 
@@ -471,3 +800,20 @@ SUPABASE_ANON_KEY=       # Optional
 ### Landing page links going to /dashboard
 - Links should point to https://app.argusguard.io
 - If not, update Landing.tsx href values
+
+### RPC credits depleting quickly
+- Check if sniper is running (uses WebSocket subscriptions that burn credits)
+- Stop sniper: `pkill -f sniper` or kill the process
+- Use Workers API instead of sniper for production
+- **Helius webhooks cost 1 credit per push** - don't use for monitoring
+- Use WebSocket subscriptions for free monitoring
+
+### Agent events not showing
+- Ensure `SCAN_CACHE` KV namespace is bound in wrangler.toml
+- Check `c.executionCtx.waitUntil()` is being called in sentinel.ts
+- Events are only generated from real user scans, not simulated
+
+### Multi-RPC failover issues
+- Check `wrangler secret list` to verify RPC secrets are set
+- Use `GET /debug/rpc-status` (if enabled) to check endpoint health
+- Helius is premium tier - only used for heavy calls like getProgramAccounts

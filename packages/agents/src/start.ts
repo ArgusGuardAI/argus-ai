@@ -9,7 +9,7 @@
  * - TraderAgent(s): Trade execution (if enabled)
  */
 
-import { createArgusNetwork } from '../src/index';
+import { createArgusNetwork } from './index';
 
 // Load environment
 const config = {
