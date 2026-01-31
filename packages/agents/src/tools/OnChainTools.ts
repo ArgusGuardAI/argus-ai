@@ -121,7 +121,7 @@ export class OnChainTools {
     try {
       // Use Helius API for efficient holder lookup
       if (this.heliusApiKey) {
-        const response = await fetch(
+        const _response = await fetch(
           `https://api.helius.xyz/v0/token-metadata?api-key=${this.heliusApiKey}`,
           {
             method: 'POST',
@@ -133,7 +133,7 @@ export class OnChainTools {
           }
         );
 
-        // Helius would return holder data
+        // TODO: Helius would return holder data
         // For now, use getProgramAccounts as fallback
       }
 
@@ -397,7 +397,7 @@ export class OnChainTools {
   /**
    * Check Raydium pool
    */
-  private async checkRaydiumPool(tokenAddress: string): Promise<LPPoolData | null> {
+  private async checkRaydiumPool(_tokenAddress: string): Promise<LPPoolData | null> {
     // In production, query Raydium API or on-chain
     return null;
   }
@@ -408,7 +408,8 @@ export class OnChainTools {
   private async checkPumpFunPool(tokenAddress: string): Promise<LPPoolData | null> {
     try {
       // pump.fun bonding curve PDA derivation
-      const PUMP_FUN_PROGRAM = '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P';
+      // TODO: Use for proper PDA derivation in production
+      const _PUMP_FUN_PROGRAM = '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P';
 
       // Check if bonding curve account exists
       // Simplified - would need proper PDA derivation
