@@ -119,25 +119,8 @@ export class OnChainTools {
    */
   async getHolders(tokenAddress: string, limit: number = 50): Promise<HolderData[]> {
     try {
-      // Use Helius API for efficient holder lookup
-      if (this.heliusApiKey) {
-        const _response = await fetch(
-          `https://api.helius.xyz/v0/token-metadata?api-key=${this.heliusApiKey}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              mintAccounts: [tokenAddress],
-              includeOffChain: true
-            })
-          }
-        );
-
-        // TODO: Helius would return holder data
-        // For now, use getProgramAccounts as fallback
-      }
-
-      // Fallback: Use getProgramAccounts (slower but works)
+      // TODO: Add Helius API support when this.heliusApiKey is available
+      // Use getProgramAccounts for now
       const response = await fetch(this.rpcEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -407,12 +390,8 @@ export class OnChainTools {
    */
   private async checkPumpFunPool(tokenAddress: string): Promise<LPPoolData | null> {
     try {
-      // pump.fun bonding curve PDA derivation
-      // TODO: Use for proper PDA derivation in production
-      const _PUMP_FUN_PROGRAM = '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P';
-
-      // Check if bonding curve account exists
-      // Simplified - would need proper PDA derivation
+      // pump.fun program: 6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P
+      // TODO: Implement proper PDA derivation for bonding curve lookup
       return {
         address: `pumpfun_curve_${tokenAddress.slice(0, 8)}`,
         dex: 'pumpfun',
