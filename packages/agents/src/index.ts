@@ -17,29 +17,53 @@
  * - OutcomeLearner: Self-improvement through outcome tracking
  */
 
-// Core
-export { BaseAgent, AgentConfig, Tool, ThoughtEntry, AgentAction } from './core/BaseAgent';
-export { MessageBus, Message, MessageHandler, MessageOptions } from './core/MessageBus';
-export { AgentMemory, MemoryEntry, SimilarityResult } from './core/AgentMemory';
-export { AgentCoordinator, CoordinatorConfig, SystemStatus } from './core/AgentCoordinator';
+// Core - Classes
+export { BaseAgent } from './core/BaseAgent';
+export { MessageBus } from './core/MessageBus';
+export { AgentMemory } from './core/AgentMemory';
+export { AgentCoordinator } from './core/AgentCoordinator';
 
-// Agents
-export { ScoutAgent, QuickScanResult, LaunchEvent } from './agents/ScoutAgent';
-export { AnalystAgent, InvestigationRequest, InvestigationReport } from './agents/AnalystAgent';
-export { HunterAgent, ScammerProfile } from './agents/HunterAgent';
-export { TraderAgent, Position, TradingStrategy, TradeResult } from './agents/TraderAgent';
+// Core - Types
+export type { AgentConfig, Tool, ThoughtEntry, AgentAction } from './core/BaseAgent';
+export type { Message, MessageHandler, MessageOptions } from './core/MessageBus';
+export type { MemoryEntry, SimilarityResult } from './core/AgentMemory';
+export type { CoordinatorConfig, SystemStatus } from './core/AgentCoordinator';
 
-// Reasoning
-export { BitNetEngine, ClassifierOutput, RiskFlag, ReasoningOutput, GenerateOptions } from './reasoning/BitNetEngine';
+// Agents - Classes
+export { ScoutAgent } from './agents/ScoutAgent';
+export { AnalystAgent } from './agents/AnalystAgent';
+export { HunterAgent } from './agents/HunterAgent';
+export { TraderAgent } from './agents/TraderAgent';
 
-// Tools
-export { OnChainTools, TokenData, HolderData, TransactionData, LPPoolData, WalletProfile } from './tools/OnChainTools';
-export { AnalysisTools, BundleDetectionResult, BundleCluster, WalletRelationship, TradingPattern, RiskFactors } from './tools/AnalysisTools';
-export { TradingTools, SwapQuote, TradeExecution, PositionSizing, SimulationResult } from './tools/TradingTools';
+// Agents - Types
+export type { QuickScanResult, LaunchEvent } from './agents/ScoutAgent';
+export type { InvestigationRequest, InvestigationReport } from './agents/AnalystAgent';
+export type { ScammerProfile } from './agents/HunterAgent';
+export type { Position, TradingStrategy, TradeResult } from './agents/TraderAgent';
 
-// Learning
-export { OutcomeLearner, Prediction, Outcome, LearningStats, FeatureImportance } from './learning/OutcomeLearner';
-export { PatternLibrary, ScamPattern, PatternMatch, PatternStats } from './learning/PatternLibrary';
+// Reasoning - Classes
+export { BitNetEngine } from './reasoning/BitNetEngine';
+
+// Reasoning - Types
+export type { ClassifierOutput, ReasoningOutput, GenerateOptions } from './reasoning/BitNetEngine';
+
+// Tools - Classes
+export { OnChainTools } from './tools/OnChainTools';
+export { AnalysisTools } from './tools/AnalysisTools';
+export { TradingTools } from './tools/TradingTools';
+
+// Tools - Types
+export type { TokenData, HolderData, TransactionData, LPPoolData, WalletProfile } from './tools/OnChainTools';
+export type { BundleDetectionResult, BundleCluster, WalletRelationship, TradingPattern, RiskFactors } from './tools/AnalysisTools';
+export type { SwapQuote, TradeExecution, PositionSizing, SimulationResult } from './tools/TradingTools';
+
+// Learning - Classes
+export { OutcomeLearner } from './learning/OutcomeLearner';
+export { PatternLibrary } from './learning/PatternLibrary';
+
+// Learning - Types
+export type { Prediction, Outcome, LearningStats, FeatureImportance } from './learning/OutcomeLearner';
+export type { ScamPattern, PatternMatch, PatternStats } from './learning/PatternLibrary';
 
 // Re-export convenience function to create and start the system
 export async function createArgusNetwork(config: {
@@ -51,9 +75,7 @@ export async function createArgusNetwork(config: {
   traders?: number;
   maxDailyTrades?: number;
   maxPositionSize?: number;
-}): Promise<AgentCoordinator> {
-  const { AgentCoordinator } = await import('./core/AgentCoordinator');
-
+}): Promise<InstanceType<typeof AgentCoordinator>> {
   const coordinator = new AgentCoordinator({
     rpcEndpoint: config.rpcEndpoint,
     enableTrading: config.enableTrading || false,
