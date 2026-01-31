@@ -9,7 +9,7 @@
  * - Gini coefficient calculation
  */
 
-import { HolderData, TransactionData, WalletProfile } from './OnChainTools';
+import { HolderData, TransactionData } from './OnChainTools';
 
 export interface BundleDetectionResult {
   detected: boolean;
@@ -126,8 +126,6 @@ export class AnalysisTools {
         score += 15;
       }
 
-      const confidence = score >= 70 ? 'HIGH' : score >= 50 ? 'MEDIUM' : 'LOW';
-
       if (score >= minConfidence * 100) {
         const clusterHolders = holders.filter(h => cluster.includes(h.address));
         const totalHoldings = clusterHolders.reduce((sum, h) => sum + h.balance, 0);
@@ -176,7 +174,6 @@ export class AnalysisTools {
     transactions: TransactionData[]
   ): WalletRelationship[] {
     const relationships: WalletRelationship[] = [];
-    const walletSet = new Set(wallets);
 
     // Build transaction graph
     const fundingMap = new Map<string, Set<string>>();
@@ -280,7 +277,6 @@ export class AnalysisTools {
 
     // Calculate metrics
     const buys = recentTxs.filter(tx => tx.type === 'buy');
-    const sells = recentTxs.filter(tx => tx.type === 'sell');
     const buyRatio = recentTxs.length > 0 ? buys.length / recentTxs.length : 0;
 
     const uniqueTraders = new Set([
@@ -454,7 +450,7 @@ export class AnalysisTools {
   // Helper methods
 
   private groupByTiming(
-    holders: HolderData[],
+    _holders: HolderData[],
     transactions: TransactionData[],
     windowHours: number
   ): string[][] {
