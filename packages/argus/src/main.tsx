@@ -21,8 +21,9 @@ const Loading = () => (
   </div>
 );
 
-// Check if we're on the app subdomain
+// Check environment
 const isAppSubdomain = window.location.hostname.startsWith('app.');
+const isLocalhost = window.location.hostname === 'localhost';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
@@ -30,12 +31,32 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       <Suspense fallback={<Loading />}>
         <Routes>
           {isAppSubdomain ? (
-            // app.argusguard.io -> original dashboard (terminal available at /terminal)
+            // app.argusguard.io -> original dashboard in production
             <Route path="*" element={
               <WalletContextProvider>
                 <App />
               </WalletContextProvider>
             } />
+          ) : isLocalhost ? (
+            // localhost -> new terminal dashboard for development/testing
+            <>
+              <Route path="/" element={
+                <WalletContextProvider>
+                  <TerminalApp />
+                </WalletContextProvider>
+              } />
+              <Route path="/dashboard" element={
+                <WalletContextProvider>
+                  <TerminalApp />
+                </WalletContextProvider>
+              } />
+              <Route path="/original" element={
+                <WalletContextProvider>
+                  <App />
+                </WalletContextProvider>
+              } />
+              <Route path="*" element={<NotFound />} />
+            </>
           ) : (
             // argusguard.io -> landing page with dashboard routes
             <>
