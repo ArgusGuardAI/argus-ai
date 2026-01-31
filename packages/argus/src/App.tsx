@@ -3,14 +3,7 @@ import * as d3 from 'd3';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { useAutoTrade } from './hooks/useAutoTrade';
-import { useAgentStatus } from './hooks/useAgentStatus';
 import { BundleNetworkGraph } from './components/BundleNetworkGraph';
-import { SwarmStatusPanel } from './components/SwarmStatusPanel';
-import { ActivityFeed } from './components/ActivityFeed';
-import { GraduationFeed } from './components/GraduationFeed';
-import { StatsGrid } from './components/StatsGrid';
-import { BuyBar } from './components/BuyBar';
-import './styles/dashboard.css';
 
 type SignalType = 'STRONG_BUY' | 'BUY' | 'WATCH' | 'HOLD' | 'AVOID';
 
@@ -40,40 +33,43 @@ function Skeleton({ className = '' }: { className?: string }) {
   return <div className={`animate-pulse bg-zinc-800 rounded ${className}`} />;
 }
 
-// Analysis loading skeleton - Compact version
+// Analysis loading skeleton
 function AnalysisSkeleton() {
   return (
-    <div className="space-y-2">
+    <div className="space-y-6">
       {/* Token Header Skeleton */}
-      <div className="bg-zinc-900 rounded-lg border border-zinc-800 p-3">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-3">
-            <Skeleton className="w-10 h-10 rounded-lg" />
-            <div className="space-y-1">
-              <div className="flex items-center gap-1.5">
-                <Skeleton className="h-5 w-20" />
-                <Skeleton className="h-4 w-14 rounded" />
+      <div className="bg-zinc-900 rounded-2xl border border-zinc-800 p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-center gap-4 sm:gap-5">
+            <Skeleton className="w-12 h-12 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl" />
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Skeleton className="h-7 w-32" />
+                <Skeleton className="h-6 w-20 rounded-full" />
               </div>
-              <Skeleton className="h-3 w-24" />
+              <Skeleton className="h-4 w-48" />
             </div>
           </div>
-          <Skeleton className="w-[70px] h-[40px]" />
+          <div className="flex sm:block items-center gap-2">
+            <Skeleton className="h-12 w-16" />
+            <Skeleton className="h-4 w-16 mt-1" />
+          </div>
         </div>
       </div>
 
       {/* Info Cards Skeleton */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {[1, 2, 3].map(i => (
-          <div key={i} className="bg-zinc-900 rounded-lg border border-zinc-800 p-3">
-            <div className="flex items-center gap-1.5 mb-2">
-              <Skeleton className="w-6 h-6 rounded" />
-              <Skeleton className="h-3 w-14" />
+          <div key={i} className="bg-zinc-900 rounded-xl border border-zinc-800 p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <Skeleton className="w-8 h-8 rounded-lg" />
+              <Skeleton className="h-5 w-20" />
             </div>
-            <div className="space-y-1.5">
-              {[1, 2, 3].map(j => (
+            <div className="space-y-3">
+              {[1, 2, 3, 4].map(j => (
                 <div key={j} className="flex items-center justify-between">
-                  <Skeleton className="h-3 w-12" />
-                  <Skeleton className="h-3 w-10" />
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-4 w-16" />
                 </div>
               ))}
             </div>
@@ -82,30 +78,31 @@ function AnalysisSkeleton() {
       </div>
 
       {/* Holders & AI Skeleton */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
-        <div className="bg-zinc-900 rounded-lg border border-zinc-800 p-3">
-          <div className="flex items-center gap-1.5 mb-2">
-            <Skeleton className="w-6 h-6 rounded" />
-            <Skeleton className="h-3 w-14" />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Skeleton className="w-8 h-8 rounded-lg" />
+            <Skeleton className="h-5 w-24" />
           </div>
-          <div className="flex items-start gap-3">
-            <Skeleton className="w-[80px] h-[80px] rounded-full" />
-            <div className="flex-1 space-y-1">
-              {[1, 2, 3].map(i => (
-                <Skeleton key={i} className="h-1.5 w-full rounded-full" />
-              ))}
-            </div>
+          <div className="space-y-3">
+            {[1, 2, 3, 4, 5].map(i => (
+              <div key={i} className="flex items-center gap-3">
+                <Skeleton className="h-3 w-4" />
+                <Skeleton className="h-3 flex-1 rounded-full" />
+                <Skeleton className="h-3 w-12" />
+              </div>
+            ))}
           </div>
         </div>
-        <div className="bg-zinc-900 rounded-lg border border-zinc-800 p-3">
-          <div className="flex items-center gap-1.5 mb-2">
-            <Skeleton className="w-6 h-6 rounded" />
-            <Skeleton className="h-3 w-14" />
+        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Skeleton className="w-8 h-8 rounded-lg" />
+            <Skeleton className="h-5 w-24" />
           </div>
-          <div className="space-y-1.5">
-            <Skeleton className="h-3 w-full" />
-            <Skeleton className="h-3 w-full" />
-            <Skeleton className="h-3 w-3/4" />
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-3/4" />
           </div>
         </div>
       </div>
@@ -169,24 +166,61 @@ function Sparkline({ data, color, height = 40 }: { data: number[]; color: string
 
 // Score gauge component
 function ScoreGauge({ score, aiScore, rulesOverride }: { score: number; aiScore?: number; rulesOverride?: boolean }) {
-  const size = 70;
-  const strokeWidth = 6;
+  const size = 100;
+  const strokeWidth = 8;
   const radius = (size - strokeWidth) / 2;
-  const circumference = Math.PI * radius;
+  const circumference = Math.PI * radius; // semicircle
   const progress = Math.max(0, Math.min(100, score)) / 100;
   const dashOffset = circumference * (1 - progress);
+
+  // Use gradient color based on score
   const color = getScoreColor(score);
+  const bgColor = '#27272a';
 
   return (
-    <div className="flex flex-col items-center flex-shrink-0">
-      <svg width={size} height={size / 2 + 6} viewBox={`0 0 ${size} ${size / 2 + 6}`}>
-        <path d={`M ${strokeWidth / 2} ${size / 2} A ${radius} ${radius} 0 0 1 ${size - strokeWidth / 2} ${size / 2}`} fill="none" stroke="#27272a" strokeWidth={strokeWidth} strokeLinecap="round" />
-        <path d={`M ${strokeWidth / 2} ${size / 2} A ${radius} ${radius} 0 0 1 ${size - strokeWidth / 2} ${size / 2}`} fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={dashOffset} style={{ filter: `drop-shadow(0 0 4px ${color}40)` }} />
-        <text x={size / 2} y={size / 2 - 2} textAnchor="middle" fill={color} fontSize="20" fontWeight="bold" fontFamily="inherit">{score}</text>
+    <div className="flex flex-col items-center">
+      <svg width={size} height={size / 2 + 8} viewBox={`0 0 ${size} ${size / 2 + 8}`}>
+        {/* Background arc */}
+        <path
+          d={`M ${strokeWidth / 2} ${size / 2} A ${radius} ${radius} 0 0 1 ${size - strokeWidth / 2} ${size / 2}`}
+          fill="none"
+          stroke={bgColor}
+          strokeWidth={strokeWidth}
+          strokeLinecap="round"
+        />
+        {/* Progress arc */}
+        <path
+          d={`M ${strokeWidth / 2} ${size / 2} A ${radius} ${radius} 0 0 1 ${size - strokeWidth / 2} ${size / 2}`}
+          fill="none"
+          stroke={color}
+          strokeWidth={strokeWidth}
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={dashOffset}
+          style={{ filter: `drop-shadow(0 0 6px ${color}40)` }}
+        />
+        {/* Score text */}
+        <text
+          x={size / 2}
+          y={size / 2 - 4}
+          textAnchor="middle"
+          fill={color}
+          fontSize="28"
+          fontWeight="bold"
+          fontFamily="inherit"
+        >
+          {score}
+        </text>
       </svg>
-      <span className="text-[9px] text-zinc-500 uppercase tracking-wider -mt-0.5">Score</span>
+      <span className="text-[10px] text-zinc-500 uppercase tracking-wider -mt-1">AI Score</span>
+      {/* Show override indicator if guardrails adjusted the score */}
       {rulesOverride && aiScore !== undefined && (
-        <div className="text-[8px] text-orange-400 mt-0.5">{aiScore}→{score}</div>
+        <div className="text-[9px] text-orange-400 mt-1 flex items-center gap-1" title={`AI rated ${aiScore}, guardrails adjusted to ${score}`}>
+          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          {aiScore} → {score}
+        </div>
       )}
     </div>
   );
@@ -218,17 +252,18 @@ function PressureBar({ label, buys, sells }: { label: string; buys: number; sell
   );
 }
 
-// Holder donut chart component - Compact
+// Holder donut chart component
 function HolderDonut({ holders }: { holders: Array<{ address: string; percent: number; isBundle: boolean }> }) {
   const svgRef = useRef<SVGSVGElement>(null);
 
   useEffect(() => {
     if (!svgRef.current || holders.length === 0) return;
 
-    const size = 80;
+    const size = 140;
     const outerRadius = size / 2;
-    const innerRadius = outerRadius - 12;
+    const innerRadius = outerRadius - 18;
 
+    // Prepare data: top 5 holders + "others"
     const top5 = holders.slice(0, 5);
     const top5Total = top5.reduce((s, h) => s + h.percent, 0);
     const othersPercent = Math.max(0, 100 - top5Total);
@@ -238,9 +273,10 @@ function HolderDonut({ holders }: { holders: Array<{ address: string; percent: n
       ...(othersPercent > 0 ? [{ percent: othersPercent, isBundle: false, label: 'Others', address: 'others' }] : []),
     ];
 
+    // Colors
     const getColor = (d: typeof data[0], i: number) => {
-      if (d.address === 'others') return '#3f3f46';
-      if (d.isBundle) return '#ef4444';
+      if (d.address === 'others') return '#3f3f46'; // zinc-700
+      if (d.isBundle) return '#ef4444'; // red
       const greens = ['#10b981', '#34d399', '#6ee7b7', '#a7f3d0', '#d1fae5'];
       return greens[i] || greens[4];
     };
@@ -248,19 +284,52 @@ function HolderDonut({ holders }: { holders: Array<{ address: string; percent: n
     const svg = d3.select(svgRef.current);
     svg.selectAll('*').remove();
 
-    const g = svg.attr('width', size).attr('height', size).append('g').attr('transform', `translate(${size / 2},${size / 2})`);
+    const g = svg
+      .attr('width', size)
+      .attr('height', size)
+      .append('g')
+      .attr('transform', `translate(${size / 2},${size / 2})`);
 
-    const pie = d3.pie<typeof data[0]>().value(d => d.percent).sort(null).padAngle(0.02);
-    const arc = d3.arc<d3.PieArcDatum<typeof data[0]>>().innerRadius(innerRadius).outerRadius(outerRadius).cornerRadius(2);
+    const pie = d3.pie<typeof data[0]>()
+      .value(d => d.percent)
+      .sort(null)
+      .padAngle(0.02);
 
-    g.selectAll('path').data(pie(data)).enter().append('path').attr('d', arc).attr('fill', (d, i) => getColor(d.data, i)).attr('opacity', 0.9).attr('stroke', '#09090b').attr('stroke-width', 1);
+    const arc = d3.arc<d3.PieArcDatum<typeof data[0]>>()
+      .innerRadius(innerRadius)
+      .outerRadius(outerRadius)
+      .cornerRadius(3);
 
-    g.append('text').attr('text-anchor', 'middle').attr('dy', '0.35em').attr('fill', '#fafafa').attr('font-size', '14').attr('font-weight', 'bold').text(`${top5Total.toFixed(0)}%`);
+    g.selectAll('path')
+      .data(pie(data))
+      .enter()
+      .append('path')
+      .attr('d', arc)
+      .attr('fill', (d, i) => getColor(d.data, i))
+      .attr('opacity', 0.9)
+      .attr('stroke', '#09090b')
+      .attr('stroke-width', 1);
+
+    // Center text
+    g.append('text')
+      .attr('text-anchor', 'middle')
+      .attr('dy', '-0.2em')
+      .attr('fill', '#fafafa')
+      .attr('font-size', '20')
+      .attr('font-weight', 'bold')
+      .text(`${top5Total.toFixed(0)}%`);
+
+    g.append('text')
+      .attr('text-anchor', 'middle')
+      .attr('dy', '1.2em')
+      .attr('fill', '#71717a')
+      .attr('font-size', '10')
+      .text('Top 5');
   }, [holders]);
 
   if (holders.length === 0) return null;
 
-  return <svg ref={svgRef} className="flex-shrink-0" />;
+  return <svg ref={svgRef} className="mx-auto mb-3" />;
 }
 
 // Analysis result from /api/analyze-full
@@ -383,9 +452,8 @@ interface AnalysisResult {
 }
 
 // Use production API or localhost for development
-// Using Workers (8787) for local dev to get agent events
 const API_URL = window.location.hostname === 'localhost'
-  ? 'http://localhost:8787'
+  ? 'http://localhost:8788'
   : 'https://argusguard-api.hermosillo-jessie.workers.dev';
 const RECENT_SEARCHES_KEY = 'argus_recent_searches';
 const WATCHLIST_KEY = 'argus_watchlist';
@@ -446,14 +514,6 @@ export default function App() {
 
   // Deep link confirmation modal (from Telegram/X)
   const [pendingDeepLink, setPendingDeepLink] = useState<string | null>(null);
-
-  // Agent status for Swarm panel and Activity feed
-  const agentStatus = useAgentStatus({
-    enabled: true,
-    statusInterval: 5000,
-    activityInterval: 3000,
-    statsInterval: 30000,
-  });
 
   const log = useCallback((msg: string, type = 'info') => {
     setLogs(prev => [...prev.slice(-49), { time: new Date(), msg, type }]);
@@ -535,9 +595,12 @@ export default function App() {
     setAnalysisResult(null);
 
     try {
-      // Use Workers API format (same for local and production now)
-      const endpoint = '/sentinel/analyze';
-      const payload = { tokenAddress: address.trim() };
+      // Use different endpoint and payload format for local vs production
+      const isLocal = window.location.hostname === 'localhost';
+      const endpoint = isLocal ? '/api/analyze-full' : '/sentinel/analyze';
+      const payload = isLocal
+        ? { address: address.trim() }
+        : { tokenAddress: address.trim() };
 
       // Prefer connected wallet for rate limiting, fallback to trading wallet
       const walletForRateLimit = connectedWallet?.toBase58() || autoTrade.wallet.address;
@@ -568,10 +631,16 @@ export default function App() {
       const data = await response.json();
 
       // Map Workers API response to our AnalysisResult format
-      // Build bundle wallet addresses from bundleInfo.wallets (primary) or network nodes (fallback)
-      // bundleInfo.wallets contains actual detected bundle wallet addresses from transaction analysis
-      const bundleWalletsFromApi = data.bundleInfo?.wallets || [];
-      const bundleWalletsFromNetwork = (data.network?.nodes || [])
+      let result: AnalysisResult;
+
+      if (isLocal) {
+        result = data;
+        if (!result.ai.flags) result.ai.flags = [];
+      } else {
+        // Build bundle wallet addresses from bundleInfo.wallets (primary) or network nodes (fallback)
+        // bundleInfo.wallets contains actual detected bundle wallet addresses from transaction analysis
+        const bundleWalletsFromApi = data.bundleInfo?.wallets || [];
+        const bundleWalletsFromNetwork = (data.network?.nodes || [])
           .filter((n: { type: string; isHighRisk?: boolean }) =>
             n.type !== 'token' &&
             n.type !== 'lp' &&
@@ -606,7 +675,7 @@ export default function App() {
                                    score >= 45 ? 'WATCH' :
                                    score >= 30 ? 'HOLD' : 'AVOID';
 
-      const result: AnalysisResult = {
+        result = {
           token: {
             address: data.tokenInfo?.address || address.trim(),
             name: data.tokenInfo?.name || 'Unknown',
@@ -710,6 +779,7 @@ export default function App() {
             dexscreener: `https://dexscreener.com/solana/${address.trim()}`,
           },
         };
+      }
 
       setAnalysisResult(result);
       addRecentSearch(result.token.address, result.token.symbol);
@@ -888,16 +958,40 @@ export default function App() {
 
   const securityIsDangerous = criticalIssueCount > 0;
 
+  const riskSubtitle = analysisResult ? (
+    analysisResult.ai.score < 20 ? 'EXTREME MANIPULATION RISK DETECTED'
+    : analysisResult.ai.score < 35 ? 'HIGH RISK \u2014 PROCEED WITH CAUTION'
+    : analysisResult.ai.score < 50 ? 'ELEVATED RISK \u2014 REVIEW CAREFULLY'
+    : analysisResult.ai.score < 70 ? 'MODERATE RISK'
+    : 'LOW RISK \u2014 FUNDAMENTALS LOOK SOLID'
+  ) : '';
+
+  const riskSubtitleColor = analysisResult ? (
+    analysisResult.ai.score < 35 ? 'text-red-300'
+    : analysisResult.ai.score < 50 ? 'text-amber-300'
+    : analysisResult.ai.score < 70 ? 'text-yellow-300'
+    : 'text-emerald-300'
+  ) : '';
+
+  // Categorical banner colors for clear visual signals
+  const bannerColorMap: Record<SignalType, string> = {
+    AVOID: 'bg-red-900/60 border-red-700',
+    HOLD: 'bg-amber-900/40 border-amber-700',
+    WATCH: 'bg-yellow-900/40 border-yellow-700',
+    BUY: 'bg-emerald-900/40 border-emerald-700',
+    STRONG_BUY: 'bg-green-900/40 border-green-700',
+  };
+
   return (
     <div className="min-h-screen bg-[#09090B]">
       {/* Header */}
       <header className="bg-[#09090B]/90 backdrop-blur-sm border-b border-zinc-800 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4">
           <div className="flex items-center justify-between">
             {/* Logo */}
-            <div className="flex items-center gap-2">
-              <div className="w-9 h-9 bg-gradient-to-br from-zinc-800 to-zinc-900 rounded-lg flex items-center justify-center border border-zinc-700">
-                <svg width="22" height="22" viewBox="0 0 32 32" fill="none">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 bg-gradient-to-br from-zinc-800 to-zinc-900 rounded-xl flex items-center justify-center border border-zinc-700">
+                <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
                   <path d="M16 4L28 26H4L16 4Z" stroke="white" strokeWidth="2" fill="none"/>
                   <ellipse cx="16" cy="16" rx="6" ry="4" stroke="white" strokeWidth="1.5" fill="none"/>
                   <circle cx="16" cy="16" r="2" fill="white"/>
@@ -905,9 +999,10 @@ export default function App() {
               </div>
               <div>
                 <div className="flex items-baseline gap-1">
-                  <span className="text-lg font-bold tracking-tight text-white">ARGUS</span>
-                  <span className="text-zinc-500 text-sm font-light">AI</span>
+                  <span className="text-xl font-bold tracking-tight text-white">ARGUS</span>
+                  <span className="text-zinc-500 font-light">AI</span>
                 </div>
+                <div className="text-[10px] text-emerald-500 tracking-wider uppercase">Token Research</div>
               </div>
             </div>
 
@@ -1210,93 +1305,56 @@ export default function App() {
       )}
 
       {/* Main Content */}
-      <main className={`max-w-[1600px] mx-auto px-4 sm:px-6 py-4 ${analysisResult ? 'pb-16' : ''}`}>
-        {/* Stats Grid */}
-        <StatsGrid
-          stats={{
-            tokensAnalyzed: agentStatus.stats?.scans?.today || 0,
-            alertsToday: agentStatus.stats?.alerts?.today || 0,
-            highRiskDetected: agentStatus.stats?.alerts?.highRisk || 0,
-            activePositions: autoTrade.state.positions.length,
-            totalPnL: autoTrade.state.totalProfitSol * 100,
-          }}
-          isLoading={agentStatus.isLoading}
-        />
-
-        {/* Two Column Layout */}
-        <div className="grid grid-cols-1 xl:grid-cols-[1fr_300px] gap-3">
-          {/* Left Column - Main Content */}
-          <div className="space-y-3 min-w-0">
-            {/* Agent Status */}
-            <SwarmStatusPanel
-              status={agentStatus.status}
-              isConnected={agentStatus.isConnected}
-              isLoading={agentStatus.isLoading}
-              onRefresh={agentStatus.refresh}
-            />
-
-            {/* Graduation Feed - Only show when there are graduations */}
-            {agentStatus.graduations.length > 0 && (
-              <GraduationFeed
-                graduations={agentStatus.graduations}
-                isLoading={agentStatus.isLoading}
-                onAnalyze={(tokenAddress) => {
-                  setTokenInput(tokenAddress);
-                  analyzeToken(tokenAddress);
-                }}
-              />
-            )}
-
-            {/* Token Input */}
-            <div className="rounded-xl bg-[#0a0a0a] border border-[rgba(239,68,68,0.2)] p-3">
-              <div className="h-[2px] bg-gradient-to-r from-[#EF4444] to-[#991B1B] -mt-3 -mx-3 mb-3 rounded-t-xl" />
-              <div className="flex flex-col sm:flex-row gap-3">
-                <div className="flex-1 relative">
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2">
-                    <svg className="w-5 h-5 text-[#666]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
-                  </div>
-                  <input
-                    type="text"
-                    placeholder="Paste Solana token address..."
-                    value={tokenInput}
-                    onChange={e => setTokenInput(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && analyzeToken(tokenInput)}
-                    className="w-full pl-12 pr-4 py-3 rounded-lg border border-[#1a1a1a] bg-[#111] text-white text-sm focus:outline-none focus:ring-2 focus:ring-[#EF4444] focus:border-transparent font-mono"
-                  />
-                </div>
-                <button
-                  onClick={() => analyzeToken(tokenInput)}
-                  disabled={isAnalyzing || !tokenInput.trim()}
-                  className="px-6 py-3 rounded-lg text-sm font-semibold bg-gradient-to-r from-[#EF4444] to-[#991B1B] text-white shadow-lg shadow-[rgba(239,68,68,0.2)] hover:shadow-[rgba(239,68,68,0.4)] disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                >
-                  {isAnalyzing ? (
-                    <span className="flex items-center gap-2">
-                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
-                      </svg>
-                      Analyzing...
-                    </span>
-                  ) : 'Analyze'}
-                </button>
-                {scansRemaining !== null && scansRemaining < 10 && (
-                  <span className={`text-xs px-2 py-1 rounded ${scansRemaining <= 3 ? 'text-red-400 bg-red-500/10' : 'text-[#888] bg-[#111]'}`}>
-                    {scansRemaining} scan{scansRemaining !== 1 ? 's' : ''} left today
-                  </span>
-                )}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+        {/* Token Input */}
+        <div className="mb-8">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex-1 relative">
+              <div className="absolute left-4 top-1/2 -translate-y-1/2">
+                <svg className="w-5 h-5 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
               </div>
+              <input
+                type="text"
+                placeholder="Paste Solana token address..."
+                value={tokenInput}
+                onChange={e => setTokenInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && analyzeToken(tokenInput)}
+                className="w-full pl-12 pr-4 py-4 rounded-xl border border-zinc-700 bg-zinc-900 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent font-mono"
+              />
+            </div>
+            <button
+              onClick={() => analyzeToken(tokenInput)}
+              disabled={isAnalyzing || !tokenInput.trim()}
+              className="px-8 py-4 rounded-xl text-sm font-semibold bg-gradient-to-r from-emerald-500 to-emerald-600 text-white shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            >
+              {isAnalyzing ? (
+                <span className="flex items-center gap-2">
+                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+                  </svg>
+                  Analyzing...
+                </span>
+              ) : 'Analyze'}
+            </button>
+            {scansRemaining !== null && scansRemaining < 10 && (
+              <span className={`text-xs px-2 py-1 rounded ${scansRemaining <= 3 ? 'text-red-400 bg-red-500/10' : 'text-zinc-400 bg-zinc-800'}`}>
+                {scansRemaining} scan{scansRemaining !== 1 ? 's' : ''} left today
+              </span>
+            )}
+          </div>
 
           {/* Recent Searches */}
           {recentSearches.length > 0 && (
             <div className="mt-3 flex items-center gap-2 flex-wrap">
-              <span className="text-xs text-[#666]">Recent:</span>
+              <span className="text-xs text-zinc-500">Recent:</span>
               {recentSearches.slice(0, 6).map(s => (
                 <button
                   key={s.address}
                   onClick={() => { setTokenInput(s.address); analyzeToken(s.address); }}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-[#111] border border-[#1a1a1a] text-[#888] hover:text-[#EF4444] hover:border-[rgba(239,68,68,0.3)] transition-all"
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-800 border border-zinc-700 text-zinc-400 hover:bg-zinc-700 hover:border-zinc-600 transition-all"
                 >
                   {s.symbol}
                 </button>
@@ -1317,7 +1375,7 @@ export default function App() {
                 <button
                   key={w.address}
                   onClick={() => { setTokenInput(w.address); analyzeToken(w.address); }}
-                  className="group px-3 py-1.5 rounded-lg text-xs font-medium bg-[rgba(239,68,68,0.1)] border border-[rgba(239,68,68,0.3)] text-[#EF4444] hover:bg-[rgba(239,68,68,0.2)] transition-all flex items-center gap-1.5"
+                  className="group px-3 py-1.5 rounded-lg text-xs font-medium bg-yellow-500/10 border border-yellow-500/30 text-yellow-500 hover:bg-yellow-500/20 transition-all flex items-center gap-1.5"
                 >
                   {w.symbol}
                   <span className={`text-[10px] px-1 py-0.5 rounded ${SIGNAL_BG[w.signal]}`}>
@@ -1325,7 +1383,7 @@ export default function App() {
                   </span>
                   <span
                     onClick={(e) => { e.stopPropagation(); removeFromWatchlist(w.address); }}
-                    className="opacity-0 group-hover:opacity-100 text-[#666] hover:text-[#EF4444] transition-opacity"
+                    className="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-red-400 transition-opacity"
                   >
                     x
                   </span>
@@ -1333,9 +1391,9 @@ export default function App() {
               ))}
             </div>
           )}
-            </div>{/* End Token Input Card */}
+        </div>
 
-            {/* Error Message */}
+        {/* Error Message */}
         {analysisError && (
           <div className="mb-6 p-4 rounded-xl bg-red-900/30 border border-red-800">
             <div className="flex items-start gap-3">
@@ -1369,36 +1427,100 @@ export default function App() {
 
         {/* Analysis Results */}
         {analysisResult && !isAnalyzing && (
-          <div className="space-y-3">
-            {/* Token Header Card - Combined with key badges */}
-            <div className={`${cardBg} rounded-xl border ${cardBorder} p-3`}>
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className={`w-10 h-10 bg-gradient-to-br ${isDangerous ? 'from-red-500 to-red-600' : 'from-emerald-500 to-emerald-600'} rounded-lg flex items-center justify-center text-white text-sm font-bold flex-shrink-0`}>
+          <div className="space-y-6">
+            {/* Risk Banner */}
+            <div className={`rounded-xl border p-4 sm:p-5 ${bannerColorMap[analysisResult.ai.signal]}`}>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  {/* Categorical icons: warning for AVOID, shield for safe, info for middle */}
+                  {analysisResult.ai.signal === 'AVOID' ? (
+                    <svg className="w-6 h-6 text-red-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  ) : analysisResult.ai.signal === 'BUY' || analysisResult.ai.signal === 'STRONG_BUY' ? (
+                    <svg className="w-6 h-6 text-emerald-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-6 h-6 text-amber-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  )}
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-white font-bold text-sm sm:text-base">{analysisResult.ai.signal.replace('_', ' ')}</span>
+                      <span className="text-zinc-300 text-sm">— Risk Score: <span className="font-bold" style={{ color: getScoreColor(analysisResult.ai.score) }}>{analysisResult.ai.score}</span>/100</span>
+                    </div>
+                    <div className={`text-xs font-semibold tracking-wide mt-0.5 ${riskSubtitleColor}`}>{riskSubtitle}</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {analysisResult.bundles.detected && (
+                    <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-red-800/60 text-red-300 border border-red-700/50">
+                      {analysisResult.bundles.count} BUNDLE{analysisResult.bundles.count > 1 ? 'S' : ''}
+                    </span>
+                  )}
+                  {criticalIssueCount > 0 && (
+                    <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-red-800/60 text-red-300 border border-red-700/50">
+                      {criticalIssueCount} CRITICAL
+                    </span>
+                  )}
+                  {/* Show LP locked value - color based on actual value locked */}
+                  {/* Hide LP badge for mature tokens with no data (shows N/A in security card) */}
+                  {/* For pump.fun tokens, show "BONDING CURVE" instead of LP locked */}
+                  {analysisResult.security.isPumpFun ? (
+                    <span className="px-2.5 py-1 rounded-lg text-xs font-bold border bg-blue-800/60 text-blue-300 border-blue-700/50">
+                      BONDING CURVE
+                    </span>
+                  ) : !(isMatureToken && lpLockedValue === 0) && (
+                    <span className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${
+                      hasRealLockedValue
+                        ? 'bg-emerald-800/60 text-emerald-300 border-emerald-700/50'
+                        : 'bg-red-800/60 text-red-300 border-red-700/50'
+                    }`}>
+                      {fmt(lpLockedValue)} LOCKED
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Token Header Card */}
+            <div className={`${cardBg} rounded-2xl border ${cardBorder} p-4 sm:p-6`}>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div className="flex items-center gap-4 sm:gap-5">
+                  <div className={`w-12 h-12 sm:w-16 sm:h-16 bg-gradient-to-br ${isDangerous ? 'from-red-500 to-red-600 shadow-red-500/20' : 'from-emerald-500 to-emerald-600 shadow-emerald-500/20'} rounded-xl sm:rounded-2xl flex items-center justify-center text-white text-lg sm:text-xl font-bold shadow-lg flex-shrink-0`}>
                     {analysisResult.token.symbol.slice(0, 2)}
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <h2 className="text-base font-bold text-white">${analysisResult.token.symbol}</h2>
-                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${SIGNAL_BG[analysisResult.ai.signal]}`}>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 sm:gap-3 mb-1 flex-wrap">
+                      <h2 className="text-xl sm:text-2xl font-bold text-white">${analysisResult.token.symbol}</h2>
+                      <span className={`px-2 sm:px-3 py-1 rounded-full text-xs font-bold ${SIGNAL_BG[analysisResult.ai.signal]}`}>
                         {analysisResult.ai.signal.replace('_', ' ')}
                       </span>
-                      {analysisResult.bundles.detected && (
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-800/60 text-red-300">{analysisResult.bundles.count} BUNDLES</span>
-                      )}
-                      {analysisResult.security.isPumpFun ? (
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-800/60 text-blue-300">PUMP</span>
-                      ) : !(isMatureToken && lpLockedValue === 0) && (
-                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${hasRealLockedValue ? 'bg-emerald-800/60 text-emerald-300' : 'bg-red-800/60 text-red-300'}`}>{fmt(lpLockedValue)}</span>
-                      )}
                     </div>
-                    <div className="flex items-center gap-1">
-                      <code className="text-[9px] text-zinc-500 font-mono truncate max-w-[100px]">{analysisResult.token.address}</code>
-                      <button onClick={() => navigator.clipboard.writeText(analysisResult.token.address)} className="p-0.5 hover:bg-zinc-800 rounded" title="Copy">
-                        <svg className="w-2.5 h-2.5 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                    <div className="flex items-center gap-2">
+                      <code className="text-[10px] sm:text-xs text-zinc-500 font-mono truncate max-w-[150px] sm:max-w-none">{analysisResult.token.address}</code>
+                      <button
+                        onClick={() => navigator.clipboard.writeText(analysisResult.token.address)}
+                        className="p-1 hover:bg-zinc-800 rounded flex-shrink-0"
+                        title="Copy address"
+                      >
+                        <svg className="w-3.5 h-3.5 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
                       </button>
-                      <button onClick={() => isInWatchlist(analysisResult.token.address) ? removeFromWatchlist(analysisResult.token.address) : addToWatchlist(analysisResult)} className={`p-0.5 rounded ${isInWatchlist(analysisResult.token.address) ? 'text-yellow-500' : 'text-zinc-500 hover:text-yellow-500'}`}>
-                        <svg className="w-2.5 h-2.5" fill={isInWatchlist(analysisResult.token.address) ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>
+                      <button
+                        onClick={() => isInWatchlist(analysisResult.token.address)
+                          ? removeFromWatchlist(analysisResult.token.address)
+                          : addToWatchlist(analysisResult)
+                        }
+                        className={`p-1 rounded flex-shrink-0 transition-colors ${isInWatchlist(analysisResult.token.address) ? 'text-yellow-500 hover:bg-zinc-800' : 'text-zinc-500 hover:bg-zinc-800 hover:text-yellow-500'}`}
+                        title={isInWatchlist(analysisResult.token.address) ? 'Remove from watchlist' : 'Add to watchlist'}
+                      >
+                        <svg className="w-3.5 h-3.5" fill={isInWatchlist(analysisResult.token.address) ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                        </svg>
                       </button>
                     </div>
                   </div>
@@ -1407,41 +1529,50 @@ export default function App() {
               </div>
             </div>
 
-            {/* Info Cards Grid - Compact */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {/* Info Cards Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {/* Security Card */}
-              <div className={`${cardBg} rounded-lg border ${securityIsDangerous ? 'border-red-800/50' : cardBorder} p-3`}>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-1.5">
-                    <div className={`w-6 h-6 ${securityIsDangerous ? 'bg-red-500/10' : 'bg-emerald-500/10'} rounded flex items-center justify-center`}>
-                      <svg className={`w-3.5 h-3.5 ${securityIsDangerous ? 'text-red-500' : 'text-emerald-500'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <div className={`${cardBg} rounded-xl border ${securityIsDangerous ? 'border-red-800/50' : cardBorder} p-5`}>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <div className={`w-8 h-8 ${securityIsDangerous ? 'bg-red-500/10' : 'bg-emerald-500/10'} rounded-lg flex items-center justify-center`}>
+                      <svg className={`w-4 h-4 ${securityIsDangerous ? 'text-red-500' : 'text-emerald-500'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                       </svg>
                     </div>
-                    <h3 className={`text-xs font-semibold ${securityIsDangerous ? 'text-red-500' : 'text-emerald-500'}`}>Security</h3>
+                    <h3 className={`font-semibold ${securityIsDangerous ? 'text-red-500' : 'text-emerald-500'}`}>Security</h3>
                   </div>
                   {securityIsDangerous && (
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-400">
+                    <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-red-500/20 text-red-400 border border-red-500/30">
                       DANGER
                     </span>
                   )}
                 </div>
-                <div className="space-y-1.5">
+                <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-zinc-500">Mint</span>
-                    <span className={`text-[11px] font-semibold ${analysisResult.security.mintAuthorityRevoked ? 'text-green-500' : 'text-red-500'}`}>
-                      {analysisResult.security.mintAuthorityRevoked ? '✓ Revoked' : '⚠ Active'}
+                    <span className="text-sm text-zinc-500">Mint Authority</span>
+                    <span className={`text-sm font-semibold flex items-center gap-1 ${analysisResult.security.mintAuthorityRevoked ? 'text-green-500' : 'text-red-500'}`}>
+                      {analysisResult.security.mintAuthorityRevoked ? (
+                        <><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg> Revoked</>
+                      ) : (
+                        <><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg> Active</>
+                      )}
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-zinc-500">Freeze</span>
-                    <span className={`text-[11px] font-semibold ${analysisResult.security.freezeAuthorityRevoked ? 'text-green-500' : 'text-red-500'}`}>
-                      {analysisResult.security.freezeAuthorityRevoked ? '✓ Revoked' : '⚠ Active'}
+                    <span className="text-sm text-zinc-500">Freeze Authority</span>
+                    <span className={`text-sm font-semibold flex items-center gap-1 ${analysisResult.security.freezeAuthorityRevoked ? 'text-green-500' : 'text-red-500'}`}>
+                      {analysisResult.security.freezeAuthorityRevoked ? (
+                        <><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg> Revoked</>
+                      ) : (
+                        <><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg> Active</>
+                      )}
                     </span>
                   </div>
+                  {/* Show LP locked value - or "Bonding Curve" for pump.fun tokens */}
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-zinc-500">{analysisResult.security.isPumpFun ? 'LP' : 'Locked'}</span>
-                    <span className={`text-[11px] font-semibold ${
+                    <span className="text-sm text-zinc-500">{analysisResult.security.isPumpFun ? 'LP Status' : 'LP Locked'}</span>
+                    <span className={`text-sm font-semibold ${
                       analysisResult.security.isPumpFun
                         ? 'text-blue-400'
                         : isMatureToken && lpLockedValue === 0
@@ -1456,44 +1587,55 @@ export default function App() {
                     </span>
                   </div>
                 </div>
+                {/* Show RUG RISK warning when locked value is insignificant (but not for pump.fun bonding curve) */}
                 {!analysisResult.security.isPumpFun && !hasRealLockedValue && (
-                  <div className="mt-2 pt-2 border-t border-red-800/30">
-                    <p className="text-[10px] text-red-400 font-semibold">⚠ RUG RISK: &lt;$1K locked</p>
+                  <div className="mt-3 pt-3 border-t border-red-800/30">
+                    <p className="text-xs text-red-400 font-semibold flex items-center gap-1.5">
+                      <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                      RUG RISK: Less than $1K liquidity locked
+                    </p>
                   </div>
                 )}
               </div>
 
               {/* Market Card */}
-              <div className={`${cardBg} rounded-lg border ${cardBorder} p-3`}>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-6 h-6 bg-emerald-500/10 rounded flex items-center justify-center">
-                      <svg className="w-3.5 h-3.5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <div className={`${cardBg} rounded-xl border ${cardBorder} p-5`}>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 bg-emerald-500/10 rounded-lg flex items-center justify-center">
+                      <svg className="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
                       </svg>
                     </div>
-                    <h3 className="text-xs font-semibold text-emerald-500">Market</h3>
+                    <h3 className="font-semibold text-emerald-500">Market</h3>
                   </div>
+                  {/* 24h Sparkline */}
                   {analysisResult.market.sparkline && analysisResult.market.sparkline.length > 0 && (
-                    <Sparkline data={analysisResult.market.sparkline} color={analysisResult.market.priceChange24h >= 0 ? '#10b981' : '#ef4444'} height={24} />
+                    <Sparkline
+                      data={analysisResult.market.sparkline}
+                      color={analysisResult.market.priceChange24h >= 0 ? '#10b981' : '#ef4444'}
+                      height={36}
+                    />
                   )}
                 </div>
-                <div className="space-y-1.5">
+                <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-zinc-500">MCap</span>
-                    <span className="text-[11px] font-semibold text-white">{fmt(analysisResult.market.marketCap)}</span>
+                    <span className="text-sm text-zinc-500">Market Cap</span>
+                    <span className="text-sm font-semibold text-white">{fmt(analysisResult.market.marketCap)}</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-zinc-500">Liq</span>
-                    <span className="text-[11px] font-semibold text-white">{fmt(analysisResult.market.liquidity)}</span>
+                    <span className="text-sm text-zinc-500">Liquidity</span>
+                    <span className="text-sm font-semibold text-white">{fmt(analysisResult.market.liquidity)}</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-zinc-500">Vol 24h</span>
-                    <span className="text-[11px] font-semibold text-white">{fmt(analysisResult.market.volume24h)}</span>
+                    <span className="text-sm text-zinc-500">24h Volume</span>
+                    <span className="text-sm font-semibold text-white">{fmt(analysisResult.market.volume24h)}</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-zinc-500">24h</span>
-                    <span className={`text-[11px] font-semibold ${pctColor(analysisResult.market.priceChange24h)}`}>
+                    <span className="text-sm text-zinc-500">Price (24h)</span>
+                    <span className={`text-sm font-semibold ${pctColor(analysisResult.market.priceChange24h)}`}>
                       {fmtPct(analysisResult.market.priceChange24h)}
                     </span>
                   </div>
@@ -1501,140 +1643,272 @@ export default function App() {
               </div>
 
               {/* Trading Activity Card */}
-              <div className={`${cardBg} rounded-lg border ${cardBorder} p-3`}>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-6 h-6 bg-emerald-500/10 rounded flex items-center justify-center">
-                      <svg className="w-3.5 h-3.5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <div className={`${cardBg} rounded-xl border ${cardBorder} p-5`}>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 bg-emerald-500/10 rounded-lg flex items-center justify-center">
+                      <svg className="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
                       </svg>
                     </div>
-                    <h3 className="text-xs font-semibold text-emerald-500">Activity</h3>
+                    <h3 className="font-semibold text-emerald-500">Activity</h3>
                   </div>
-                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${analysisResult.trading.buyRatio > 1 ? 'bg-green-900/50 text-green-400' : 'bg-red-900/50 text-red-400'}`}>
-                    {analysisResult.trading.buyRatio.toFixed(1)}:1
+                  <span className={`text-xs font-bold px-2 py-0.5 rounded ${analysisResult.trading.buyRatio > 1 ? 'bg-green-900/50 text-green-400' : 'bg-red-900/50 text-red-400'}`}>
+                    {analysisResult.trading.buyRatio.toFixed(2)}:1
                   </span>
                 </div>
-                <div className="space-y-1.5">
+                <div className="space-y-3">
                   <PressureBar label="5m" buys={analysisResult.trading.buys5m} sells={analysisResult.trading.sells5m} />
                   <PressureBar label="1h" buys={analysisResult.trading.buys1h} sells={analysisResult.trading.sells1h} />
                   <PressureBar label="24h" buys={analysisResult.trading.buys24h} sells={analysisResult.trading.sells24h} />
                 </div>
-                <div className="mt-2 pt-2 border-t border-zinc-800 flex items-center justify-between">
-                  <span className="text-[10px] text-zinc-500">24h Txns</span>
-                  <span className="text-[10px] font-semibold text-white">
+                <div className="mt-3 pt-3 border-t border-zinc-800 flex items-center justify-between">
+                  <span className="text-xs text-zinc-500">Total 24h Txns</span>
+                  <span className="text-xs font-semibold text-white">
                     {(analysisResult.trading.buys24h + analysisResult.trading.sells24h).toLocaleString()}
                   </span>
                 </div>
               </div>
             </div>
 
-            {/* Holders & AI Analysis - Compact */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+            {/* Holders & AI Analysis */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {/* Top Holders */}
-              <div className={`${cardBg} rounded-lg border ${cardBorder} p-3`}>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-6 h-6 bg-emerald-500/10 rounded flex items-center justify-center">
-                      <svg className="w-3.5 h-3.5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+              <div className={`${cardBg} rounded-xl border ${cardBorder} p-5`}>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 bg-emerald-500/10 rounded-lg flex items-center justify-center">
+                      <svg className="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                       </svg>
                     </div>
-                    <h3 className="text-xs font-semibold text-emerald-500">Holders</h3>
+                    <h3 className="font-semibold text-emerald-500">Top Holders</h3>
                   </div>
                   {analysisResult.bundles.detected && (
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-900/50 text-red-400">
+                    <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-red-900/50 text-red-400 flex items-center gap-1">
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
                       {analysisResult.bundles.count} BUNDLE{analysisResult.bundles.count > 1 ? 'S' : ''}
                     </span>
                   )}
                 </div>
                 {analysisResult.holders.top10.length > 0 && analysisResult.holders.topHolderPercent > 0 ? (
-                  <div className="flex items-start gap-3">
+                  <>
                     <HolderDonut holders={analysisResult.holders.top10} />
-                    <div className="flex-1 min-w-0">
-                      <div className="space-y-1 mb-2">
-                        {analysisResult.holders.top10.slice(0, 3).map((holder, i) => (
-                          <div key={i} className="flex items-center gap-1.5">
-                            <span className="text-[9px] text-zinc-500 w-2">{i + 1}</span>
-                            <div className="flex-1 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                              <div className={`h-full rounded-full ${holder.isBundle ? 'bg-red-500' : 'bg-emerald-500'}`} style={{ width: `${Math.min(holder.percent * 2, 100)}%` }} />
+                    <div className="space-y-2.5">
+                      {analysisResult.holders.top10.slice(0, 5).map((holder, i) => (
+                        <div key={i} className="flex items-center gap-3">
+                          <span className="text-xs text-zinc-500 w-4">{i + 1}</span>
+                          <div className="flex-1">
+                            <div className="h-2.5 bg-zinc-800 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all ${holder.isBundle ? 'bg-gradient-to-r from-red-500 to-red-400' : 'bg-gradient-to-r from-emerald-500 to-emerald-400'}`}
+                                style={{ width: `${Math.min(holder.percent * 2, 100)}%` }}
+                              />
                             </div>
-                            <span className={`text-[9px] font-mono ${holder.isBundle ? 'text-red-500' : 'text-zinc-400'}`}>{holder.percent.toFixed(1)}%</span>
                           </div>
-                        ))}
+                          <span className={`text-xs font-mono w-12 text-right font-semibold ${holder.isBundle ? 'text-red-500' : 'text-zinc-400'}`}>
+                            {holder.percent.toFixed(1)}%
+                          </span>
+                          <code className="text-[10px] text-zinc-600 w-20 truncate">
+                            {holder.address.slice(0, 4)}...{holder.address.slice(-4)}
+                          </code>
+                          {holder.isBundle && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-900/50 text-red-400 font-semibold">B{holder.bundleId}</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-4 pt-4 border-t border-zinc-800 grid grid-cols-3 gap-3">
+                      <div className="text-center">
+                        <div className="text-xs text-zinc-500 mb-1">Top 1</div>
+                        <div className="text-sm font-bold text-white">{analysisResult.holders.topHolderPercent.toFixed(1)}%</div>
                       </div>
-                      <div className="flex gap-2 text-[9px]">
-                        <span className="text-zinc-500">T1:<span className="text-white font-bold ml-0.5">{analysisResult.holders.topHolderPercent.toFixed(0)}%</span></span>
-                        <span className="text-zinc-500">T5:<span className="text-white font-bold ml-0.5">{analysisResult.holders.top5Percent.toFixed(0)}%</span></span>
-                        <span className="text-zinc-500">T10:<span className="text-white font-bold ml-0.5">{analysisResult.holders.top10Percent.toFixed(0)}%</span></span>
+                      <div className="text-center">
+                        <div className="text-xs text-zinc-500 mb-1">Top 5</div>
+                        <div className="text-sm font-bold text-white">{analysisResult.holders.top5Percent.toFixed(1)}%</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-xs text-zinc-500 mb-1">Top 10</div>
+                        <div className="text-sm font-bold text-white">{analysisResult.holders.top10Percent.toFixed(1)}%</div>
                       </div>
                     </div>
-                  </div>
+                  </>
                 ) : (
-                  <p className="text-[10px] text-zinc-500">No holder data</p>
+                  <div className="py-6 text-center">
+                    <div className="w-10 h-10 mx-auto mb-2 rounded-lg bg-zinc-800 flex items-center justify-center">
+                      <svg className="w-5 h-5 text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                    </div>
+                    <p className="text-sm text-zinc-500">Holder data unavailable</p>
+                    <p className="text-xs text-zinc-600 mt-1">Not tracked for established tokens</p>
+                  </div>
                 )}
               </div>
 
-              {/* AI Analysis - Compact */}
-              <div className={`${cardBg} rounded-lg border ${cardBorder} p-3`}>
-                <div className="flex items-center gap-1.5 mb-2">
-                  <div className="w-6 h-6 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded flex items-center justify-center">
-                    <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              {/* AI Analysis - Enhanced */}
+              <div className={`${cardBg} rounded-xl border ${cardBorder} p-5`}>
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-lg flex items-center justify-center">
+                    <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                     </svg>
                   </div>
-                  <h3 className="text-xs font-semibold text-emerald-500">AI Analysis</h3>
+                  <h3 className="font-semibold text-emerald-500">AI Analysis</h3>
                 </div>
 
+                {/* Sentinel Override Banner */}
                 {analysisResult.ai.rulesOverride && analysisResult.ai.aiScore !== undefined && (
-                  <div className="bg-orange-500/10 border border-orange-500/30 rounded p-2 mb-2">
-                    <p className="text-[10px] text-orange-300/80">
-                      <span className="font-semibold text-orange-400">Guardrails:</span> AI rated <span className="font-mono font-bold" style={{ color: getScoreColor(analysisResult.ai.aiScore) }}>{analysisResult.ai.aiScore}</span> → adjusted to <span className="font-mono font-bold" style={{ color: getScoreColor(analysisResult.ai.score) }}>{analysisResult.ai.score}</span>
+                  <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-3 mb-4">
+                    <div className="flex items-center gap-2 mb-1">
+                      <svg className="w-4 h-4 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                      <span className="text-sm font-semibold text-orange-400">Guardrails Adjusted Score</span>
+                    </div>
+                    <p className="text-xs text-orange-300/80">
+                      AI rated this token <span className="font-mono font-bold" style={{ color: getScoreColor(analysisResult.ai.aiScore) }}>{analysisResult.ai.aiScore}</span>,
+                      but structural risk factors adjusted it to <span className="font-mono font-bold" style={{ color: getScoreColor(analysisResult.ai.score) }}>{analysisResult.ai.score}</span>.
+                      {analysisResult.ai.score < analysisResult.ai.aiScore && ' The guardrails detected risks the AI underweighted.'}
+                      {analysisResult.ai.score > analysisResult.ai.aiScore && ' Security fundamentals limited the downside risk assessment.'}
                     </p>
                   </div>
                 )}
 
-                <p className="text-[11px] text-zinc-300 leading-relaxed mb-2 line-clamp-3">{analysisResult.ai.verdict}</p>
+                {/* Summary */}
+                <p className="text-sm text-zinc-300 leading-relaxed mb-4">{analysisResult.ai.verdict}</p>
 
-                {/* Recommendation - compact */}
-                {analysisResult.ai.recommendation && (
-                  <div className={`rounded p-2 mb-2 ${
-                    analysisResult.ai.signal === 'AVOID' ? 'bg-red-900/20' :
-                    analysisResult.ai.signal === 'STRONG_BUY' || analysisResult.ai.signal === 'BUY' ? 'bg-emerald-900/20' : 'bg-zinc-800/50'
-                  }`}>
-                    <p className={`text-[10px] leading-relaxed line-clamp-2 ${
-                      analysisResult.ai.signal === 'AVOID' ? 'text-red-300/80' :
-                      analysisResult.ai.signal === 'STRONG_BUY' || analysisResult.ai.signal === 'BUY' ? 'text-emerald-300/80' : 'text-zinc-400'
-                    }`}>{analysisResult.ai.recommendation}</p>
+                {/* Prediction & Recommendation Grid */}
+                {(analysisResult.ai.prediction || analysisResult.ai.recommendation) && (
+                  <div className="grid grid-cols-1 gap-3 mb-4">
+                    {/* Prediction */}
+                    {analysisResult.ai.prediction && (
+                      <div className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700/50">
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <svg className="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                          </svg>
+                          <span className="text-xs font-semibold text-amber-400 uppercase tracking-wider">Prediction</span>
+                        </div>
+                        <p className="text-xs text-zinc-400 leading-relaxed">{analysisResult.ai.prediction}</p>
+                      </div>
+                    )}
+
+                    {/* Recommendation */}
+                    {analysisResult.ai.recommendation && (
+                      <div className={`rounded-lg p-3 border ${
+                        analysisResult.ai.signal === 'AVOID'
+                          ? 'bg-red-900/20 border-red-800/50'
+                          : analysisResult.ai.signal === 'STRONG_BUY' || analysisResult.ai.signal === 'BUY'
+                            ? 'bg-emerald-900/20 border-emerald-800/50'
+                            : 'bg-zinc-800/50 border-zinc-700/50'
+                      }`}>
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <svg className={`w-4 h-4 ${
+                            analysisResult.ai.signal === 'AVOID' ? 'text-red-400' :
+                            analysisResult.ai.signal === 'STRONG_BUY' || analysisResult.ai.signal === 'BUY' ? 'text-emerald-400' : 'text-zinc-400'
+                          }`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <span className={`text-xs font-semibold uppercase tracking-wider ${
+                            analysisResult.ai.signal === 'AVOID' ? 'text-red-400' :
+                            analysisResult.ai.signal === 'STRONG_BUY' || analysisResult.ai.signal === 'BUY' ? 'text-emerald-400' : 'text-zinc-400'
+                          }`}>Recommendation</span>
+                        </div>
+                        <p className={`text-xs leading-relaxed ${
+                          analysisResult.ai.signal === 'AVOID' ? 'text-red-300/80' :
+                          analysisResult.ai.signal === 'STRONG_BUY' || analysisResult.ai.signal === 'BUY' ? 'text-emerald-300/80' : 'text-zinc-400'
+                        }`}>{analysisResult.ai.recommendation}</p>
+                      </div>
+                    )}
                   </div>
                 )}
 
-                {/* Flags - collapsed by default */}
-                {analysisResult.ai.flags.length > 0 && (
-                  <details className="mb-2">
-                    <summary className="text-[10px] text-zinc-500 cursor-pointer hover:text-zinc-400">
-                      {analysisResult.ai.flags.length} flags (click to expand)
-                    </summary>
-                    <div className="mt-1 space-y-1 max-h-20 overflow-y-auto">
-                      {analysisResult.ai.flags.slice(0, 5).map((flag, i) => (
-                        <div key={i} className="flex items-start gap-1">
-                          <span className={`px-1 rounded text-[9px] font-bold ${
-                            flag.severity === 'CRITICAL' ? 'bg-red-500/20 text-red-400' :
-                            flag.severity === 'HIGH' ? 'bg-amber-500/20 text-amber-400' :
-                            'bg-emerald-500/20 text-emerald-400'
-                          }`}>{flag.severity === 'CRITICAL' ? '!' : flag.severity === 'HIGH' ? '!' : '✓'}</span>
-                          <span className="text-[10px] text-zinc-500 line-clamp-1">{flag.message}</span>
+                {/* Split flags into Risk Factors and Protective Factors */}
+                {analysisResult.ai.flags.length > 0 && (() => {
+                  // Identify protective flags by type or message content
+                  const isProtective = (flag: { type: string; message: string }) => {
+                    const protectiveTypes = ['SECURITY', 'CONTRACT'];
+                    const protectiveKeywords = ['revoked', 'locked', 'protection', 'limit downside', 'community-owned', 'exited', 'safe'];
+                    return protectiveTypes.includes(flag.type) ||
+                           protectiveKeywords.some(kw => flag.message.toLowerCase().includes(kw));
+                  };
+
+                  const riskFlags = analysisResult.ai.flags.filter(f => !isProtective(f));
+                  const protectiveFlags = analysisResult.ai.flags.filter(f => isProtective(f));
+
+                  return (
+                    <>
+                      {/* Risk Factors */}
+                      {riskFlags.length > 0 && (
+                        <div className="space-y-2 mb-4">
+                          <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Risk Factors</h4>
+                          {riskFlags.map((flag, i) => (
+                            <div key={i} className="flex items-start gap-2">
+                              <span className={`mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold leading-none flex-shrink-0 ${
+                                flag.severity === 'CRITICAL' ? 'bg-red-500/20 text-red-400' :
+                                flag.severity === 'HIGH' ? 'bg-amber-500/20 text-amber-400' :
+                                'bg-yellow-500/15 text-yellow-400'
+                              }`}>
+                                {flag.severity === 'CRITICAL' ? 'CRIT' : flag.severity === 'HIGH' ? 'HIGH' : 'MED'}
+                              </span>
+                              <span className="text-xs text-zinc-400 leading-relaxed">{flag.message}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Protective Factors */}
+                      {protectiveFlags.length > 0 && (
+                        <div className="space-y-2 mb-4">
+                          <h4 className="text-xs font-semibold text-emerald-600 uppercase tracking-wider">Protective Factors</h4>
+                          {protectiveFlags.map((flag, i) => (
+                            <div key={i} className="flex items-start gap-2">
+                              <span className="mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold leading-none flex-shrink-0 bg-emerald-500/20 text-emerald-400">
+                                SAFE
+                              </span>
+                              <span className="text-xs text-zinc-400 leading-relaxed">{flag.message}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+
+                {/* Network Insights */}
+                {analysisResult.ai.networkInsights && analysisResult.ai.networkInsights.length > 0 && (
+                  <div className="mb-4">
+                    <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">Network Insights</h4>
+                    <div className="space-y-1.5">
+                      {analysisResult.ai.networkInsights.map((insight, i) => (
+                        <div key={i} className="flex items-start gap-2">
+                          <svg className="w-3.5 h-3.5 text-zinc-600 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <span className="text-xs text-zinc-500 leading-relaxed">{insight}</span>
                         </div>
                       ))}
                     </div>
-                  </details>
+                  </div>
                 )}
 
-                {/* Links - compact inline */}
-                <div className="mt-2 pt-2 border-t border-zinc-800 flex items-center gap-1.5 flex-wrap">
-                  <a href={analysisResult.links.dexscreener} target="_blank" rel="noopener noreferrer" className="px-2 py-1 text-[10px] bg-zinc-800 text-zinc-400 rounded hover:bg-zinc-700">DEX</a>
+                {/* Links */}
+                <div className="mt-4 pt-4 border-t border-zinc-800 flex items-center gap-2 flex-wrap">
+                  <a
+                    href={analysisResult.links.dexscreener}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1.5 text-xs font-medium bg-zinc-800 text-zinc-400 rounded-lg hover:bg-zinc-700 transition-colors"
+                  >
+                    DexScreener
+                  </a>
                   {analysisResult.links.website && (
-                    <a href={analysisResult.links.website} target="_blank" rel="noopener noreferrer" className="px-2 py-1 text-[10px] bg-zinc-800 text-zinc-400 rounded hover:bg-zinc-700">Web</a>
+                    <a href={analysisResult.links.website} target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 text-xs font-medium bg-zinc-800 text-zinc-400 rounded-lg hover:bg-zinc-700">
+                      Website
+                    </a>
                   )}
                   {analysisResult.links.twitter && (
                     <a href={analysisResult.links.twitter} target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 text-xs font-medium bg-zinc-800 text-zinc-400 rounded-lg hover:bg-zinc-700">
@@ -1650,54 +1924,334 @@ export default function App() {
               </div>
             </div>
 
-            {/* Bundle Warning - Compact */}
+            {/* Standalone Warning Callouts */}
             {analysisResult.bundles.detected && (
-              <div className="p-2 rounded-lg bg-red-900/30 border border-red-800 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-bold text-red-400">
-                    {analysisResult.bundles.confidence === 'HIGH' ? '⚠ Pump Syndicate' : '⚠ Bundle Warning'}
+              <div className="p-4 rounded-xl bg-red-900/30 border border-red-800">
+                <div className="flex items-center gap-2 mb-2">
+                  <svg className="w-5 h-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <span className="text-sm font-bold text-red-400">
+                    {analysisResult.bundles.confidence === 'HIGH' && analysisResult.holders.total > 0 && (analysisResult.bundles.count / analysisResult.holders.total) > 0.4
+                      ? 'Pump Syndicate Detected'
+                      : 'Bundle Warning'}
                   </span>
-                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-800/60 text-red-300">
-                    {analysisResult.bundles.count} wallets
-                  </span>
-                  {analysisResult.bundles.controlPercent > 0 && (
-                    <span className="text-[10px] text-red-400">{analysisResult.bundles.controlPercent.toFixed(1)}% supply</span>
+                  <div className="ml-auto flex items-center gap-1.5">
+                    {analysisResult.bundles.confidence && (
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                        analysisResult.bundles.confidence === 'HIGH' ? 'bg-red-700/80 text-red-200' : 'bg-amber-800/60 text-amber-300'
+                      }`}>
+                        {analysisResult.bundles.confidence}
+                      </span>
+                    )}
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-800/60 text-red-300">
+                      {analysisResult.bundles.count} WALLETS
+                    </span>
+                    <button
+                      onClick={() => setShowBundleNetwork(true)}
+                      className="ml-1 px-2.5 py-0.5 rounded text-[10px] font-bold bg-zinc-700/80 text-zinc-300 hover:bg-zinc-600/80 hover:text-white transition-colors flex items-center gap-1"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                      </svg>
+                      VIEW MAP
+                    </button>
+                  </div>
+                </div>
+
+                {/* Syndicate summary */}
+                <div className="mb-3 text-sm text-red-400/80">
+                  {analysisResult.bundles.confidence === 'HIGH' ? (
+                    <span><span className="text-red-300 font-medium">{analysisResult.bundles.count} wallets</span> confirmed buying in the same block (same-block sniping). {
+                      analysisResult.holders.total > 0
+                        ? analysisResult.bundles.count > analysisResult.holders.total
+                          ? `Many have already sold — only ${analysisResult.holders.total} holders remain.`
+                          : `That's ${((analysisResult.bundles.count / analysisResult.holders.total) * 100).toFixed(0)}% of all ${analysisResult.holders.total} holders.`
+                        : ''
+                    }</span>
+                  ) : (
+                    <span>{analysisResult.bundles.count} wallets show coordination patterns — possible coordinated buying activity.</span>
                   )}
                 </div>
-                <button
-                  onClick={() => setShowBundleNetwork(true)}
-                  className="px-2 py-1 rounded text-[10px] font-bold bg-zinc-700/80 text-zinc-300 hover:bg-zinc-600/80"
-                >
-                  VIEW MAP
-                </button>
+
+                {/* Syndicate signs - show for both HIGH and MEDIUM confidence */}
+                {(analysisResult.bundles.confidence === 'HIGH' || analysisResult.bundles.confidence === 'MEDIUM') && analysisResult.bundles.count > 0 && (
+                  <div className="space-y-3">
+                    {/* Signs of syndicate */}
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="flex items-center gap-1.5 text-red-300">
+                        <span className="text-red-500">&#x2716;</span>
+                        Same-block sniping
+                      </div>
+                      {analysisResult.bundles.controlPercent > 0 && (
+                        <div className="flex items-center gap-1.5 text-red-300">
+                          <span className="text-red-500">&#x2716;</span>
+                          Control ~{analysisResult.bundles.controlPercent.toFixed(1)}% of supply
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Wallet table - Use walletsWithHoldings from API (has exact % for each wallet) */}
+                    {analysisResult.bundles.wallets && analysisResult.bundles.wallets.length > 0 && (() => {
+                      // Use walletsWithHoldings from API - it has exact % for each bundle wallet
+                      const walletsFromApi = analysisResult.bundles.walletsWithHoldings || [];
+
+                      // Build status array: prefer walletsWithHoldings, fall back to top10 lookup
+                      const bundleWalletsWithStatus = analysisResult.bundles.wallets.map(addr => {
+                        // First check walletsWithHoldings (has ALL bundle wallet percentages)
+                        const apiWallet = walletsFromApi.find(w => w.address === addr);
+                        if (apiWallet && apiWallet.percent > 0) {
+                          return { addr, percent: apiWallet.percent, isHolder: true };
+                        }
+                        // Fall back to top10 lookup
+                        const holderMatch = analysisResult.holders.top10.find(h => h.address === addr);
+                        return { addr, percent: holderMatch?.percent || 0, isHolder: !!holderMatch };
+                      });
+
+                      // Sort: holders first (descending by %), then sold wallets
+                      bundleWalletsWithStatus.sort((a, b) => b.percent - a.percent);
+
+                      const holdersCount = bundleWalletsWithStatus.filter(w => w.isHolder).length;
+                      const soldCount = bundleWalletsWithStatus.length - holdersCount;
+
+                      return (
+                        <div className="mt-3 rounded-lg bg-zinc-900/80 border border-zinc-700/50 overflow-hidden">
+                          {/* Table Header */}
+                          <div className="grid grid-cols-[1fr_70px_70px] gap-2 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 border-b border-zinc-700/50 bg-zinc-800/50">
+                            <span>WALLET</span>
+                            <span className="text-right">%</span>
+                            <span className="text-right">TYPE</span>
+                          </div>
+                          {/* Table Body */}
+                          <div className="max-h-[200px] overflow-y-auto">
+                            {bundleWalletsWithStatus.slice(0, 10).map(({ addr, percent, isHolder }, i) => (
+                              <div
+                                key={i}
+                                className={`grid grid-cols-[1fr_70px_70px] gap-2 px-4 py-2 text-sm border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors ${!isHolder ? 'opacity-60' : ''}`}
+                              >
+                                <span className="font-mono text-zinc-300 truncate">
+                                  {addr.slice(0, 4)}...{addr.slice(-4)}
+                                </span>
+                                <span className="text-right text-zinc-400 font-medium">
+                                  {isHolder ? `${percent.toFixed(2)}%` : <span className="text-xs text-zinc-500">sold</span>}
+                                </span>
+                                <span className="text-right">
+                                  <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold ${isHolder ? 'bg-red-900/50 text-red-400 border border-red-800/50' : 'bg-zinc-800/50 text-zinc-500 border border-zinc-700/50'}`}>
+                                    Bundle
+                                  </span>
+                                </span>
+                              </div>
+                            ))}
+                            {bundleWalletsWithStatus.length > 10 && (
+                              <div className="px-4 py-2 text-xs text-zinc-500 text-center bg-zinc-800/20">
+                                +{bundleWalletsWithStatus.length - 10} more ({soldCount > 10 ? `${soldCount - (10 - holdersCount)} sold` : 'sold'})
+                              </div>
+                            )}
+                          </div>
+                          {/* Table Footer */}
+                          <div className="grid grid-cols-[1fr_70px_70px] gap-2 px-4 py-2 text-xs border-t border-zinc-700/50 bg-zinc-800/30">
+                            <span className="text-zinc-500 font-medium">
+                              {holdersCount > 0 ? `${holdersCount} holding, ${soldCount} sold` : `${analysisResult.bundles.count} detected (all sold)`}
+                            </span>
+                            <span className="text-right text-red-400 font-bold">{(analysisResult.bundles.controlPercent || 0).toFixed(1)}%</span>
+                            <span></span>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+
+                {/* Fallback for LOW confidence or missing wallet data */}
+                {((analysisResult.bundles.confidence !== 'HIGH' && analysisResult.bundles.confidence !== 'MEDIUM') || analysisResult.bundles.count === 0) && (
+                  <p className="text-sm text-red-400/80">
+                    {analysisResult.bundles.description
+                      ? `${analysisResult.bundles.description}. This indicates coordinated wallet activity designed to manipulate price action.`
+                      : `${analysisResult.bundles.count} coordinated wallet cluster${analysisResult.bundles.count > 1 ? 's' : ''} detected. This indicates coordinated wallet activity designed to manipulate price action.`
+                    }
+                  </p>
+                )}
               </div>
             )}
 
-            {/* Compact Warning Pills */}
-            <div className="flex flex-wrap gap-2">
-              {analysisResult.bundles.washTrading?.detected && (
-                <span className="px-2 py-1 rounded text-[10px] font-bold bg-orange-900/30 border border-orange-800 text-orange-400">
-                  ⚠ Wash Trading: {analysisResult.bundles.washTrading.washTradingPercent.toFixed(0)}% fake buys
-                </span>
-              )}
-              {analysisResult.bundles.syndicateNetwork?.detected && (
-                <span className="px-2 py-1 rounded text-[10px] font-bold bg-purple-900/30 border border-purple-800 text-purple-400">
-                  ⚠ Syndicate: {analysisResult.bundles.syndicateNetwork.repeatOffenders} repeat offenders
-                </span>
-              )}
-              {analysisResult.devActivity && analysisResult.devActivity.severity !== 'NONE' && (
-                <span className={`px-2 py-1 rounded text-[10px] font-bold ${
-                  analysisResult.devActivity.severity === 'CRITICAL' || analysisResult.devActivity.severity === 'HIGH'
-                    ? 'bg-red-900/30 border border-red-800 text-red-400'
-                    : 'bg-amber-900/30 border border-amber-800 text-amber-400'
-                }`}>
-                  Dev: {analysisResult.devActivity.hasSold ? `Sold ${analysisResult.devActivity.percentSold.toFixed(0)}%` : `Holds ${analysisResult.devActivity.currentHoldingsPercent.toFixed(1)}%`}
-                </span>
-              )}
-            </div>
+            {/* Wash Trading Detection */}
+            {analysisResult.bundles.washTrading?.detected && (
+              <div className="p-4 rounded-xl bg-orange-900/30 border border-orange-800">
+                <div className="flex items-center gap-2 mb-3">
+                  <svg className="w-5 h-5 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  <span className="text-sm font-bold text-orange-400">Wash Trading Detected</span>
+                  <span className={`ml-auto px-2 py-0.5 rounded text-[10px] font-bold ${
+                    analysisResult.bundles.washTrading.washTradingPercent >= 70
+                      ? 'bg-red-800/60 text-red-300'
+                      : analysisResult.bundles.washTrading.washTradingPercent >= 50
+                      ? 'bg-orange-800/60 text-orange-300'
+                      : 'bg-amber-800/60 text-amber-300'
+                  }`}>
+                    {analysisResult.bundles.washTrading.washTradingPercent.toFixed(0)}% FAKE
+                  </span>
+                </div>
 
-            {/* Buy Controls - Hidden, using fixed BuyBar instead */}
-            <div className="hidden">
+                <div className="space-y-2 text-xs">
+                  <div className="flex justify-between text-zinc-400">
+                    <span>Total Buys Analyzed:</span>
+                    <span className="font-mono text-zinc-300">{analysisResult.bundles.washTrading.totalBuys}</span>
+                  </div>
+                  <div className="flex justify-between text-zinc-400">
+                    <span>Bundle Self-Buys:</span>
+                    <span className="font-mono text-red-400">{analysisResult.bundles.washTrading.bundleBuys} ({analysisResult.bundles.washTrading.washTradingPercent.toFixed(0)}%)</span>
+                  </div>
+                  <div className="flex justify-between text-zinc-400">
+                    <span>Organic Buys:</span>
+                    <span className="font-mono text-emerald-400">{analysisResult.bundles.washTrading.organicBuys} ({(100 - analysisResult.bundles.washTrading.washTradingPercent).toFixed(0)}%)</span>
+                  </div>
+                  {analysisResult.bundles.washTrading.realBuyRatio !== null && (
+                    <div className="flex justify-between text-zinc-400 pt-1 border-t border-orange-800/50">
+                      <span>Real Buy Ratio:</span>
+                      <span className="font-mono text-orange-300">{analysisResult.bundles.washTrading.realBuyRatio.toFixed(2)}:1</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-3 pt-2 border-t border-orange-800/50">
+                  <p className="text-xs text-orange-300">
+                    {analysisResult.bundles.washTrading.washTradingPercent >= 70
+                      ? `The displayed buy ratio is artificial. Only ${analysisResult.bundles.washTrading.organicBuys} of ${analysisResult.bundles.washTrading.totalBuys} buys are from real users.`
+                      : analysisResult.bundles.washTrading.washTradingPercent >= 50
+                      ? 'Bundle wallets are inflating buy metrics to attract retail buyers.'
+                      : 'Coordinated wallets contributing to buy volume — exercise caution.'}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Syndicate Network Alert - Repeat Offenders */}
+            {analysisResult.bundles.syndicateNetwork?.detected && (
+              <div className="p-4 rounded-xl bg-purple-900/30 border border-purple-800">
+                <div className="flex items-center gap-2 mb-3">
+                  <svg className="w-5 h-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                  </svg>
+                  <span className="text-sm font-bold text-purple-400">Syndicate Network Detected</span>
+                  <div className="ml-auto flex gap-1.5">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-800/60 text-purple-300">
+                      {analysisResult.bundles.syndicateNetwork.repeatOffenders} REPEAT
+                    </span>
+                    {analysisResult.bundles.syndicateNetwork.rugRate > 0 && (
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                        analysisResult.bundles.syndicateNetwork.rugRate >= 50
+                          ? 'bg-red-800/60 text-red-300'
+                          : 'bg-amber-800/60 text-amber-300'
+                      }`}>
+                        {analysisResult.bundles.syndicateNetwork.rugRate}% RUG RATE
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <p className="text-sm text-purple-300/90 mb-3">
+                  {analysisResult.bundles.syndicateNetwork.networkWarning ||
+                    `${analysisResult.bundles.syndicateNetwork.repeatOffenders} bundle wallets have appeared in ${analysisResult.bundles.syndicateNetwork.totalTokensTouched} previous token launches.`}
+                </p>
+
+                {/* High Risk Wallets */}
+                {analysisResult.bundles.syndicateNetwork.highRiskWallets.length > 0 && (
+                  <div className="rounded-lg bg-black/30 border border-purple-900/40 overflow-hidden">
+                    <div className="grid grid-cols-[1fr_60px_60px_70px] gap-2 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-purple-400/60 border-b border-purple-900/30">
+                      <span>Wallet</span>
+                      <span className="text-center">Tokens</span>
+                      <span className="text-center">Rugs</span>
+                      <span className="text-right">Risk</span>
+                    </div>
+                    <div className="max-h-[140px] overflow-y-auto">
+                      {analysisResult.bundles.syndicateNetwork.highRiskWallets.slice(0, 5).map((wallet, i) => (
+                        <div key={i} className="grid grid-cols-[1fr_60px_60px_70px] gap-2 px-3 py-1.5 text-xs border-b border-purple-900/20 hover:bg-purple-900/20">
+                          <span className="font-mono text-zinc-400 truncate">
+                            {wallet.address.slice(0, 4)}...{wallet.address.slice(-4)}
+                          </span>
+                          <span className="text-center text-zinc-300">{wallet.tokenCount}</span>
+                          <span className={`text-center ${wallet.rugCount > 0 ? 'text-red-400' : 'text-zinc-500'}`}>
+                            {wallet.rugCount}
+                          </span>
+                          <span className="text-right">
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                              wallet.riskScore >= 70 ? 'bg-red-800/80 text-red-200' :
+                              wallet.riskScore >= 50 ? 'bg-amber-800/80 text-amber-200' :
+                              'bg-zinc-700 text-zinc-300'
+                            }`}>
+                              {wallet.riskScore}
+                            </span>
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Recent rugged tokens */}
+                {(() => {
+                  const ruggedTokens = analysisResult.bundles.syndicateNetwork!.highRiskWallets
+                    .flatMap(w => w.recentTokens)
+                    .filter(t => t.rugged)
+                    .slice(0, 3);
+
+                  return ruggedTokens.length > 0 && (
+                    <div className="mt-3 pt-2 border-t border-purple-800/50">
+                      <p className="text-xs text-purple-300/70 mb-1">Recent rugs involving these wallets:</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {ruggedTokens.map((t, i) => (
+                          <span key={i} className="px-2 py-0.5 rounded text-[10px] bg-red-900/40 text-red-300 border border-red-800/50">
+                            ${t.symbol} ({t.daysAgo}d ago)
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
+            {analysisResult.devActivity && analysisResult.devActivity.severity !== 'NONE' && (
+              <div className={`p-4 rounded-xl border ${
+                analysisResult.devActivity.severity === 'CRITICAL' || analysisResult.devActivity.severity === 'HIGH'
+                  ? 'bg-red-900/30 border-red-800'
+                  : analysisResult.devActivity.severity === 'MEDIUM'
+                  ? 'bg-amber-900/30 border-amber-800'
+                  : 'bg-zinc-800/50 border-zinc-700'
+              }`}>
+                <div className="flex items-center gap-2 mb-2">
+                  <svg className="w-5 h-5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  <span className={`text-sm font-bold ${
+                    analysisResult.devActivity.severity === 'CRITICAL' || analysisResult.devActivity.severity === 'HIGH'
+                      ? 'text-red-400'
+                      : analysisResult.devActivity.severity === 'MEDIUM'
+                      ? 'text-amber-400'
+                      : 'text-zinc-300'
+                  }`}>Dev Wallet Activity</span>
+                  <span className={`ml-auto px-2 py-0.5 rounded text-[10px] font-bold ${
+                    analysisResult.devActivity.severity === 'CRITICAL' || analysisResult.devActivity.severity === 'HIGH'
+                      ? 'bg-red-800/60 text-red-300'
+                      : analysisResult.devActivity.severity === 'MEDIUM'
+                      ? 'bg-amber-800/60 text-amber-300'
+                      : 'bg-zinc-700 text-zinc-400'
+                  }`}>
+                    {analysisResult.devActivity.severity}
+                  </span>
+                </div>
+                <p className="text-sm text-zinc-400">
+                  {analysisResult.devActivity.hasSold
+                    ? `Dev sold ${analysisResult.devActivity.percentSold.toFixed(0)}% of tokens${analysisResult.devActivity.currentHoldingsPercent > 0.1 ? ` but still holds ${analysisResult.devActivity.currentHoldingsPercent.toFixed(1)}%` : ' and fully exited'}.`
+                    : `Dev has not sold. Currently holds ${analysisResult.devActivity.currentHoldingsPercent.toFixed(1)}% of supply.`
+                  }
+                </p>
+              </div>
+            )}
+
+            {/* Buy Controls */}
+            <div className={`${cardBg} rounded-xl border ${cardBorder} p-4 sm:p-5 md:sticky md:bottom-4 z-20`}>
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
                   <span className="text-sm font-medium text-zinc-500">Amount:</span>
@@ -1903,103 +2457,127 @@ export default function App() {
           </div>
         )}
 
-          </div>{/* End Left Column */}
-
-          {/* Right Column - Activity Feed (Sticky) */}
-          <div className="xl:sticky xl:top-6 xl:self-start">
-            <ActivityFeed
-              events={agentStatus.activity}
-              maxVisible={15}
-              onAnalyze={(tokenAddress) => {
-                setTokenInput(tokenAddress);
-                analyzeToken(tokenAddress);
-              }}
-              onClear={agentStatus.clearActivity}
-            />
-          </div>{/* End Right Column */}
-        </div>{/* End Two Column Grid */}
-
-        {/* Compact Empty State - Only show if no positions either */}
-        {!analysisResult && !isAnalyzing && !analysisError && autoTrade.state.positions.length === 0 && (
-          <div className="mt-6 p-6 rounded-xl bg-[#0a0a0a] border border-[#1a1a1a] text-center">
-            <div className="flex items-center justify-center gap-4 text-[#666]">
-              <svg className="w-5 h-5 text-[#EF4444]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+        {/* Empty State */}
+        {!analysisResult && !isAnalyzing && !analysisError && (
+          <div className="text-center py-24">
+            <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-emerald-600/20 flex items-center justify-center">
+              <svg className="w-10 h-10 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
-              <span className="text-sm">Paste a token address above to begin analysis</span>
             </div>
+            <h3 className="text-2xl font-bold text-emerald-500 mb-2">The Hundred-Eyed Guardian</h3>
+            <p className="text-zinc-500 max-w-lg mx-auto leading-relaxed">
+              Paste a Solana token address above. Argus will scan every wallet, detect pump syndicates, and deliver a full risk analysis before you invest.
+            </p>
+
+            {/* Getting Started Steps */}
             {!autoTrade.wallet.isLoaded && (
-              <p className="mt-3 text-xs text-[#666]">
-                <span className="text-[#EF4444]">Tip:</span> Create a trading wallet to enable one-click buys
-              </p>
+              <div className="mt-8 mx-auto max-w-md p-4 rounded-xl bg-amber-500/5 border border-amber-500/20">
+                <div className="flex items-center gap-2 text-sm font-medium text-amber-500 mb-1">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Get Started
+                </div>
+                <p className="text-xs text-zinc-400">Create a trading wallet to analyze tokens and trade. Click "Create Wallet" in the header above.</p>
+              </div>
             )}
+
+            <div className="mt-8 flex flex-col sm:flex-row justify-center gap-3 sm:gap-4 text-sm text-zinc-500">
+              <div className="flex items-center justify-center gap-2">
+                <svg className="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
+                Security Analysis
+              </div>
+              <div className="flex items-center justify-center gap-2">
+                <svg className="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                Bundle Detection
+              </div>
+              <div className="flex items-center justify-center gap-2">
+                <svg className="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+                AI Verdict
+              </div>
+            </div>
           </div>
         )}
 
-        {/* Positions - Only show when there are positions */}
-        {autoTrade.state.positions.length > 0 && (
-        <div className="mt-4">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <h3 className="text-[10px] font-bold text-[#EF4444] tracking-wider uppercase">Positions</h3>
-              <span className="px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-[#EF4444] text-white">
-                {autoTrade.state.positions.length}
-              </span>
-              {autoTrade.state.totalTraded > 0 && (
-                <span className={`text-[10px] ${autoTrade.state.totalProfitSol >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                  {autoTrade.state.totalProfitSol >= 0 ? '+' : ''}{autoTrade.state.totalProfitSol.toFixed(4)} SOL
+        {/* Positions - Always visible */}
+        <div className="mt-8">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-3">
+              <h3 className="text-lg font-bold text-emerald-500">Your Positions</h3>
+              {autoTrade.state.positions.length > 0 && (
+                <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-500 text-white">
+                  {autoTrade.state.positions.length}
                 </span>
               )}
             </div>
-            <div className="flex gap-1.5">
-              <button
-                onClick={() => autoTrade.sellAllPositions()}
-                className="px-2 py-1 rounded text-[9px] font-semibold bg-red-900/50 text-red-400 hover:bg-red-900/70 transition-colors"
-              >
-                Sell All
-              </button>
-              <button
-                onClick={() => autoTrade.clearAllPositions()}
-                className="px-2 py-1 rounded text-[9px] font-semibold bg-zinc-800 text-zinc-400 hover:bg-zinc-700 transition-colors"
-              >
-                Clear
-              </button>
+            <div className="flex items-center gap-3">
+              {autoTrade.state.totalTraded > 0 && (
+                <div className="flex items-center gap-3 text-xs text-zinc-500">
+                  <span>{autoTrade.state.totalTraded} trades</span>
+                  <span className={autoTrade.state.totalProfitSol >= 0 ? 'text-green-500' : 'text-red-500'}>
+                    {autoTrade.state.totalProfitSol >= 0 ? '+' : ''}{autoTrade.state.totalProfitSol.toFixed(4)} SOL
+                  </span>
+                </div>
+              )}
+              {autoTrade.state.positions.length > 0 && (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => autoTrade.sellAllPositions()}
+                    className="px-4 py-2 rounded-lg text-xs font-semibold bg-red-900/50 text-red-400 hover:bg-red-900/70 transition-colors"
+                  >
+                    Sell All
+                  </button>
+                  <button
+                    onClick={() => autoTrade.clearAllPositions()}
+                    className="px-4 py-2 rounded-lg text-xs font-semibold bg-zinc-800 text-zinc-400 hover:bg-zinc-700 transition-colors"
+                  >
+                    Clear All
+                  </button>
+                </div>
+              )}
             </div>
           </div>
-          <div className="bg-[#0a0a0a] rounded-lg border border-[rgba(239,68,68,0.2)] overflow-hidden">
-            <table className="w-full min-w-[400px]">
+          <div className="bg-zinc-900 rounded-xl border border-zinc-800 overflow-x-auto">
+            {autoTrade.state.positions.length > 0 ? (
+              <table className="w-full min-w-[500px]">
                 <thead>
-                  <tr className="bg-[#111] text-[9px] uppercase tracking-wider text-[#666]">
-                    <th className="px-3 py-2 text-left font-semibold">Token</th>
-                    <th className="px-3 py-2 text-right font-semibold">Entry</th>
-                    <th className="px-3 py-2 text-right font-semibold">Current</th>
-                    <th className="px-3 py-2 text-right font-semibold">P&L</th>
-                    <th className="px-3 py-2 text-right font-semibold">Action</th>
+                  <tr className="bg-zinc-800 text-xs uppercase tracking-wider text-zinc-500">
+                    <th className="px-5 py-3 text-left font-semibold">Token</th>
+                    <th className="px-5 py-3 text-right font-semibold">Entry</th>
+                    <th className="px-5 py-3 text-right font-semibold">Current</th>
+                    <th className="px-5 py-3 text-right font-semibold">P&L</th>
+                    <th className="px-5 py-3 text-right font-semibold">Action</th>
                   </tr>
                 </thead>
                 <tbody>
                   {autoTrade.state.positions.map((p, i) => (
-                    <tr key={`${p.tokenAddress}-${i}`} className="border-t border-[#1a1a1a] hover:bg-[rgba(255,255,255,0.02)] transition-colors">
-                      <td className="px-3 py-2">
+                    <tr key={`${p.tokenAddress}-${i}`} className="border-t border-zinc-800 hover:bg-zinc-800/50 transition-colors">
+                      <td className="px-5 py-4">
                         <a
                           href={`https://dexscreener.com/solana/${p.tokenAddress}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-xs font-semibold text-[#EF4444] hover:text-[#F87171]"
+                          className="font-semibold text-white hover:text-emerald-400"
                         >
                           {p.tokenSymbol}
                         </a>
                       </td>
-                      <td className="px-3 py-2 text-right text-[10px] text-[#888]">{p.entrySolAmount.toFixed(3)}</td>
-                      <td className="px-3 py-2 text-right text-[10px] text-[#888]">{p.currentValueSol.toFixed(3)}</td>
-                      <td className={`px-3 py-2 text-right text-[10px] font-bold ${p.pnlPercent >= 0 ? 'text-[#10B981]' : 'text-[#EF4444]'}`}>
+                      <td className="px-5 py-4 text-right text-sm text-zinc-400">{p.entrySolAmount.toFixed(4)} SOL</td>
+                      <td className="px-5 py-4 text-right text-sm text-zinc-400">{p.currentValueSol.toFixed(4)} SOL</td>
+                      <td className={`px-5 py-4 text-right text-sm font-bold ${p.pnlPercent >= 0 ? 'text-green-500' : 'text-red-500'}`}>
                         {p.pnlPercent >= 0 ? '+' : ''}{p.pnlPercent.toFixed(1)}%
                       </td>
-                      <td className="px-3 py-2 text-right">
+                      <td className="px-5 py-4 text-right">
                         <button
                           onClick={() => autoTrade.manualSell(p.tokenAddress)}
-                          className="px-2 py-1 rounded text-[9px] font-semibold bg-[#111] border border-[#1a1a1a] text-[#888] hover:text-[#EF4444] hover:border-[rgba(239,68,68,0.3)] transition-all"
+                          className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-zinc-800 text-zinc-400 hover:bg-zinc-700 transition-colors"
                         >
                           Sell
                         </button>
@@ -2008,9 +2586,19 @@ export default function App() {
                   ))}
                 </tbody>
               </table>
+            ) : (
+              <div className="px-5 py-10 text-center">
+                <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-zinc-800 flex items-center justify-center">
+                  <svg className="w-6 h-6 text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                  </svg>
+                </div>
+                <p className="text-sm text-zinc-500">No positions yet</p>
+                <p className="text-xs text-zinc-600 mt-1">Buy a token to start tracking</p>
+              </div>
+            )}
           </div>
         </div>
-        )}
 
         {/* Trade History */}
         {autoTrade.state.soldPositions.length > 0 && (
@@ -2103,26 +2691,6 @@ export default function App() {
           </div>
         )}
       </main>
-
-      {/* Fixed Buy Bar - Always visible when analyzing */}
-      {analysisResult && (
-        <BuyBar
-          tokenSymbol={analysisResult.token.symbol}
-          tokenAddress={analysisResult.token.address}
-          signal={analysisResult.ai.signal}
-          score={analysisResult.ai.score}
-          walletLoaded={autoTrade.wallet.isLoaded}
-          walletBalance={autoTrade.wallet.balance}
-          hasPosition={autoTrade.state.positions.some(p => p.tokenAddress === analysisResult.token.address)}
-          isBuying={isBuying}
-          isSelling={isSelling}
-          onBuy={(amount) => {
-            setBuyAmount(amount);
-            handleBuy();
-          }}
-          onSell={handleSell}
-        />
-      )}
 
       {/* Click outside to close wallet dropdown */}
       {showWalletMenu && (
