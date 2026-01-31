@@ -74,10 +74,18 @@ export class TraderAgent extends BaseAgent {
   // Trading wallet (in production, loaded from secure vault)
   private walletAddress: string = '';
 
+  // Config from coordinator
+  private maxPositionSize: number;
+  private maxDailyTrades: number;
+  private dailyTradeCount: number = 0;
+  private lastTradeDate: string = '';
+
   constructor(messageBus: MessageBus, options: {
     name?: string;
     walletAddress?: string;
     initialBalance?: number;
+    maxPositionSize?: number;
+    maxDailyTrades?: number;
   } = {}) {
     const config: AgentConfig = {
       name: options.name || 'trader-1',
@@ -119,6 +127,8 @@ export class TraderAgent extends BaseAgent {
 
     this.walletAddress = options.walletAddress || 'SIMULATED_WALLET';
     this.walletBalance = options.initialBalance || 1.0; // 1 SOL starting balance
+    this.maxPositionSize = options.maxPositionSize || 0.1; // Default 0.1 SOL
+    this.maxDailyTrades = options.maxDailyTrades || 10; // Default 10 trades/day
 
     this.initializeStrategies();
   }
@@ -221,6 +231,21 @@ export class TraderAgent extends BaseAgent {
   }> {
     const { token, analysis } = params;
 
+    // Reset daily trade count if new day
+    const today = new Date().toISOString().split('T')[0];
+    if (this.lastTradeDate !== today) {
+      this.dailyTradeCount = 0;
+      this.lastTradeDate = today;
+    }
+
+    // Check daily trade limit
+    if (this.dailyTradeCount >= this.maxDailyTrades) {
+      return {
+        shouldBuy: false,
+        reasoning: `Daily trade limit reached (${this.maxDailyTrades})`
+      };
+    }
+
     // Check if we already have a position
     if (this.positions.has(token)) {
       return {
@@ -242,15 +267,18 @@ export class TraderAgent extends BaseAgent {
       const matches = this.checkStrategyMatch(strategy, analysis);
 
       if (matches.matches) {
+        // Cap position size to configured max
+        const positionSize = Math.min(strategy.positionSize, this.maxPositionSize);
+
         // Check if we have enough balance
-        if (this.walletBalance < strategy.positionSize) {
+        if (this.walletBalance < positionSize) {
           continue;
         }
 
         return {
           shouldBuy: true,
           strategy: strategy.name,
-          positionSize: strategy.positionSize,
+          positionSize,
           reasoning: matches.reasoning
         };
       }
@@ -345,6 +373,7 @@ export class TraderAgent extends BaseAgent {
 
       this.positions.set(token, position);
       this.walletBalance -= amount;
+      this.dailyTradeCount++;
 
       // Record trade
       this.tradeHistory.push({
@@ -550,7 +579,8 @@ export class TraderAgent extends BaseAgent {
   protected getConstraints(): Record<string, any> {
     return {
       maxPositions: 5,
-      maxPositionSize: this.walletBalance * 0.2,
+      maxPositionSize: this.maxPositionSize,
+      maxDailyTrades: this.maxDailyTrades,
       minBalance: 0.1,
       maxDailyLoss: this.walletBalance * 0.1
     };
