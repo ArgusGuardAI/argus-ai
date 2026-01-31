@@ -63,11 +63,12 @@ export interface WalletProfile {
 
 export class OnChainTools {
   private rpcEndpoint: string;
-  private heliusApiKey?: string;
+  // TODO: Re-enable when Helius integration is implemented
+  // private heliusApiKey?: string;
 
   constructor(options: { rpcEndpoint: string; heliusApiKey?: string }) {
     this.rpcEndpoint = options.rpcEndpoint;
-    this.heliusApiKey = options.heliusApiKey;
+    // this.heliusApiKey = options.heliusApiKey;
   }
 
   /**
