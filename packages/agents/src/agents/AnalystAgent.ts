@@ -9,7 +9,7 @@
  * - Hand off scammer profiles to Hunters
  */
 
-import { BaseAgent, AgentConfig, AgentAction } from '../core/BaseAgent';
+import { BaseAgent, AgentConfig } from '../core/BaseAgent';
 import { MessageBus } from '../core/MessageBus';
 
 export interface InvestigationRequest {
@@ -292,7 +292,7 @@ export class AnalystAgent extends BaseAgent {
   /**
    * Analyze bundle/coordination patterns
    */
-  private async analyzeBundles(params: { token: string; holders: any[] }): Promise<{
+  private async analyzeBundles(_params: { token: string; holders: any[] }): Promise<{
     detected: boolean;
     count: number;
     controlPercent: number;
@@ -341,7 +341,7 @@ export class AnalystAgent extends BaseAgent {
   /**
    * Check creator wallet history
    */
-  private async checkCreatorHistory(params: { creator: string }): Promise<{
+  private async checkCreatorHistory(_params: { creator: string }): Promise<{
     walletAge: number;
     tokensCreated: number;
     rugCount: number;
