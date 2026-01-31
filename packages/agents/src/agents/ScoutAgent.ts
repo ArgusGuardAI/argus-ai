@@ -8,7 +8,7 @@
  * - Track launch velocity and patterns
  */
 
-import { BaseAgent, AgentConfig, AgentAction } from '../core/BaseAgent';
+import { BaseAgent, AgentConfig } from '../core/BaseAgent';
 import { MessageBus } from '../core/MessageBus';
 
 export interface QuickScanResult {
@@ -45,7 +45,7 @@ export class ScoutAgent extends BaseAgent {
         {
           name: 'get_current_slot',
           description: 'Get current blockchain slot',
-          execute: (params) => this.getCurrentSlot()
+          execute: (_params) => this.getCurrentSlot()
         },
         {
           name: 'find_new_launches',
