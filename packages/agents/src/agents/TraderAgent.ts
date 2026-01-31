@@ -72,6 +72,7 @@ export class TraderAgent extends BaseAgent {
   private lossCount: number = 0;
 
   // Trading wallet (in production, loaded from secure vault)
+  // @ts-ignore - Reserved for future production use
   private walletAddress: string = '';
 
   // Config from coordinator
@@ -110,7 +111,7 @@ export class TraderAgent extends BaseAgent {
         {
           name: 'monitor_positions',
           description: 'Check all positions for exit signals',
-          execute: (params) => this.monitorPositions()
+          execute: (_params) => this.monitorPositions()
         },
         {
           name: 'emergency_exit',
@@ -549,7 +550,7 @@ export class TraderAgent extends BaseAgent {
   private async emergencyExit(params: { token?: string; wallet?: string }): Promise<void> {
     const { token, wallet } = params;
 
-    for (const [posToken, position] of this.positions) {
+    for (const [posToken, _position] of this.positions) {
       let shouldExit = false;
 
       if (token && posToken === token) {
