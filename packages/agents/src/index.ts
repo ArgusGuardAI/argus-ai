@@ -25,7 +25,7 @@ export { AgentCoordinator } from './core/AgentCoordinator';
 
 // Core - Types
 export type { AgentConfig, Tool, ThoughtEntry, AgentAction } from './core/BaseAgent';
-export type { Message, MessageHandler, MessageOptions } from './core/MessageBus';
+export type { Message, MessageHandler } from './core/MessageBus';
 export type { MemoryEntry, SimilarityResult } from './core/AgentMemory';
 export type { CoordinatorConfig, SystemStatus } from './core/AgentCoordinator';
 
@@ -75,7 +75,7 @@ export async function createArgusNetwork(config: {
   traders?: number;
   maxDailyTrades?: number;
   maxPositionSize?: number;
-}): Promise<InstanceType<typeof AgentCoordinator>> {
+}) {
   const coordinator = new AgentCoordinator({
     rpcEndpoint: config.rpcEndpoint,
     enableTrading: config.enableTrading || false,
