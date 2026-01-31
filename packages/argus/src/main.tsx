@@ -30,10 +30,10 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       <Suspense fallback={<Loading />}>
         <Routes>
           {isAppSubdomain ? (
-            // app.argusguard.io -> terminal dashboard directly
+            // app.argusguard.io -> original dashboard (terminal available at /terminal)
             <Route path="*" element={
               <WalletContextProvider>
-                <TerminalApp />
+                <App />
               </WalletContextProvider>
             } />
           ) : (
@@ -42,12 +42,12 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
               <Route path="/" element={<Landing />} />
               <Route path="/dashboard" element={
                 <WalletContextProvider>
-                  <TerminalApp />
+                  <App />
                 </WalletContextProvider>
               } />
-              <Route path="/legacy" element={
+              <Route path="/terminal" element={
                 <WalletContextProvider>
-                  <App />
+                  <TerminalApp />
                 </WalletContextProvider>
               } />
               <Route path="*" element={<NotFound />} />
