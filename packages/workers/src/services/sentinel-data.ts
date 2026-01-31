@@ -140,6 +140,17 @@ export class SentinelDataFetcher {
     const isPumpFun = tokenAddress.endsWith('pump') ||
       analysis.pools.some(p => p.dex === 'pumpfun');
 
+    // For pump.fun tokens still on bonding curve, estimate liquidity from market cap
+    let effectiveLiquidity = analysis.totalLiquidity;
+    if (isPumpFun && (!effectiveLiquidity || effectiveLiquidity === 0)) {
+      const mcap = analysis.marketCap ?? 0;
+      if (mcap > 0) {
+        // Bonding curve: liquidity roughly scales with market cap, capped at $50k
+        effectiveLiquidity = Math.min(mcap, 50000);
+        console.log(`[SentinelData] Pump.fun ON_CHAIN liquidity estimated: $${effectiveLiquidity.toFixed(0)} from mcap $${mcap.toFixed(0)}`);
+      }
+    }
+
     // Map to sentinel format
     const tokenInfo: SentinelTokenInfo = {
       address: tokenAddress,
@@ -147,7 +158,7 @@ export class SentinelDataFetcher {
       symbol: analysis.metadata.symbol,
       price: analysis.price,
       marketCap: analysis.marketCap,
-      liquidity: analysis.totalLiquidity,
+      liquidity: effectiveLiquidity,
       age: analysis.ageHours ? Math.floor(analysis.ageHours / 24) : undefined,
       ageHours: analysis.ageHours,
       holderCount: analysis.holders.length,

@@ -3,14 +3,15 @@
  *
  * Responsibilities:
  * - Receive suspicious tokens from Scouts
- * - Perform comprehensive analysis
- * - Build investigation reports
+ * - Perform comprehensive analysis using ON-CHAIN DATA
+ * - Build investigation reports with classified holders
  * - Recommend actions to Traders
  * - Hand off scammer profiles to Hunters
  */
 
 import { BaseAgent, AgentConfig } from '../core/BaseAgent';
 import { MessageBus } from '../core/MessageBus';
+import { OnChainTools, ClassifiedHolder, HolderClassificationResult } from '../tools/OnChainTools';
 
 export interface InvestigationRequest {
   token: string;
@@ -50,8 +51,11 @@ export class AnalystAgent extends BaseAgent {
   private investigationQueue: InvestigationRequest[] = [];
   private completedInvestigations: Map<string, InvestigationReport> = new Map();
   private isInvestigating: boolean = false;
+  private onChainTools: OnChainTools;
 
-  constructor(messageBus: MessageBus, options: { name?: string } = {}) {
+  constructor(messageBus: MessageBus, options: { name?: string; rpcEndpoint?: string } = {}) {
+    // Initialize on-chain tools with RPC endpoint
+    const rpcEndpoint = options.rpcEndpoint || process.env.RPC_ENDPOINT || 'https://api.mainnet-beta.solana.com';
     const config: AgentConfig = {
       name: options.name || 'analyst-1',
       role: 'Analyst - Deep investigation of suspicious tokens',
@@ -86,6 +90,16 @@ export class AnalystAgent extends BaseAgent {
           name: 'recommend_action',
           description: 'Recommend action based on findings',
           execute: (params) => this.recommendAction(params)
+        },
+        {
+          name: 'classify_holders_onchain',
+          description: 'Classify all holders using pure on-chain data (LP, DEV, DEX, BURN, BUNDLE)',
+          execute: (params) => this.classifyHoldersOnChain(params)
+        },
+        {
+          name: 'get_token_creator',
+          description: 'Find the original creator of a token from mint transaction',
+          execute: (params) => this.getTokenCreator(params)
         }
       ],
       memory: true,
@@ -94,6 +108,9 @@ export class AnalystAgent extends BaseAgent {
     };
 
     super(config, messageBus);
+
+    // Initialize on-chain tools
+    this.onChainTools = new OnChainTools({ rpcEndpoint });
   }
 
   protected async onInitialize(): Promise<void> {
@@ -531,6 +548,147 @@ export class AnalystAgent extends BaseAgent {
       queueSize: this.investigationQueue.length,
       completedCount: this.completedInvestigations.size,
       isInvestigating: this.isInvestigating
+    };
+  }
+
+  // ============================================
+  // ON-CHAIN CLASSIFICATION METHODS
+  // These use ONLY RPC data, no external APIs
+  // ============================================
+
+  /**
+   * Classify all holders using pure on-chain data
+   * This is the REAL classification - no guessing, no external APIs
+   */
+  private async classifyHoldersOnChain(params: {
+    token: string;
+    bundleWallets?: string[];
+  }): Promise<HolderClassificationResult> {
+    await this.think('reasoning', `Classifying holders on-chain for ${params.token.slice(0, 8)}...`);
+
+    const bundleSet = new Set(params.bundleWallets || []);
+
+    try {
+      const result = await this.onChainTools.classifyAllHolders(
+        params.token,
+        bundleSet,
+        50 // Top 50 holders
+      );
+
+      await this.think('observation',
+        `Classified ${result.totalClassified}/${result.holders.length} holders. ` +
+        `Creator: ${result.creator?.slice(0, 8) || 'unknown'}... ` +
+        `LP accounts: ${result.lpAccounts.length}, DEX: ${result.dexAccounts.length}`
+      );
+
+      return result;
+
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      await this.think('reflection', `On-chain classification failed: ${errorMsg}`);
+
+      // Return empty result on error
+      return {
+        holders: [],
+        creator: null,
+        lpAccounts: [],
+        dexAccounts: [],
+        burnAccounts: [],
+        totalClassified: 0
+      };
+    }
+  }
+
+  /**
+   * Get the token creator from on-chain data
+   */
+  private async getTokenCreator(params: { token: string }): Promise<{
+    creator: string | null;
+    confidence: 'HIGH' | 'MEDIUM' | 'LOW';
+    source: string;
+  }> {
+    await this.think('reasoning', `Finding creator for ${params.token.slice(0, 8)}...`);
+
+    try {
+      const creator = await this.onChainTools.getTokenCreator(params.token);
+
+      if (creator) {
+        await this.think('observation', `Found creator: ${creator.slice(0, 8)}... (from mint tx)`);
+        return {
+          creator,
+          confidence: 'HIGH',
+          source: 'mint_transaction_signer'
+        };
+      }
+
+      // Fallback: check mint authority
+      const tokenData = await this.onChainTools.getTokenData(params.token);
+      if (tokenData?.mintAuthority) {
+        await this.think('observation', `Found mint authority: ${tokenData.mintAuthority.slice(0, 8)}...`);
+        return {
+          creator: tokenData.mintAuthority,
+          confidence: 'MEDIUM',
+          source: 'mint_authority'
+        };
+      }
+
+      await this.think('reflection', 'Could not determine token creator');
+      return {
+        creator: null,
+        confidence: 'LOW',
+        source: 'not_found'
+      };
+
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      await this.think('reflection', `Creator lookup failed: ${errorMsg}`);
+      return {
+        creator: null,
+        confidence: 'LOW',
+        source: 'error'
+      };
+    }
+  }
+
+  /**
+   * Get classified holder data formatted for dashboard display
+   */
+  async getClassifiedHoldersForDashboard(tokenAddress: string, bundleWallets: string[] = []): Promise<{
+    holders: Array<{
+      address: string;
+      percent: number;
+      tags: string[];
+      label?: string;
+    }>;
+    creator: string | null;
+    summary: {
+      totalHolders: number;
+      lpCount: number;
+      devCount: number;
+      bundleCount: number;
+      burnCount: number;
+    };
+  }> {
+    const result = await this.classifyHoldersOnChain({
+      token: tokenAddress,
+      bundleWallets
+    });
+
+    return {
+      holders: result.holders.map(h => ({
+        address: h.address,
+        percent: h.percent,
+        tags: h.tags,
+        label: h.label
+      })),
+      creator: result.creator,
+      summary: {
+        totalHolders: result.holders.length,
+        lpCount: result.lpAccounts.length,
+        devCount: result.holders.filter(h => h.tags.includes('DEV')).length,
+        bundleCount: result.holders.filter(h => h.tags.includes('BUNDLE')).length,
+        burnCount: result.burnAccounts.length
+      }
     };
   }
 }

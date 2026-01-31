@@ -68,7 +68,7 @@ export function BundleNetworkGraph({
         fx: centerX,
         fy: centerY,
       },
-      ...wallets.slice(0, 20).map((w) => ({
+      ...wallets.slice(0, 30).map((w) => ({
         id: w.address,
         type: 'wallet' as const,
         label: `${w.address.slice(0, 4)}...${w.address.slice(-4)}`,
@@ -79,7 +79,7 @@ export function BundleNetworkGraph({
     ];
 
     // Create links: all wallets connect to token (same-block coordination)
-    const links: GraphLink[] = wallets.slice(0, 20).map(w => ({
+    const links: GraphLink[] = wallets.slice(0, 30).map(w => ({
       source: 'token',
       target: w.address,
     }));

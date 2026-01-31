@@ -29,6 +29,27 @@ export interface HolderData {
   isLP: boolean;
 }
 
+// Enhanced holder classification
+export type HolderTag = 'DEV' | 'LP' | 'DEX' | 'BURN' | 'BUNDLE' | 'SNIPER' | 'WHALE';
+
+export interface ClassifiedHolder {
+  address: string;
+  balance: number;
+  percent: number;
+  tags: HolderTag[];
+  label?: string;
+  accountOwner?: string; // The program that owns this token account
+}
+
+export interface HolderClassificationResult {
+  holders: ClassifiedHolder[];
+  creator: string | null;
+  lpAccounts: string[];
+  dexAccounts: string[];
+  burnAccounts: string[];
+  totalClassified: number;
+}
+
 export interface TransactionData {
   signature: string;
   slot: number;
@@ -435,6 +456,342 @@ export class OnChainTools {
     }
 
     return results;
+  }
+
+  // ============================================
+  // HOLDER CLASSIFICATION - On-Chain Analysis
+  // ============================================
+
+  /**
+   * Known program addresses for classification
+   */
+  private static readonly KNOWN_PROGRAMS = {
+    // AMM/DEX Programs
+    RAYDIUM_V4: '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8',
+    RAYDIUM_AMM: '5Q544fKrFoe2tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1',
+    RAYDIUM_CLMM: 'CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK',
+    ORCA_WHIRLPOOL: 'whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc',
+    METEORA: 'LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo',
+    METEORA_DLMM: 'LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo',
+    JUPITER: 'JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4',
+    PUMP_FUN: '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P',
+
+    // Token Programs
+    TOKEN_PROGRAM: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+    TOKEN_2022: 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb',
+
+    // System
+    SYSTEM_PROGRAM: '11111111111111111111111111111111',
+  };
+
+  /**
+   * Known burn addresses
+   */
+  private static readonly BURN_ADDRESSES = [
+    '1111111111111111111111111111111111111111111', // Null address
+    '1nc1nerator11111111111111111111111111111111', // Incinerator
+  ];
+
+  /**
+   * Get the token creator by finding the mint initialization transaction
+   */
+  async getTokenCreator(tokenAddress: string): Promise<string | null> {
+    try {
+      // Get the first transaction signatures for the mint account
+      const response = await fetch(this.rpcEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 'get-mint-sigs',
+          method: 'getSignaturesForAddress',
+          params: [
+            tokenAddress,
+            { limit: 1, before: null } // Get oldest by reversing
+          ]
+        })
+      });
+
+      const sigData = await response.json() as any;
+      const signatures = sigData.result || [];
+
+      if (signatures.length === 0) {
+        return null;
+      }
+
+      // Get the oldest signature (mint creation)
+      // Actually we need to get ALL and find the oldest
+      const allSigsResponse = await fetch(this.rpcEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 'get-all-sigs',
+          method: 'getSignaturesForAddress',
+          params: [tokenAddress, { limit: 1000 }]
+        })
+      });
+
+      const allSigsData = await allSigsResponse.json() as any;
+      const allSigs = allSigsData.result || [];
+
+      if (allSigs.length === 0) return null;
+
+      // Get the oldest transaction (last in array)
+      const oldestSig = allSigs[allSigs.length - 1].signature;
+
+      // Fetch the full transaction to get the signer
+      const txResponse = await fetch(this.rpcEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 'get-tx',
+          method: 'getTransaction',
+          params: [
+            oldestSig,
+            { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 }
+          ]
+        })
+      });
+
+      const txData = await txResponse.json() as any;
+      const tx = txData.result;
+
+      if (!tx) return null;
+
+      // The first signer is typically the creator (fee payer)
+      const signers = tx.transaction?.message?.accountKeys?.filter(
+        (key: any) => key.signer === true
+      ) || [];
+
+      if (signers.length > 0) {
+        return signers[0].pubkey;
+      }
+
+      return null;
+
+    } catch (error) {
+      console.error('[OnChainTools] Error getting token creator:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Check if an address is owned by an AMM/DEX program (making it an LP account)
+   */
+  async checkIfLPAccount(address: string): Promise<{ isLP: boolean; program?: string }> {
+    try {
+      const response = await fetch(this.rpcEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 'check-lp',
+          method: 'getAccountInfo',
+          params: [address, { encoding: 'jsonParsed' }]
+        })
+      });
+
+      const data = await response.json() as any;
+      const accountInfo = data.result?.value;
+
+      if (!accountInfo) {
+        return { isLP: false };
+      }
+
+      const owner = accountInfo.owner;
+
+      // Check if owner is a known AMM program
+      const ammPrograms = [
+        OnChainTools.KNOWN_PROGRAMS.RAYDIUM_V4,
+        OnChainTools.KNOWN_PROGRAMS.RAYDIUM_AMM,
+        OnChainTools.KNOWN_PROGRAMS.RAYDIUM_CLMM,
+        OnChainTools.KNOWN_PROGRAMS.ORCA_WHIRLPOOL,
+        OnChainTools.KNOWN_PROGRAMS.METEORA,
+        OnChainTools.KNOWN_PROGRAMS.METEORA_DLMM,
+        OnChainTools.KNOWN_PROGRAMS.PUMP_FUN,
+      ];
+
+      if (ammPrograms.includes(owner)) {
+        return { isLP: true, program: owner };
+      }
+
+      return { isLP: false };
+
+    } catch (error) {
+      console.error('[OnChainTools] Error checking LP account:', error);
+      return { isLP: false };
+    }
+  }
+
+  /**
+   * Classify a single holder address
+   */
+  async classifyHolder(
+    holderAddress: string,
+    tokenCreator: string | null,
+    bundleWallets: Set<string> = new Set()
+  ): Promise<{ tags: HolderTag[]; label?: string; accountOwner?: string }> {
+    const tags: HolderTag[] = [];
+    let label: string | undefined;
+    let accountOwner: string | undefined;
+
+    // Check burn address
+    if (OnChainTools.BURN_ADDRESSES.some(burn => holderAddress.startsWith(burn.slice(0, 20)))) {
+      tags.push('BURN');
+      label = 'Burn Address';
+      return { tags, label };
+    }
+
+    // Check if this is the creator
+    if (tokenCreator && holderAddress === tokenCreator) {
+      tags.push('DEV');
+      label = 'Token Creator';
+    }
+
+    // Check if in bundle set
+    if (bundleWallets.has(holderAddress)) {
+      tags.push('BUNDLE');
+    }
+
+    // Check if LP account (owned by AMM program)
+    const lpCheck = await this.checkIfLPAccount(holderAddress);
+    if (lpCheck.isLP) {
+      tags.push('LP');
+      accountOwner = lpCheck.program;
+
+      // Add specific label based on program
+      if (lpCheck.program === OnChainTools.KNOWN_PROGRAMS.RAYDIUM_V4) {
+        label = 'Raydium LP';
+      } else if (lpCheck.program === OnChainTools.KNOWN_PROGRAMS.ORCA_WHIRLPOOL) {
+        label = 'Orca LP';
+      } else if (lpCheck.program === OnChainTools.KNOWN_PROGRAMS.METEORA) {
+        label = 'Meteora LP';
+      } else if (lpCheck.program === OnChainTools.KNOWN_PROGRAMS.PUMP_FUN) {
+        label = 'Pump.fun Bonding Curve';
+      }
+    }
+
+    // Check if address itself is a known DEX program (rare but possible)
+    const dexPrograms = Object.values(OnChainTools.KNOWN_PROGRAMS);
+    if (dexPrograms.includes(holderAddress)) {
+      tags.push('DEX');
+      label = 'DEX Program';
+    }
+
+    return { tags, label, accountOwner };
+  }
+
+  /**
+   * Classify all holders for a token - FULL ON-CHAIN ANALYSIS
+   * No external APIs needed, uses only RPC data
+   */
+  async classifyAllHolders(
+    tokenAddress: string,
+    bundleWallets: Set<string> = new Set(),
+    limit: number = 50
+  ): Promise<HolderClassificationResult> {
+    console.log(`[OnChainTools] Classifying holders for ${tokenAddress}`);
+
+    // Step 1: Get the token creator
+    const creator = await this.getTokenCreator(tokenAddress);
+    console.log(`[OnChainTools] Token creator: ${creator || 'unknown'}`);
+
+    // Step 2: Get all holders
+    const holders = await this.getHolders(tokenAddress, limit);
+    console.log(`[OnChainTools] Found ${holders.length} holders`);
+
+    // Step 3: Classify each holder
+    const classifiedHolders: ClassifiedHolder[] = [];
+    const lpAccounts: string[] = [];
+    const dexAccounts: string[] = [];
+    const burnAccounts: string[] = [];
+
+    for (const holder of holders) {
+      const classification = await this.classifyHolder(
+        holder.address,
+        creator,
+        bundleWallets
+      );
+
+      const classified: ClassifiedHolder = {
+        address: holder.address,
+        balance: holder.balance,
+        percent: holder.percent,
+        tags: classification.tags,
+        label: classification.label,
+        accountOwner: classification.accountOwner,
+      };
+
+      classifiedHolders.push(classified);
+
+      // Track by type
+      if (classification.tags.includes('LP')) {
+        lpAccounts.push(holder.address);
+      }
+      if (classification.tags.includes('DEX')) {
+        dexAccounts.push(holder.address);
+      }
+      if (classification.tags.includes('BURN')) {
+        burnAccounts.push(holder.address);
+      }
+    }
+
+    const totalClassified = classifiedHolders.filter(h => h.tags.length > 0).length;
+    console.log(`[OnChainTools] Classified ${totalClassified}/${holders.length} holders`);
+
+    return {
+      holders: classifiedHolders,
+      creator,
+      lpAccounts,
+      dexAccounts,
+      burnAccounts,
+      totalClassified,
+    };
+  }
+
+  /**
+   * Quick classification without RPC calls for each holder
+   * Uses heuristics based on address patterns and holder data
+   */
+  classifyHolderQuick(
+    holder: HolderData,
+    tokenCreator: string | null,
+    bundleWallets: Set<string> = new Set()
+  ): { tags: HolderTag[]; label?: string } {
+    const tags: HolderTag[] = [];
+    let label: string | undefined;
+
+    // Check burn
+    if (OnChainTools.BURN_ADDRESSES.some(burn => holder.address.startsWith(burn.slice(0, 20)))) {
+      tags.push('BURN');
+      label = 'Burn Address';
+      return { tags, label };
+    }
+
+    // Check creator
+    if (tokenCreator && holder.address === tokenCreator) {
+      tags.push('DEV');
+      label = 'Token Creator';
+    }
+
+    // Check bundle
+    if (bundleWallets.has(holder.address)) {
+      tags.push('BUNDLE');
+    }
+
+    // Use existing isLP flag
+    if (holder.isLP) {
+      tags.push('LP');
+    }
+
+    // Whale detection (>5% not LP/DEV/BURN)
+    if (holder.percent > 5 && tags.length === 0) {
+      tags.push('WHALE');
+    }
+
+    return { tags, label };
   }
 
   /**

@@ -8,7 +8,8 @@ import { WalletContextProvider } from './contexts/AuthContext';
 import './index.css';
 
 // Code-split: lazy load pages so each subdomain only downloads what it needs
-const App = React.lazy(() => import('./App'));
+const TerminalApp = React.lazy(() => import('./TerminalApp'));
+const App = React.lazy(() => import('./App')); // Legacy dashboard
 const Landing = React.lazy(() => import('./pages/Landing'));
 const NotFound = React.lazy(() => import('./pages/NotFound'));
 
@@ -29,17 +30,22 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       <Suspense fallback={<Loading />}>
         <Routes>
           {isAppSubdomain ? (
-            // app.argusguard.io -> dashboard directly
+            // app.argusguard.io -> terminal dashboard directly
             <Route path="*" element={
               <WalletContextProvider>
-                <App />
+                <TerminalApp />
               </WalletContextProvider>
             } />
           ) : (
-            // argusguard.io -> landing page with dashboard route
+            // argusguard.io -> landing page with dashboard routes
             <>
               <Route path="/" element={<Landing />} />
               <Route path="/dashboard" element={
+                <WalletContextProvider>
+                  <TerminalApp />
+                </WalletContextProvider>
+              } />
+              <Route path="/legacy" element={
                 <WalletContextProvider>
                   <App />
                 </WalletContextProvider>
