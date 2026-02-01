@@ -986,19 +986,17 @@ const styles = `
       radial-gradient(ellipse at center, rgba(220, 38, 38, 0.03) 0%, transparent 70%);
   }
 
-  /* World map silhouette */
+  /* World map - dark fill with glowing red outline */
   .world-map {
     position: absolute;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    width: 100%;
-    height: 100%;
-    opacity: 0.15;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 500'%3E%3Cpath fill='%23DC2626' d='M170 120c10-5 25-8 40-5 15 3 20 15 35 18 10 2 25-5 35-2 8 2 12 10 20 12 15 3 30-8 45-5 12 2 18 12 30 15 8 2 18-2 25 2 10 5 12 18 22 22 12 5 28 0 38 8 8 6 10 18 18 24 10 8 25 8 35 16 8 6 12 18 20 24 10 8 25 10 32 20 5 8 2 20 8 28 8 10 25 12 30 24 4 10-5 22 0 32 6 12 22 18 25 32 2 10-8 20-5 30 4 12 20 18 22 30 2 10-10 18-8 28 3 12 18 20 18 32 0 10-15 18-12 28 4 12 22 18 22 32 0 8-12 14-10 22M280 95c-8 5-20 2-28 8-10 8-12 25-22 32-12 8-30 5-40 15-8 8-8 22-15 30-10 10-28 12-35 25-5 10 0 25-8 33-10 10-30 10-38 22-6 10 0 25-8 34-10 12-32 12-40 26-6 10 2 25-6 34-10 12-32 15-40 28M480 80c12 2 22 12 34 15 15 4 32-2 45 5 10 5 15 18 26 22 14 5 32 0 44 8 10 6 14 20 24 26 12 8 30 8 40 18 8 8 10 22 18 30 10 10 28 14 35 26 5 10-2 24 5 33 10 12 30 15 38 28 6 10 0 25 8 34 10 12 30 15 38 28 6 10 0 24 8 33 10 12 30 16 38 30M620 110c8-6 22-4 30-12 10-10 10-28 22-36 10-6 25-2 35-10 12-10 15-30 28-38 10-6 25 0 35-8 12-10 18-28 32-35M750 140c-10 8-15 24-28 30-15 8-35 2-48 12-10 8-12 25-24 32-14 8-35 4-46 15-8 8-8 24-18 30-12 8-32 4-42 14-8 8-6 24-16 30-12 8-32 5-42 16-8 10-4 26-14 34-12 10-34 8-44 20-8 10-2 26-12 35-12 10-34 10-44 22-8 10-2 28-12 36M850 180c5 10 2 24 10 32 10 10 30 10 38 22 6 10-2 25 6 34 10 10 30 12 38 24 6 10-2 26 6 35 10 10 28 14 36 26M150 280c10-2 20 5 30 2 12-4 18-18 30-22 14-5 32 2 44-6 10-6 12-22 24-26 14-5 32 4 44-4 10-6 14-22 26-26 14-4 30 5 42-2 10-6 16-20 28-24 14-5 32 2 44-6 10-6 14-20 26-25 14-6 32 0 45-8M200 350c12 4 22 15 35 18 15 4 32-5 46 2 12 6 18 22 30 28 14 7 32 2 45 12 10 8 14 24 26 30 14 8 34 4 46 14 10 8 12 26 24 32 14 8 34 4 48 14M100 400c15 0 28 10 42 12 18 3 35-8 52-4 14 3 24 16 38 20 16 5 35-4 50 4 12 6 18 22 32 26 16 5 35-2 50 6 12 6 20 22 34 26'/%3E%3C/svg%3E");
-    background-size: contain;
-    background-repeat: no-repeat;
-    background-position: center;
+    width: 90%;
+    height: auto;
+    opacity: 0.6;
+    filter: brightness(0.15) sepia(1) hue-rotate(-50deg) saturate(3) drop-shadow(0 0 8px rgba(220, 38, 38, 0.8)) drop-shadow(0 0 20px rgba(220, 38, 38, 0.4));
+    pointer-events: none;
   }
 
   /* Scanning grid overlay */
@@ -1020,93 +1018,74 @@ const styles = `
     100% { background-position: 40px 40px; }
   }
 
-  /* Horizontal scan line */
-  .scan-line {
-    position: absolute;
-    left: 0;
-    width: 100%;
-    height: 2px;
-    background: linear-gradient(90deg, transparent, var(--accent), transparent);
-    box-shadow: 0 0 20px var(--accent), 0 0 40px var(--accent);
-    animation: scan-sweep 4s ease-in-out infinite;
-  }
-
-  @keyframes scan-sweep {
-    0%, 100% { top: 10%; opacity: 0; }
-    10% { opacity: 1; }
-    90% { opacity: 1; }
-    100% { top: 90%; opacity: 0; }
-  }
-
-  /* Network nodes - War style */
+  /* Network nodes - Triangle style (Argus eye aesthetic) */
   .network-node {
     position: absolute;
-    width: 16px;
-    height: 16px;
-    background: var(--accent);
-    border-radius: 50%;
-    box-shadow:
-      0 0 20px var(--accent),
-      0 0 40px var(--accent),
-      0 0 60px rgba(220, 38, 38, 0.5);
-    animation: node-pulse-war 1s ease-in-out infinite;
+    width: 0;
+    height: 0;
+    border-left: 10px solid transparent;
+    border-right: 10px solid transparent;
+    border-bottom: 18px solid var(--accent);
+    background: transparent;
+    filter: drop-shadow(0 0 10px var(--accent)) drop-shadow(0 0 20px var(--accent));
+    animation: node-pulse-war 1.5s ease-in-out infinite;
     z-index: 10;
   }
 
   .network-node::before {
     content: '';
     position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 40px;
-    height: 40px;
-    border: 2px solid var(--accent);
-    border-radius: 50%;
+    top: 6px;
+    left: -16px;
+    width: 0;
+    height: 0;
+    border-left: 16px solid transparent;
+    border-right: 16px solid transparent;
+    border-bottom: 28px solid transparent;
+    border-bottom-color: rgba(220, 38, 38, 0.3);
     opacity: 0;
-    animation: node-ring-war 1.5s ease-out infinite;
+    animation: triangle-ring 2s ease-out infinite;
   }
 
   .network-node::after {
     content: '';
     position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 60px;
-    height: 60px;
-    border: 1px solid rgba(220, 38, 38, 0.3);
-    border-radius: 50%;
+    top: 6px;
+    left: -22px;
+    width: 0;
+    height: 0;
+    border-left: 22px solid transparent;
+    border-right: 22px solid transparent;
+    border-bottom: 38px solid transparent;
+    border-bottom-color: rgba(220, 38, 38, 0.15);
     opacity: 0;
-    animation: node-ring-war 1.5s ease-out infinite 0.5s;
+    animation: triangle-ring 2s ease-out infinite 0.5s;
   }
 
   .network-node.core {
-    width: 24px;
-    height: 24px;
-    background: linear-gradient(135deg, #EF4444, #DC2626);
-    box-shadow:
-      0 0 30px var(--accent),
-      0 0 60px var(--accent),
-      0 0 100px rgba(220, 38, 38, 0.8);
+    border-left: 14px solid transparent;
+    border-right: 14px solid transparent;
+    border-bottom: 24px solid var(--accent);
+    filter:
+      drop-shadow(0 0 15px var(--accent))
+      drop-shadow(0 0 30px var(--accent))
+      drop-shadow(0 0 60px rgba(220, 38, 38, 0.8));
   }
 
   .network-node.threat {
-    background: var(--amber);
-    box-shadow:
-      0 0 20px var(--amber),
-      0 0 40px var(--amber);
+    border-bottom-color: var(--amber);
+    filter: drop-shadow(0 0 10px var(--amber)) drop-shadow(0 0 20px var(--amber));
     animation: threat-blink 0.5s ease-in-out infinite;
   }
 
   @keyframes node-pulse-war {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.3); }
+    0%, 100% { transform: scale(1); filter: drop-shadow(0 0 10px var(--accent)) drop-shadow(0 0 20px var(--accent)); }
+    50% { transform: scale(1.2); filter: drop-shadow(0 0 20px var(--accent)) drop-shadow(0 0 40px var(--accent)); }
   }
 
-  @keyframes node-ring-war {
-    0% { transform: translate(-50%, -50%) scale(0.5); opacity: 1; }
-    100% { transform: translate(-50%, -50%) scale(2); opacity: 0; }
+  @keyframes triangle-ring {
+    0% { transform: scale(0.5); opacity: 0.8; }
+    100% { transform: scale(2); opacity: 0; }
   }
 
   @keyframes threat-blink {
@@ -1183,22 +1162,6 @@ const styles = `
   @keyframes threat-popup {
     0%, 100% { opacity: 0; transform: translateY(10px); }
     20%, 80% { opacity: 1; transform: translateY(0); }
-  }
-
-  /* Data burst effect */
-  .data-burst {
-    position: absolute;
-    width: 100px;
-    height: 100px;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(220, 38, 38, 0.4) 0%, transparent 70%);
-    animation: burst 2s ease-out infinite;
-    pointer-events: none;
-  }
-
-  @keyframes burst {
-    0% { transform: translate(-50%, -50%) scale(0); opacity: 1; }
-    100% { transform: translate(-50%, -50%) scale(3); opacity: 0; }
   }
 
   /* Network stats overlay */
@@ -1586,18 +1549,18 @@ export default function Landing() {
     animationDuration: `${6 + Math.random() * 4}s`,
   }));
 
-  // Network nodes (agents around the globe) - more spread out for war map look
+  // Network nodes (agents around the globe) - positioned on continents
   const networkNodes = [
-    { id: 1, x: 12, y: 28, label: 'NA-WEST', type: 'agent' },
-    { id: 2, x: 22, y: 32, label: 'NA-EAST', type: 'agent' },
-    { id: 3, x: 18, y: 58, label: 'SA-1', type: 'agent' },
-    { id: 4, x: 42, y: 22, label: 'EU-NORTH', type: 'agent' },
-    { id: 5, x: 48, y: 35, label: 'EU-SOUTH', type: 'agent' },
-    { id: 6, x: 52, y: 50, label: 'AF-1', type: 'threat' },
-    { id: 7, x: 68, y: 25, label: 'AS-NORTH', type: 'agent' },
-    { id: 8, x: 75, y: 40, label: 'AS-EAST', type: 'agent' },
-    { id: 9, x: 82, y: 60, label: 'OC-1', type: 'agent' },
-    { id: 10, x: 50, y: 42, label: 'CORE', type: 'core' },
+    { id: 1, x: 18, y: 30, label: 'NA-WEST', type: 'agent' },      // West USA
+    { id: 2, x: 26, y: 32, label: 'NA-EAST', type: 'agent' },      // East USA
+    { id: 3, x: 28, y: 55, label: 'SA-1', type: 'agent' },         // Brazil
+    { id: 4, x: 48, y: 25, label: 'EU-NORTH', type: 'agent' },     // UK/Germany
+    { id: 5, x: 50, y: 35, label: 'EU-SOUTH', type: 'agent' },     // Mediterranean
+    { id: 6, x: 52, y: 48, label: 'AF-1', type: 'threat' },        // Africa
+    { id: 7, x: 70, y: 30, label: 'AS-NORTH', type: 'agent' },     // Russia/China
+    { id: 8, x: 78, y: 38, label: 'AS-EAST', type: 'agent' },      // Japan/Korea
+    { id: 9, x: 82, y: 58, label: 'OC-1', type: 'agent' },         // Australia
+    { id: 10, x: 55, y: 38, label: 'CORE', type: 'core' },         // Middle East (central)
   ];
 
   // Laser beams between nodes - more connections for war effect
@@ -2178,26 +2141,27 @@ export default function Landing() {
 
             {/* War Map visualization */}
             <div className="network-globe-container">
-              {/* World map silhouette */}
-              <div className="world-map" />
+              {/* World map - actual image (HD) */}
+              <img
+                src="https://upload.wikimedia.org/wikipedia/commons/thumb/e/ec/World_map_blank_without_borders.svg/2560px-World_map_blank_without_borders.svg.png"
+                alt=""
+                className="world-map"
+              />
 
               {/* Scanning grid */}
               <div className="scan-grid" />
-
-              {/* Horizontal scan line */}
-              <div className="scan-line" />
-
-              {/* Data bursts at core */}
-              <div className="data-burst" style={{ left: '50%', top: '42%', animationDelay: '0s' }} />
-              <div className="data-burst" style={{ left: '50%', top: '42%', animationDelay: '1s' }} />
-              <div className="data-burst" style={{ left: '50%', top: '42%', animationDelay: '2s' }} />
 
               {/* Laser beams */}
               {laserBeams.map((beam, i) => {
                 const from = networkNodes[beam.from];
                 const to = networkNodes[beam.to];
-                const dx = to.x - from.x;
-                const dy = to.y - from.y;
+                // Offset to center of triangle nodes (triangle is ~20px wide, ~18px tall)
+                const fromX = from.x + 0.8;
+                const fromY = from.y + 1.2;
+                const toX = to.x + 0.8;
+                const toY = to.y + 1.2;
+                const dx = toX - fromX;
+                const dy = toY - fromY;
                 const length = Math.sqrt(dx * dx + dy * dy);
                 const angle = Math.atan2(dy, dx) * (180 / Math.PI);
 
@@ -2206,8 +2170,8 @@ export default function Landing() {
                     key={i}
                     className="laser-beam"
                     style={{
-                      left: `${from.x}%`,
-                      top: `${from.y}%`,
+                      left: `${fromX}%`,
+                      top: `${fromY}%`,
                       width: `${length}%`,
                       transform: `rotate(${angle}deg)`,
                       animationDelay: beam.delay,
