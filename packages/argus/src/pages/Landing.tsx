@@ -282,7 +282,7 @@ const styles = `
   /* Section: The Swarm (Agents) */
   .section-swarm {
     background: var(--bg-void);
-    padding: 100px 24px;
+    padding: 120px 24px;
   }
 
   .agents-grid {
@@ -322,19 +322,22 @@ const styles = `
   .agent-card:nth-child(4) { transition-delay: 0.4s; }
 
   .agent-icon {
-    width: 56px;
-    height: 56px;
-    border-radius: 14px;
+    width: 60px;
+    height: 60px;
+    border-radius: 16px;
     display: flex;
     align-items: center;
     justify-content: center;
     margin-bottom: 20px;
+    font-size: 1.5rem;
+    color: white;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
   }
 
-  .agent-icon.scout { background: linear-gradient(135deg, var(--purple) 0%, #5B21B6 100%); }
-  .agent-icon.analyst { background: linear-gradient(135deg, var(--accent) 0%, #991B1B 100%); }
-  .agent-icon.hunter { background: linear-gradient(135deg, var(--amber) 0%, #D97706 100%); }
-  .agent-icon.trader { background: linear-gradient(135deg, var(--emerald) 0%, #16A34A 100%); }
+  .agent-icon.scout { background: linear-gradient(135deg, var(--purple) 0%, #5B21B6 100%); box-shadow: 0 4px 20px rgba(139, 92, 246, 0.3); }
+  .agent-icon.analyst { background: linear-gradient(135deg, var(--accent) 0%, #991B1B 100%); box-shadow: 0 4px 20px rgba(220, 38, 38, 0.3); }
+  .agent-icon.hunter { background: linear-gradient(135deg, var(--amber) 0%, #D97706 100%); box-shadow: 0 4px 20px rgba(245, 158, 11, 0.3); }
+  .agent-icon.trader { background: linear-gradient(135deg, var(--emerald) 0%, #16A34A 100%); box-shadow: 0 4px 20px rgba(16, 185, 129, 0.3); }
 
   .agent-name {
     font-size: 1.25rem;
@@ -426,7 +429,7 @@ const styles = `
   /* Section: The Arsenal (Features) */
   .section-arsenal {
     background: var(--bg-dark);
-    padding: 100px 24px;
+    padding: 120px 24px;
   }
 
   .arsenal-grid {
@@ -484,7 +487,7 @@ const styles = `
     background:
       radial-gradient(ellipse at 50% 100%, rgba(220, 38, 38, 0.1) 0%, transparent 50%),
       var(--bg-void);
-    padding: 100px 24px;
+    padding: 120px 24px;
   }
 
   .engine-stats {
@@ -536,7 +539,7 @@ const styles = `
   /* Section: Pricing */
   .section-pricing {
     background: var(--bg-dark);
-    padding: 100px 24px;
+    padding: 120px 24px;
   }
 
   .pricing-grid {
@@ -694,36 +697,59 @@ const styles = `
   /* Section: Token */
   .section-token {
     background:
-      radial-gradient(ellipse at 50% 0%, rgba(220, 38, 38, 0.08) 0%, transparent 50%),
+      radial-gradient(ellipse at 50% 30%, rgba(220, 38, 38, 0.12) 0%, transparent 60%),
       var(--bg-void);
-    padding: 100px 24px;
+    padding: 120px 24px;
+  }
+
+  .section-token .narrative-content {
+    margin-bottom: 20px;
   }
 
   .token-card {
-    max-width: 600px;
-    margin: 60px auto 0;
-    background: var(--bg-card);
-    border: 1px solid rgba(220, 38, 38, 0.2);
-    border-radius: 20px;
-    padding: 40px;
+    max-width: 500px;
+    margin: 40px auto 0;
+    background: linear-gradient(180deg, rgba(30, 30, 35, 0.9) 0%, rgba(20, 20, 25, 0.95) 100%);
+    border: 2px solid rgba(220, 38, 38, 0.3);
+    border-radius: 24px;
+    padding: 48px 40px;
     text-align: center;
-    box-shadow: 0 0 60px var(--accent-dim);
+    box-shadow:
+      0 0 80px rgba(220, 38, 38, 0.15),
+      0 0 40px rgba(220, 38, 38, 0.1),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .token-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
   }
 
   .token-symbol {
-    font-size: 3rem;
+    font-size: 3.5rem;
     font-weight: 800;
-    background: linear-gradient(135deg, var(--accent) 0%, #EF4444 100%);
+    background: linear-gradient(135deg, var(--accent) 0%, #EF4444 50%, var(--accent) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
     margin-bottom: 8px;
+    text-shadow: 0 0 40px var(--accent-dim);
   }
 
   .token-name {
-    font-size: 1rem;
+    font-size: 1.1rem;
     color: var(--text-muted);
-    margin-bottom: 32px;
+    margin-bottom: 36px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
   }
 
   .token-ca {
@@ -784,7 +810,7 @@ const styles = `
   .token-link {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     padding: 14px 24px;
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.08);
@@ -802,19 +828,19 @@ const styles = `
     transform: translateY(-2px);
   }
 
-  .token-link svg {
-    width: 20px;
-    height: 20px;
+  .token-link i {
+    font-size: 1.1rem;
+    color: var(--accent);
   }
 
   /* Section: Roadmap */
   .section-roadmap {
     background: var(--bg-dark);
-    padding: 100px 24px;
+    padding: 120px 24px;
   }
 
   .roadmap-timeline {
-    max-width: 800px;
+    max-width: 900px;
     margin: 60px auto 0;
     position: relative;
   }
@@ -823,26 +849,31 @@ const styles = `
     content: '';
     position: absolute;
     left: 50%;
-    top: 0;
-    bottom: 0;
-    width: 2px;
-    background: linear-gradient(180deg, var(--accent) 0%, var(--accent-dim) 100%);
+    top: 24px;
+    bottom: 24px;
+    width: 3px;
+    background: linear-gradient(180deg, var(--accent) 0%, var(--accent-dim) 50%, rgba(220, 38, 38, 0.1) 100%);
     transform: translateX(-50%);
+    box-shadow: 0 0 15px var(--accent-dim);
   }
 
   @media (max-width: 700px) {
     .roadmap-timeline::before {
-      left: 20px;
+      left: 24px;
     }
   }
 
   .roadmap-phase {
     display: flex;
     align-items: flex-start;
-    margin-bottom: 60px;
+    margin-bottom: 70px;
     opacity: 0;
     transform: translateY(30px);
     transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+
+  .roadmap-phase:last-child {
+    margin-bottom: 0;
   }
 
   .roadmap-phase.visible {
@@ -870,18 +901,23 @@ const styles = `
 
   .roadmap-content {
     flex: 1;
-    padding: 0 40px;
+    padding: 0 50px;
+    background: rgba(20, 20, 25, 0.5);
+    border-radius: 16px;
+    padding: 24px 32px;
+    border: 1px solid rgba(220, 38, 38, 0.1);
   }
 
   @media (max-width: 700px) {
     .roadmap-content {
-      padding: 0 0 0 40px;
+      padding: 20px 24px;
+      margin-left: 20px;
     }
   }
 
   .roadmap-marker {
-    width: 48px;
-    height: 48px;
+    width: 52px;
+    height: 52px;
     border-radius: 50%;
     background: var(--bg-card);
     border: 3px solid var(--accent);
@@ -891,14 +927,21 @@ const styles = `
     flex-shrink: 0;
     position: relative;
     z-index: 1;
-    box-shadow: 0 0 20px var(--accent-dim);
+    box-shadow: 0 0 25px var(--accent-dim), 0 0 50px rgba(220, 38, 38, 0.1);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+  }
+
+  .roadmap-marker:hover {
+    transform: scale(1.1);
+    box-shadow: 0 0 35px var(--accent-dim), 0 0 60px rgba(220, 38, 38, 0.2);
   }
 
   .roadmap-marker.completed {
     background: var(--accent);
+    box-shadow: 0 0 30px var(--accent-dim), 0 0 60px rgba(220, 38, 38, 0.3);
   }
 
-  .roadmap-marker.completed svg {
+  .roadmap-marker.completed i {
     color: white;
   }
 
@@ -911,9 +954,8 @@ const styles = `
     50% { box-shadow: 0 0 40px var(--accent-glow); }
   }
 
-  .roadmap-marker svg {
-    width: 20px;
-    height: 20px;
+  .roadmap-marker i {
+    font-size: 1.2rem;
     color: var(--accent);
   }
 
@@ -945,7 +987,7 @@ const styles = `
     padding: 6px 0;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
   }
 
   .roadmap-phase:nth-child(odd) .roadmap-items li {
@@ -958,12 +1000,23 @@ const styles = `
     }
   }
 
-  .roadmap-items .done {
+  .roadmap-items li i {
+    font-size: 0.7rem;
+    width: 16px;
+    text-align: center;
+  }
+
+  .roadmap-items li i.done {
     color: var(--emerald);
   }
 
-  .roadmap-items .progress {
+  .roadmap-items li i.progress {
     color: var(--amber);
+  }
+
+  .roadmap-items li i.pending {
+    color: var(--text-dim);
+    font-size: 0.5rem;
   }
 
   /* Section: Final Chapter - The Global Network */
@@ -1209,10 +1262,10 @@ const styles = `
   }
 
   .join-eye {
-    width: 80px;
-    height: 80px;
+    width: 100px;
+    height: 100px;
     margin: 0 auto 40px;
-    filter: drop-shadow(0 0 30px var(--accent-glow));
+    filter: drop-shadow(0 0 40px var(--accent-glow));
     animation: awakening-glow 2s ease-in-out infinite;
   }
 
@@ -1220,45 +1273,74 @@ const styles = `
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 18px 48px;
-    background: linear-gradient(135deg, var(--accent) 0%, #991B1B 100%);
+    padding: 22px 64px;
+    background: linear-gradient(135deg, var(--accent) 0%, #B91C1C 50%, var(--accent) 100%);
+    background-size: 200% 100%;
     color: white;
-    font-size: 1rem;
-    font-weight: 600;
-    border-radius: 12px;
+    font-size: 1.2rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    border-radius: 14px;
     margin-top: 40px;
     cursor: pointer;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    transition: transform 0.3s ease, box-shadow 0.3s ease, background-position 0.5s ease;
     text-decoration: none;
-    box-shadow: 0 4px 30px var(--accent-dim);
+    box-shadow:
+      0 4px 30px var(--accent-dim),
+      0 0 60px rgba(220, 38, 38, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .join-cta::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    animation: cta-shimmer 3s ease-in-out infinite;
+  }
+
+  @keyframes cta-shimmer {
+    0%, 100% { left: -100%; }
+    50% { left: 100%; }
   }
 
   .join-cta:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 8px 40px var(--accent-glow);
+    transform: translateY(-4px) scale(1.02);
+    box-shadow:
+      0 8px 50px var(--accent-glow),
+      0 0 80px rgba(220, 38, 38, 0.4);
+    background-position: 100% 0;
   }
 
   .join-secondary {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    padding: 14px 28px;
-    background: transparent;
+    gap: 10px;
+    padding: 16px 32px;
+    background: rgba(220, 38, 38, 0.05);
     color: var(--text-muted);
-    font-size: 0.9rem;
+    font-size: 0.95rem;
     font-weight: 500;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 10px;
+    border: 1px solid rgba(220, 38, 38, 0.2);
+    border-radius: 12px;
     margin-top: 16px;
-    margin-left: 12px;
+    margin-left: 16px;
     cursor: pointer;
-    transition: border-color 0.2s ease, color 0.2s ease;
+    transition: all 0.3s ease;
     text-decoration: none;
   }
 
   .join-secondary:hover {
     border-color: var(--accent);
     color: var(--text-main);
+    background: rgba(220, 38, 38, 0.1);
+    transform: translateY(-2px);
   }
 
   /* Footer */
@@ -1549,47 +1631,82 @@ export default function Landing() {
     animationDuration: `${6 + Math.random() * 4}s`,
   }));
 
-  // Network nodes (agents around the globe) - positioned on continents
+  // Network nodes - FULL GLOBAL COVERAGE
   const networkNodes = [
-    { id: 1, x: 18, y: 30, label: 'NA-WEST', type: 'agent' },      // West USA
-    { id: 2, x: 26, y: 32, label: 'NA-EAST', type: 'agent' },      // East USA
-    { id: 3, x: 28, y: 55, label: 'SA-1', type: 'agent' },         // Brazil
-    { id: 4, x: 48, y: 25, label: 'EU-NORTH', type: 'agent' },     // UK/Germany
-    { id: 5, x: 50, y: 35, label: 'EU-SOUTH', type: 'agent' },     // Mediterranean
-    { id: 6, x: 52, y: 48, label: 'AF-1', type: 'threat' },        // Africa
-    { id: 7, x: 70, y: 30, label: 'AS-NORTH', type: 'agent' },     // Russia/China
-    { id: 8, x: 78, y: 38, label: 'AS-EAST', type: 'agent' },      // Japan/Korea
-    { id: 9, x: 82, y: 58, label: 'OC-1', type: 'agent' },         // Australia
-    { id: 10, x: 55, y: 38, label: 'CORE', type: 'core' },         // Middle East (central)
+    // North America
+    { id: 0, x: 15, y: 28, label: 'NA-W', type: 'agent' },
+    { id: 1, x: 22, y: 32, label: 'NA-C', type: 'agent' },
+    { id: 2, x: 28, y: 35, label: 'NA-E', type: 'agent' },
+    // South America
+    { id: 3, x: 28, y: 55, label: 'SA-N', type: 'agent' },
+    { id: 4, x: 30, y: 65, label: 'SA-S', type: 'agent' },
+    // Europe
+    { id: 5, x: 45, y: 25, label: 'EU-N', type: 'agent' },
+    { id: 6, x: 48, y: 32, label: 'EU-C', type: 'agent' },
+    { id: 7, x: 52, y: 35, label: 'EU-S', type: 'agent' },
+    // Africa
+    { id: 8, x: 48, y: 45, label: 'AF-N', type: 'threat' },
+    { id: 9, x: 52, y: 55, label: 'AF-S', type: 'threat' },
+    // Middle East - CORE
+    { id: 10, x: 58, y: 38, label: 'CORE', type: 'core' },
+    // Asia
+    { id: 11, x: 65, y: 28, label: 'AS-W', type: 'agent' },
+    { id: 12, x: 72, y: 32, label: 'AS-C', type: 'agent' },
+    { id: 13, x: 80, y: 30, label: 'AS-E', type: 'agent' },
+    // Southeast Asia
+    { id: 14, x: 75, y: 48, label: 'SEA', type: 'agent' },
+    // Australia
+    { id: 15, x: 82, y: 60, label: 'OC', type: 'agent' },
+    // Antarctica
+    { id: 16, x: 40, y: 78, label: 'ANT-W', type: 'agent' },
+    { id: 17, x: 60, y: 78, label: 'ANT-E', type: 'agent' },
   ];
 
-  // Laser beams between nodes - more connections for war effect
+  // Laser beams - FULL NETWORK
   const laserBeams = [
-    { from: 0, to: 9, delay: '0s' },
-    { from: 1, to: 9, delay: '0.3s' },
-    { from: 2, to: 9, delay: '0.6s' },
-    { from: 3, to: 9, delay: '0.9s' },
-    { from: 4, to: 9, delay: '1.2s' },
-    { from: 5, to: 9, delay: '1.5s' },
-    { from: 6, to: 9, delay: '1.8s' },
-    { from: 7, to: 9, delay: '2.1s' },
-    { from: 8, to: 9, delay: '2.4s' },
-    // Cross connections
-    { from: 0, to: 1, delay: '2.7s' },
-    { from: 3, to: 4, delay: '3.0s' },
-    { from: 6, to: 7, delay: '3.3s' },
-    { from: 1, to: 3, delay: '3.6s' },
-    { from: 4, to: 6, delay: '3.9s' },
-    { from: 7, to: 8, delay: '4.2s' },
-    { from: 2, to: 5, delay: '4.5s' },
+    // North America chain
+    { from: 0, to: 1, delay: '0s' },
+    { from: 1, to: 2, delay: '0.2s' },
+    // NA to SA
+    { from: 2, to: 3, delay: '0.4s' },
+    { from: 3, to: 4, delay: '0.6s' },
+    // NA to EU
+    { from: 1, to: 6, delay: '0.8s' },
+    // Europe chain
+    { from: 5, to: 6, delay: '1s' },
+    { from: 6, to: 7, delay: '1.2s' },
+    // EU to Africa
+    { from: 7, to: 8, delay: '1.4s' },
+    { from: 8, to: 9, delay: '1.6s' },
+    // EU to CORE
+    { from: 7, to: 10, delay: '1.8s' },
+    // CORE connections
+    { from: 10, to: 11, delay: '2s' },
+    { from: 10, to: 8, delay: '2.2s' },
+    // Asia chain
+    { from: 11, to: 12, delay: '2.4s' },
+    { from: 12, to: 13, delay: '2.6s' },
+    // Asia to SEA
+    { from: 12, to: 14, delay: '2.8s' },
+    // SEA to Australia
+    { from: 14, to: 15, delay: '3s' },
+    { from: 13, to: 15, delay: '3.2s' },
+    // Antarctica connections
+    { from: 4, to: 16, delay: '3.4s' },
+    { from: 16, to: 17, delay: '3.6s' },
+    { from: 9, to: 17, delay: '3.8s' },
+    // Cross-continental
+    { from: 0, to: 5, delay: '4s' },
+    { from: 6, to: 11, delay: '4.2s' },
+    { from: 15, to: 17, delay: '4.4s' },
   ];
 
-  // Threat indicators that pop up
+  // Threat indicators that pop up near nodes
   const threats = [
-    { x: 30, y: 40, text: 'SCAM DETECTED', delay: '0s' },
-    { x: 65, y: 55, text: 'RUG ALERT', delay: '2s' },
-    { x: 20, y: 25, text: 'BUNDLE FOUND', delay: '4s' },
-    { x: 78, y: 35, text: 'SYNDICATE', delay: '6s' },
+    { x: 25, y: 28, text: 'BUNDLE FOUND', delay: '0s' },
+    { x: 45, y: 35, text: 'SCAM DETECTED', delay: '2s' },
+    { x: 72, y: 38, text: 'SYNDICATE', delay: '4s' },
+    { x: 75, y: 55, text: 'RUG ALERT', delay: '6s' },
   ];
 
   return (
@@ -1698,10 +1815,7 @@ export default function Landing() {
             <div className="agents-grid">
               <div className={`agent-card ${visibleSections.has('swarm') ? 'visible' : ''}`}>
                 <div className="agent-icon scout">
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-                    <circle cx="12" cy="12" r="10"/>
-                    <path d="M12 16v-4M12 8h.01"/>
-                  </svg>
+                  <i className="fa-solid fa-satellite-dish"></i>
                 </div>
                 <div className="agent-name">Scout</div>
                 <div className="agent-role">Mempool Patrol</div>
@@ -1712,10 +1826,7 @@ export default function Landing() {
               </div>
               <div className={`agent-card ${visibleSections.has('swarm') ? 'visible' : ''}`}>
                 <div className="agent-icon analyst">
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-                    <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
-                    <circle cx="12" cy="12" r="3"/>
-                  </svg>
+                  <i className="fa-solid fa-eye"></i>
                 </div>
                 <div className="agent-name">Analyst</div>
                 <div className="agent-role">Deep Investigation</div>
@@ -1726,10 +1837,7 @@ export default function Landing() {
               </div>
               <div className={`agent-card ${visibleSections.has('swarm') ? 'visible' : ''}`}>
                 <div className="agent-icon hunter">
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-                    <circle cx="11" cy="11" r="8"/>
-                    <path d="m21 21-4.35-4.35"/>
-                  </svg>
+                  <i className="fa-solid fa-crosshairs"></i>
                 </div>
                 <div className="agent-name">Hunter</div>
                 <div className="agent-role">Network Tracker</div>
@@ -1740,9 +1848,7 @@ export default function Landing() {
               </div>
               <div className={`agent-card ${visibleSections.has('swarm') ? 'visible' : ''}`}>
                 <div className="agent-icon trader">
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-                    <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-                  </svg>
+                  <i className="fa-solid fa-coins"></i>
                 </div>
                 <div className="agent-name">Trader</div>
                 <div className="agent-role">Position Guardian</div>
@@ -1830,7 +1936,7 @@ export default function Landing() {
             ref={(el) => (sectionRefs.current['engine'] = el)}
           >
             <div className={`narrative-content ${visibleSections.has('engine') ? 'visible' : ''}`}>
-              <div className="narrative-label">The Dark Engine</div>
+              <div className="narrative-label">Chapter V</div>
               <h1 className="narrative-title">
                 BitNet <span>1-bit AI</span>
               </h1>
@@ -1866,7 +1972,7 @@ export default function Landing() {
             ref={(el) => (sectionRefs.current['arsenal'] = el)}
           >
             <div className={`narrative-content ${visibleSections.has('arsenal') ? 'visible' : ''}`}>
-              <div className="narrative-label">The Arsenal</div>
+              <div className="narrative-label">Chapter VI</div>
               <h1 className="narrative-title">
                 Weapons <span>forged in darkness</span>
               </h1>
@@ -1902,7 +2008,7 @@ export default function Landing() {
             ref={(el) => (sectionRefs.current['pricing'] = el)}
           >
             <div className={`narrative-content ${visibleSections.has('pricing') ? 'visible' : ''}`}>
-              <div className="narrative-label">Access Levels</div>
+              <div className="narrative-label">Chapter VII</div>
               <h1 className="narrative-title">
                 Choose your <span>tier</span>
               </h1>
@@ -1966,7 +2072,7 @@ export default function Landing() {
             ref={(el) => (sectionRefs.current['token'] = el)}
           >
             <div className={`narrative-content ${visibleSections.has('token') ? 'visible' : ''}`}>
-              <div className="narrative-label">Chapter V</div>
+              <div className="narrative-label">Chapter VIII</div>
               <h1 className="narrative-title">
                 The <span>$ARGUS</span> token
               </h1>
@@ -1994,10 +2100,7 @@ export default function Landing() {
                   rel="noopener noreferrer"
                   className="token-link"
                 >
-                  <svg viewBox="0 0 24 24" fill="currentColor">
-                    <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="2"/>
-                    <path d="M8 12h8M12 8v8" stroke="currentColor" strokeWidth="2"/>
-                  </svg>
+                  <i className="fa-solid fa-rocket"></i>
                   Buy on Jupiter
                 </a>
                 <a
@@ -2006,9 +2109,7 @@ export default function Landing() {
                   rel="noopener noreferrer"
                   className="token-link"
                 >
-                  <svg viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
-                  </svg>
+                  <i className="fa-solid fa-bolt"></i>
                   Buy on Raydium
                 </a>
                 <a
@@ -2017,10 +2118,7 @@ export default function Landing() {
                   rel="noopener noreferrer"
                   className="token-link"
                 >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M3 3v18h18"/>
-                    <path d="M18 9l-5 5-4-4-3 3"/>
-                  </svg>
+                  <i className="fa-solid fa-chart-line"></i>
                   DexScreener
                 </a>
               </div>
@@ -2034,7 +2132,7 @@ export default function Landing() {
             ref={(el) => (sectionRefs.current['roadmap'] = el)}
           >
             <div className={`narrative-content ${visibleSections.has('roadmap') ? 'visible' : ''}`}>
-              <div className="narrative-label">Chapter VI</div>
+              <div className="narrative-label">Chapter IX</div>
               <h1 className="narrative-title">
                 The path <span>ahead</span>
               </h1>
@@ -2049,16 +2147,14 @@ export default function Landing() {
                   <div className="roadmap-phase-label">Phase 1 — Foundation</div>
                   <div className="roadmap-phase-title">The Awakening</div>
                   <ul className="roadmap-items">
-                    <li><span className="done">&#10003;</span> Token launch & initial liquidity</li>
-                    <li><span className="done">&#10003;</span> AI risk analysis engine</li>
-                    <li><span className="done">&#10003;</span> Bundle detection system</li>
-                    <li><span className="done">&#10003;</span> One-click Jupiter trading</li>
+                    <li><i className="fa-solid fa-check done"></i> Token launch & initial liquidity</li>
+                    <li><i className="fa-solid fa-check done"></i> AI risk analysis engine</li>
+                    <li><i className="fa-solid fa-check done"></i> Bundle detection system</li>
+                    <li><i className="fa-solid fa-check done"></i> One-click Jupiter trading</li>
                   </ul>
                 </div>
                 <div className="roadmap-marker completed">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                    <path d="M5 13l4 4L19 7"/>
-                  </svg>
+                  <i className="fa-solid fa-check"></i>
                 </div>
               </div>
 
@@ -2068,16 +2164,14 @@ export default function Landing() {
                   <div className="roadmap-phase-label">Phase 2 — Evolution</div>
                   <div className="roadmap-phase-title">The Swarm Awakens</div>
                   <ul className="roadmap-items">
-                    <li><span className="done">&#10003;</span> Multi-agent architecture</li>
-                    <li><span className="done">&#10003;</span> BitNet 1-bit AI engine</li>
-                    <li><span className="progress">&#9679;</span> Autonomous trading agents</li>
-                    <li><span className="progress">&#9679;</span> Real-time dashboard</li>
+                    <li><i className="fa-solid fa-check done"></i> Multi-agent architecture</li>
+                    <li><i className="fa-solid fa-check done"></i> BitNet 1-bit AI engine</li>
+                    <li><i className="fa-solid fa-spinner fa-spin progress"></i> Autonomous trading agents</li>
+                    <li><i className="fa-solid fa-spinner fa-spin progress"></i> Real-time dashboard</li>
                   </ul>
                 </div>
                 <div className="roadmap-marker current">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="12" cy="12" r="4"/>
-                  </svg>
+                  <i className="fa-solid fa-code"></i>
                 </div>
               </div>
 
@@ -2087,16 +2181,14 @@ export default function Landing() {
                   <div className="roadmap-phase-label">Phase 3 — Expansion</div>
                   <div className="roadmap-phase-title">The Network Spreads</div>
                   <ul className="roadmap-items">
-                    <li>Telegram alert bot</li>
-                    <li>Public API for developers</li>
-                    <li>Mobile companion app</li>
-                    <li>Portfolio guardian mode</li>
+                    <li><i className="fa-solid fa-circle pending"></i> Telegram alert bot</li>
+                    <li><i className="fa-solid fa-circle pending"></i> Public API for developers</li>
+                    <li><i className="fa-solid fa-circle pending"></i> Mobile companion app</li>
+                    <li><i className="fa-solid fa-circle pending"></i> Portfolio guardian mode</li>
                   </ul>
                 </div>
                 <div className="roadmap-marker">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M12 5v14M5 12h14"/>
-                  </svg>
+                  <i className="fa-solid fa-rocket"></i>
                 </div>
               </div>
 
@@ -2106,17 +2198,14 @@ export default function Landing() {
                   <div className="roadmap-phase-label">Phase 4 — Dominion</div>
                   <div className="roadmap-phase-title">The Global Network</div>
                   <ul className="roadmap-items">
-                    <li>Multi-chain expansion (Base, ETH)</li>
-                    <li>Decentralized agent nodes</li>
-                    <li>Community-powered threat intel</li>
-                    <li>Governance for $ARGUS holders</li>
+                    <li><i className="fa-solid fa-circle pending"></i> Multi-chain expansion (Base, ETH)</li>
+                    <li><i className="fa-solid fa-circle pending"></i> Decentralized agent nodes</li>
+                    <li><i className="fa-solid fa-circle pending"></i> Community-powered threat intel</li>
+                    <li><i className="fa-solid fa-circle pending"></i> Governance for $ARGUS holders</li>
                   </ul>
                 </div>
                 <div className="roadmap-marker">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="12" cy="12" r="10"/>
-                    <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-                  </svg>
+                  <i className="fa-solid fa-globe"></i>
                 </div>
               </div>
             </div>
@@ -2155,15 +2244,23 @@ export default function Landing() {
               {laserBeams.map((beam, i) => {
                 const from = networkNodes[beam.from];
                 const to = networkNodes[beam.to];
-                // Offset to center of triangle nodes (triangle is ~20px wide, ~18px tall)
-                const fromX = from.x + 0.8;
-                const fromY = from.y + 1.2;
-                const toX = to.x + 0.8;
-                const toY = to.y + 1.2;
+                // Offset to center of triangle
+                const fromX = from.x + 1;
+                const fromY = from.y + 2;
+                const toX = to.x + 1;
+                const toY = to.y + 2;
+
                 const dx = toX - fromX;
                 const dy = toY - fromY;
-                const length = Math.sqrt(dx * dx + dy * dy);
-                const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+
+                // Container aspect ratio correction (width:height ≈ 2:1)
+                // Convert dy to "width-percent" equivalent
+                const dyScaled = dy * 0.5;
+
+                // Length in width-percent units
+                const length = Math.sqrt(dx * dx + dyScaled * dyScaled);
+                // Angle using scaled coordinates
+                const angle = Math.atan2(dyScaled, dx) * (180 / Math.PI);
 
                 return (
                   <div
@@ -2174,6 +2271,7 @@ export default function Landing() {
                       top: `${fromY}%`,
                       width: `${length}%`,
                       transform: `rotate(${angle}deg)`,
+                      transformOrigin: '0 50%',
                       animationDelay: beam.delay,
                     }}
                   />
@@ -2240,9 +2338,7 @@ export default function Landing() {
                   Enter the Darkness
                 </a>
                 <a href="https://github.com/ArgusGuardAI/argus-ai" target="_blank" rel="noopener noreferrer" className="join-secondary">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-                  </svg>
+                  <i className="fa-brands fa-github"></i>
                   View Source
                 </a>
               </div>
