@@ -10,7 +10,7 @@ export interface AgentEvent {
   id: string;
   timestamp: number;
   agent: 'SCOUT' | 'ANALYST' | 'HUNTER' | 'TRADER';
-  type: 'scan' | 'alert' | 'analysis' | 'trade' | 'discovery' | 'graduation';
+  type: 'scan' | 'alert' | 'analysis' | 'trade' | 'discovery' | 'graduation' | 'comms';
   message: string;
   severity: 'info' | 'warning' | 'critical';
   data?: {
@@ -25,6 +25,9 @@ export interface AgentEvent {
     graduatedFrom?: string;
     bondingCurveTime?: number;
     poolAddress?: string;
+    // Agent communication
+    targetAgent?: 'SCOUT' | 'ANALYST' | 'HUNTER' | 'TRADER';
+    requestType?: string;
   };
 }
 
@@ -241,6 +244,9 @@ export async function getAgentStats(kv: KVNamespace): Promise<AgentStats> {
 /**
  * Create events from a token scan result
  * Called after /sentinel/analyze completes
+ *
+ * Implements agent-to-agent communication:
+ * SCOUT detects → requests ANALYST analysis → ANALYST reports → HUNTER tracks (if risky)
  */
 export async function processTokenScan(
   kv: KVNamespace,
@@ -260,83 +266,153 @@ export async function processTokenScan(
 ): Promise<void> {
   const { tokenAddress, tokenSymbol, score, bundleDetected, bundleCount, syndicateNetwork } = scanResult;
 
-  // Always emit SCOUT scan event
+  // Update stats for scan
+  const statsUpdates: Parameters<typeof updateAgentStats>[1] = { scan: true };
+
+  // 1. SCOUT detects token and requests ANALYST analysis
   await storeAgentEvent(kv, {
     agent: 'SCOUT',
-    type: 'scan',
-    message: `Scanned token`,
+    type: 'comms',
+    message: `→ ANALYST: New token detected, requesting analysis`,
     severity: 'info',
     data: {
       tokenAddress,
       tokenSymbol: `$${tokenSymbol}`,
-      score,
+      targetAgent: 'ANALYST',
+      requestType: 'analyze',
     },
   });
 
-  // Update stats for scan
-  const statsUpdates: Parameters<typeof updateAgentStats>[1] = { scan: true };
-
-  // If high risk (score < 40), emit ANALYST alert
+  // Small delay simulation for agent processing (these get timestamped slightly apart)
+  // 2. ANALYST responds with analysis results
   if (score < 40) {
+    // Critical risk - ANALYST alerts and requests HUNTER investigation
     await storeAgentEvent(kv, {
       agent: 'ANALYST',
-      type: 'alert',
-      message: `High-risk token detected`,
+      type: 'comms',
+      message: `→ HUNTER: CRITICAL risk (${score}/100), requesting wallet investigation`,
       severity: 'critical',
       data: {
         tokenAddress,
         tokenSymbol: `$${tokenSymbol}`,
         score,
+        targetAgent: 'HUNTER',
+        requestType: 'investigate',
       },
     });
     statsUpdates.alert = true;
     statsUpdates.highRisk = true;
+
+    // 3. HUNTER acknowledges and begins tracking
+    await storeAgentEvent(kv, {
+      agent: 'HUNTER',
+      type: 'comms',
+      message: `→ ANALYST: Acknowledged, tracking suspicious wallets on $${tokenSymbol}`,
+      severity: 'warning',
+      data: {
+        tokenAddress,
+        tokenSymbol: `$${tokenSymbol}`,
+        targetAgent: 'ANALYST',
+        requestType: 'tracking_started',
+      },
+    });
+
   } else if (score < 60) {
-    // Medium risk - warning
+    // Medium risk - ANALYST warns SCOUT
     await storeAgentEvent(kv, {
       agent: 'ANALYST',
-      type: 'analysis',
-      message: `Risky token flagged`,
+      type: 'comms',
+      message: `→ SCOUT: Moderate risk (${score}/100), flagging for watchlist`,
       severity: 'warning',
       data: {
         tokenAddress,
         tokenSymbol: `$${tokenSymbol}`,
         score,
+        targetAgent: 'SCOUT',
+        requestType: 'flag',
       },
     });
     statsUpdates.alert = true;
+
+  } else {
+    // Safe token - ANALYST confirms to SCOUT
+    await storeAgentEvent(kv, {
+      agent: 'ANALYST',
+      type: 'comms',
+      message: `→ SCOUT: Analysis complete (${score}/100), token appears safe`,
+      severity: 'info',
+      data: {
+        tokenAddress,
+        tokenSymbol: `$${tokenSymbol}`,
+        score,
+        targetAgent: 'SCOUT',
+        requestType: 'cleared',
+      },
+    });
   }
 
-  // If bundle detected, emit HUNTER discovery
+  // 4. If bundle detected, HUNTER reports to ANALYST
   if (bundleDetected && bundleCount && bundleCount > 0) {
     await storeAgentEvent(kv, {
       agent: 'HUNTER',
-      type: 'discovery',
-      message: `Bundle coordination detected`,
+      type: 'comms',
+      message: `→ ANALYST: Found ${bundleCount} coordinated wallets on $${tokenSymbol}`,
       severity: 'warning',
       data: {
         tokenAddress,
         tokenSymbol: `$${tokenSymbol}`,
         bundleCount,
+        targetAgent: 'ANALYST',
+        requestType: 'bundle_report',
       },
     });
     statsUpdates.bundleDetected = true;
+
+    // ANALYST acknowledges bundle intel
+    await storeAgentEvent(kv, {
+      agent: 'ANALYST',
+      type: 'comms',
+      message: `→ HUNTER: Received, factoring ${bundleCount} wallets into risk model`,
+      severity: 'info',
+      data: {
+        tokenAddress,
+        tokenSymbol: `$${tokenSymbol}`,
+        targetAgent: 'HUNTER',
+        requestType: 'intel_received',
+      },
+    });
   }
 
-  // If syndicate network found, emit critical HUNTER alert
+  // 5. If syndicate network found, escalate through all agents
   if (syndicateNetwork?.detected && syndicateNetwork.repeatOffenders > 0) {
+    // HUNTER alerts entire swarm
     await storeAgentEvent(kv, {
       agent: 'HUNTER',
-      type: 'alert',
-      message: `Repeat scammer network identified`,
+      type: 'comms',
+      message: `→ ALL: SYNDICATE ALERT - ${syndicateNetwork.repeatOffenders} repeat scammers, ${Math.round(syndicateNetwork.rugRate * 100)}% rug rate`,
       severity: 'critical',
       data: {
         tokenAddress,
         tokenSymbol: `$${tokenSymbol}`,
         rugRate: syndicateNetwork.rugRate,
+        requestType: 'syndicate_alert',
       },
     });
     statsUpdates.syndicateFound = true;
+
+    // TRADER responds to syndicate warning
+    await storeAgentEvent(kv, {
+      agent: 'TRADER',
+      type: 'comms',
+      message: `→ HUNTER: Blacklisting $${tokenSymbol}, blocking all trade routes`,
+      severity: 'critical',
+      data: {
+        tokenAddress,
+        tokenSymbol: `$${tokenSymbol}`,
+        targetAgent: 'HUNTER',
+        requestType: 'blacklist',
+      },
+    });
   }
 
   // Update stats

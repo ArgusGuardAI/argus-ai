@@ -34,6 +34,7 @@
   "license": "MIT",
   "dependencies": {
     "@solana/web3.js": "^1.87.6",
+    "bs58": "^6.0.0",
     "eventemitter3": "^5.0.1",
     "pg": "^8.11.3"
   },

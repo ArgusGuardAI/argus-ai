@@ -21,13 +21,13 @@ interface WalletTopologyProps {
   bundleHoldingsPercent?: number;
 }
 
-// Tag colors for consistency
+// Tag colors for consistency (red theme)
 const TAG_COLORS: Record<string, { bg: string; text: string; border: string }> = {
   DEV: { bg: 'rgba(187,134,252,0.3)', text: '#bb86fc', border: '#bb86fc' },
-  SNIPER: { bg: 'rgba(255,68,68,0.3)', text: '#ff4444', border: '#ff4444' },
+  SNIPER: { bg: 'rgba(239,68,68,0.3)', text: '#EF4444', border: '#EF4444' },
   BUNDLE: { bg: 'rgba(245,158,11,0.3)', text: '#F59E0B', border: '#F59E0B' },
-  DEX: { bg: 'rgba(0,230,118,0.3)', text: '#00e676', border: '#00e676' },
-  LP: { bg: 'rgba(0,230,118,0.3)', text: '#00e676', border: '#00e676' },
+  DEX: { bg: 'rgba(34,197,94,0.3)', text: '#22C55E', border: '#22C55E' },
+  LP: { bg: 'rgba(34,197,94,0.3)', text: '#22C55E', border: '#22C55E' },
   BURN: { bg: 'rgba(136,136,136,0.3)', text: '#888', border: '#888' },
 };
 
@@ -79,10 +79,10 @@ export const WalletTopology: React.FC<WalletTopologyProps> = ({
   // Calculate histogram data (holder concentration by size)
   const histogram = useMemo(() => {
     const ranges = [
-      { label: '>10%', min: 10, max: 100, count: 0, percent: 0, color: '#ff4444' },
+      { label: '>10%', min: 10, max: 100, count: 0, percent: 0, color: '#EF4444' },
       { label: '5-10%', min: 5, max: 10, count: 0, percent: 0, color: '#F59E0B' },
-      { label: '1-5%', min: 1, max: 5, count: 0, percent: 0, color: '#00bcd4' },
-      { label: '<1%', min: 0, max: 1, count: 0, percent: 0, color: '#00e676' },
+      { label: '1-5%', min: 1, max: 5, count: 0, percent: 0, color: '#DC2626' },
+      { label: '<1%', min: 0, max: 1, count: 0, percent: 0, color: '#22C55E' },
     ];
 
     for (const holder of holders) {
@@ -145,8 +145,8 @@ export const WalletTopology: React.FC<WalletTopologyProps> = ({
         <div className="space-y-1">
           {histogram.ranges.map((range) => (
             <div key={range.label} className="flex items-center gap-2">
-              <div className="w-12 text-[0.65rem] text-[#888] font-mono text-right">{range.label}</div>
-              <div className="flex-1 h-4 bg-[#111] rounded overflow-hidden relative">
+              <div className="w-10 text-[0.65rem] text-[#888] font-mono">{range.label}</div>
+              <div className="flex-1 h-4 bg-[#111] rounded overflow-hidden">
                 <div
                   className="h-full rounded transition-all duration-300"
                   style={{
@@ -155,13 +155,9 @@ export const WalletTopology: React.FC<WalletTopologyProps> = ({
                     opacity: 0.7,
                   }}
                 />
-                {range.count > 0 && (
-                  <div className="absolute inset-0 flex items-center px-2">
-                    <span className="text-[0.6rem] font-mono text-white/80">
-                      {range.count} ({range.percent.toFixed(1)}%)
-                    </span>
-                  </div>
-                )}
+              </div>
+              <div className="w-16 text-[0.6rem] font-mono text-[#aaa] text-right">
+                {range.count > 0 ? `${range.count} (${range.percent.toFixed(1)}%)` : '—'}
               </div>
             </div>
           ))}
@@ -172,7 +168,7 @@ export const WalletTopology: React.FC<WalletTopologyProps> = ({
       <div className="flex-1 overflow-y-auto min-h-0">
         <div className="text-[0.7rem] uppercase text-[#666] border-b border-[#222] pb-1 mb-2 flex justify-between">
           <span>Top Holders</span>
-          {totalHolders && <span className="text-[#00bcd4]">{totalHolders.toLocaleString()} total</span>}
+          {totalHolders && <span className="text-[#DC2626]">{totalHolders.toLocaleString()} total</span>}
         </div>
 
         <div className="space-y-2">
@@ -195,7 +191,7 @@ export const WalletTopology: React.FC<WalletTopologyProps> = ({
                   </div>
                 )}
               </div>
-              <div className={`font-bold ${holder.percent > 10 ? 'text-[#ff4444]' : holder.percent > 5 ? 'text-[#F59E0B]' : 'text-[#d1d1d1]'}`}>
+              <div className={`font-bold ${holder.percent > 10 ? 'text-[#EF4444]' : holder.percent > 5 ? 'text-[#F59E0B]' : 'text-[#d1d1d1]'}`}>
                 {holder.percent.toFixed(1)}%
               </div>
             </div>
@@ -217,7 +213,7 @@ export const WalletTopology: React.FC<WalletTopologyProps> = ({
         <div className="font-mono text-[0.7rem] text-[#aaa] leading-relaxed">
           <div className="flex justify-between">
             <span>Top 1-10:</span>
-            <span className={top10Percent && top10Percent > 50 ? 'text-[#ff4444]' : 'text-[#d1d1d1]'}>
+            <span className={top10Percent && top10Percent > 50 ? 'text-[#EF4444]' : 'text-[#d1d1d1]'}>
               {top10Percent !== undefined ? `${top10Percent.toFixed(1)}%` : '---'}
             </span>
           </div>
@@ -239,7 +235,7 @@ export const WalletTopology: React.FC<WalletTopologyProps> = ({
         {top10Percent !== undefined && (
           <div className="mt-3 h-2 bg-[#1a1a1a] rounded overflow-hidden flex">
             <div
-              className="h-full bg-[#ff4444]"
+              className="h-full bg-[#EF4444]"
               style={{ width: `${top10Percent}%` }}
               title={`Top 10: ${top10Percent.toFixed(1)}%`}
             />
@@ -249,7 +245,7 @@ export const WalletTopology: React.FC<WalletTopologyProps> = ({
               title={`Top 11-100: ${((top100Percent || 0) - top10Percent).toFixed(1)}%`}
             />
             <div
-              className="h-full bg-[#00e676]"
+              className="h-full bg-[#22C55E]"
               style={{ width: `${retailPercent || 0}%` }}
               title={`Retail: ${retailPercent?.toFixed(1)}%`}
             />
@@ -265,12 +261,12 @@ function getTagStyle(tag: string): string {
     case 'DEV':
       return 'bg-[rgba(187,134,252,0.2)] text-[#bb86fc] border border-[#bb86fc]';
     case 'SNIPER':
-      return 'bg-[rgba(255,68,68,0.2)] text-[#ff4444] border border-[#ff4444]';
+      return 'bg-[rgba(239,68,68,0.2)] text-[#EF4444] border border-[#EF4444]';
     case 'BUNDLE':
       return 'bg-[rgba(245,158,11,0.2)] text-[#F59E0B] border border-[#F59E0B]';
     case 'DEX':
     case 'LP':
-      return 'bg-[rgba(0,230,118,0.2)] text-[#00e676] border border-[#00e676]';
+      return 'bg-[rgba(34,197,94,0.2)] text-[#22C55E] border border-[#22C55E]';
     case 'BURN':
       return 'bg-[rgba(136,136,136,0.2)] text-[#888] border border-[#888]';
     default:

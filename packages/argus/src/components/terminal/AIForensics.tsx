@@ -299,15 +299,15 @@ const RiskBreakdown: React.FC<{ data: ForensicsData; mcLiqRatio: number | null }
     <div className="mb-4 space-y-3">
       {/* Risk Factors */}
       {risks.length > 0 && (
-        <div className="bg-[rgba(255,68,68,0.08)] border border-[#ff4444]/30 rounded p-3">
-          <div className="text-[0.7rem] uppercase text-[#ff4444] font-bold mb-2 flex items-center gap-1">
+        <div className="bg-[rgba(255,68,68,0.08)] border border-[#EF4444]/30 rounded p-3">
+          <div className="text-[0.7rem] uppercase text-[#EF4444] font-bold mb-2 flex items-center gap-1">
             <span>Risk Factors</span>
-            <span className="bg-[#ff4444] text-black px-1.5 py-0.5 rounded text-[0.6rem]">{risks.length}</span>
+            <span className="bg-[#EF4444] text-black px-1.5 py-0.5 rounded text-[0.6rem]">{risks.length}</span>
           </div>
           <ul className="space-y-1">
             {risks.map((risk, i) => (
               <li key={i} className="text-[0.75rem] text-[#ffaaaa] flex items-start gap-2">
-                <span className="text-[#ff4444] mt-0.5">•</span>
+                <span className="text-[#EF4444] mt-0.5">•</span>
                 <span>{risk}</span>
               </li>
             ))}
@@ -317,15 +317,15 @@ const RiskBreakdown: React.FC<{ data: ForensicsData; mcLiqRatio: number | null }
 
       {/* Positive Factors */}
       {positives.length > 0 && (
-        <div className="bg-[rgba(0,230,118,0.08)] border border-[#00e676]/30 rounded p-3">
-          <div className="text-[0.7rem] uppercase text-[#00e676] font-bold mb-2 flex items-center gap-1">
+        <div className="bg-[rgba(0,230,118,0.08)] border border-[#22C55E]/30 rounded p-3">
+          <div className="text-[0.7rem] uppercase text-[#22C55E] font-bold mb-2 flex items-center gap-1">
             <span>Positive Factors</span>
-            <span className="bg-[#00e676] text-black px-1.5 py-0.5 rounded text-[0.6rem]">{positives.length}</span>
+            <span className="bg-[#22C55E] text-black px-1.5 py-0.5 rounded text-[0.6rem]">{positives.length}</span>
           </div>
           <ul className="space-y-1">
             {positives.map((pos, i) => (
               <li key={i} className="text-[0.75rem] text-[#aaffcc] flex items-start gap-2">
-                <span className="text-[#00e676] mt-0.5">✓</span>
+                <span className="text-[#22C55E] mt-0.5">✓</span>
                 <span>{pos}</span>
               </li>
             ))}
@@ -345,18 +345,18 @@ const TradingRecommendation: React.FC<{ score: number }> = ({ score }) => {
       level: 'LOW RISK',
       title: 'Standard Position',
       advice: 'Lower risk profile. Standard position sizing appropriate. Monitor for changes in holder distribution.',
-      color: 'text-[#00e676]',
+      color: 'text-[#22C55E]',
       bgColor: 'bg-[rgba(0,230,118,0.1)]',
-      borderColor: 'border-[#00e676]',
+      borderColor: 'border-[#22C55E]',
     };
   } else if (score >= 60) {
     recommendation = {
       level: 'MODERATE RISK',
       title: 'Reduced Position',
       advice: 'Consider reduced position size. Set stop-loss at 15-20%. Watch for bundle wallet sells.',
-      color: 'text-[#00e676]',
+      color: 'text-[#22C55E]',
       bgColor: 'bg-[rgba(0,230,118,0.08)]',
-      borderColor: 'border-[#00e676]/50',
+      borderColor: 'border-[#22C55E]/50',
     };
   } else if (score >= 40) {
     recommendation = {
@@ -372,18 +372,18 @@ const TradingRecommendation: React.FC<{ score: number }> = ({ score }) => {
       level: 'VERY HIGH RISK',
       title: 'Avoid or Minimal',
       advice: 'Significant red flags detected. Avoid or use only disposable funds. High probability of loss.',
-      color: 'text-[#ff4444]',
+      color: 'text-[#EF4444]',
       bgColor: 'bg-[rgba(255,68,68,0.1)]',
-      borderColor: 'border-[#ff4444]',
+      borderColor: 'border-[#EF4444]',
     };
   } else {
     recommendation = {
       level: 'CRITICAL RISK',
       title: 'Do Not Trade',
       advice: 'Critical risk indicators. Likely scam or rug pull. Do not invest any funds.',
-      color: 'text-[#ff4444]',
+      color: 'text-[#EF4444]',
       bgColor: 'bg-[rgba(255,68,68,0.15)]',
-      borderColor: 'border-[#ff4444]',
+      borderColor: 'border-[#EF4444]',
     };
   }
 
@@ -410,11 +410,11 @@ const TradingRecommendation: React.FC<{ score: number }> = ({ score }) => {
 function getBorderColor(risk: string): string {
   switch (risk) {
     case 'safe':
-      return 'border-[#00e676]';
+      return 'border-[#22C55E]';
     case 'warning':
       return 'border-[#F59E0B]';
     case 'danger':
-      return 'border-[#ff4444]';
+      return 'border-[#EF4444]';
     default:
       return 'border-[#333]';
   }
@@ -423,11 +423,11 @@ function getBorderColor(risk: string): string {
 function getTextColor(risk: string): string {
   switch (risk) {
     case 'safe':
-      return 'text-[#00e676]';
+      return 'text-[#22C55E]';
     case 'warning':
       return 'text-[#F59E0B]';
     case 'danger':
-      return 'text-[#ff4444]';
+      return 'text-[#EF4444]';
     default:
       return 'text-[#d1d1d1]';
   }

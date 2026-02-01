@@ -289,46 +289,123 @@ export class AnalystAgent extends BaseAgent {
   }
 
   /**
-   * Get full token data (simulated - in production calls Sentinel API)
+   * Get full token data using real on-chain queries
    */
   private async getFullTokenData(params: { token: string }): Promise<any> {
-    // In production, this calls our Sentinel API
-    return {
-      token: params.token,
-      name: 'Test Token',
-      symbol: 'TEST',
-      supply: 1000000000,
-      holders: this.generateSimulatedHolders(),
-      creator: 'SIMULATED_CREATOR',
-      liquidity: Math.random() * 50000,
-      marketCap: Math.random() * 100000,
-      age: Math.random() * 24
-    };
+    const { token } = params;
+
+    try {
+      // Fetch token metadata
+      const tokenData = await this.onChainTools.getTokenData(token);
+
+      // Fetch holders
+      const holders = await this.onChainTools.getHolders(token, 50);
+
+      // Get token creator
+      const creator = await this.onChainTools.getTokenCreator(token);
+
+      // Get LP pool info
+      const lpPool = await this.onChainTools.getLPPool(token);
+
+      // Calculate age in hours
+      const ageHours = tokenData?.createdAt
+        ? (Date.now() - tokenData.createdAt) / (1000 * 60 * 60)
+        : 0;
+
+      return {
+        token,
+        name: tokenData?.name || 'Unknown',
+        symbol: tokenData?.symbol || '???',
+        supply: tokenData?.supply || 0,
+        decimals: tokenData?.decimals || 9,
+        mintAuthority: tokenData?.mintAuthority,
+        freezeAuthority: tokenData?.freezeAuthority,
+        holders: holders.map(h => ({
+          address: h.address,
+          percent: h.percent,
+          isLP: h.isLP
+        })),
+        creator: creator || tokenData?.creator || 'unknown',
+        liquidity: lpPool?.liquidity || 0,
+        lpLocked: lpPool?.lpLocked || false,
+        lpBurned: lpPool?.lpBurned || false,
+        age: ageHours
+      };
+    } catch (error) {
+      console.error('[AnalystAgent] Error fetching token data:', error);
+      // Return minimal data on error
+      return {
+        token,
+        name: 'Unknown',
+        symbol: '???',
+        supply: 0,
+        holders: [],
+        creator: 'unknown',
+        liquidity: 0,
+        age: 0
+      };
+    }
   }
 
   /**
-   * Analyze bundle/coordination patterns
+   * Analyze bundle/coordination patterns using real holder data
    */
-  private async analyzeBundles(_params: { token: string; holders: any[] }): Promise<{
+  private async analyzeBundles(params: { token: string; holders: any[] }): Promise<{
     detected: boolean;
     count: number;
     controlPercent: number;
     wallets: string[];
     assessment: string;
   }> {
-    // Simulate bundle detection
-    const detected = Math.random() > 0.5;
-    const count = detected ? Math.floor(Math.random() * 20) + 3 : 0;
-    const controlPercent = detected ? Math.random() * 40 : 0;
+    const { holders } = params;
+
+    // Filter out LP and known program accounts
+    const suspiciousHolders = holders.filter(h => !h.isLP && h.percent > 0.5);
+
+    // Group by similar percentages (potential coordinated buyers)
+    const percentGroups: Map<number, string[]> = new Map();
+    for (const holder of suspiciousHolders) {
+      // Round to nearest 0.1%
+      const roundedPercent = Math.round(holder.percent * 10) / 10;
+      if (!percentGroups.has(roundedPercent)) {
+        percentGroups.set(roundedPercent, []);
+      }
+      percentGroups.get(roundedPercent)!.push(holder.address);
+    }
+
+    // Find groups with 3+ wallets at same percentage (likely bundle)
+    const bundleWallets: string[] = [];
+    for (const [, wallets] of percentGroups) {
+      if (wallets.length >= 3) {
+        bundleWallets.push(...wallets);
+      }
+    }
+
+    const detected = bundleWallets.length >= 3;
+    const count = bundleWallets.length;
+    const controlPercent = detected
+      ? suspiciousHolders
+          .filter(h => bundleWallets.includes(h.address))
+          .reduce((sum, h) => sum + h.percent, 0)
+      : 0;
+
+    let assessment = 'LIKELY_LEGIT';
+    if (detected) {
+      if (controlPercent > 30) {
+        assessment = 'VERY_SUSPICIOUS';
+      } else if (controlPercent > 15) {
+        assessment = 'SUSPICIOUS';
+      } else {
+        assessment = 'MINOR_COORDINATION';
+      }
+    }
 
     return {
       detected,
       count,
       controlPercent,
-      wallets: detected ? ['wallet1...', 'wallet2...', 'wallet3...'] : [],
-      assessment: detected
-        ? controlPercent > 30 ? 'VERY_SUSPICIOUS' : 'SUSPICIOUS'
-        : 'LIKELY_LEGIT'
+      wallets: bundleWallets.slice(0, 10), // Limit to top 10
+      assessment
     };
   }
 
@@ -356,23 +433,49 @@ export class AnalystAgent extends BaseAgent {
   }
 
   /**
-   * Check creator wallet history
+   * Check creator wallet history using real on-chain data
    */
-  private async checkCreatorHistory(_params: { creator: string }): Promise<{
+  private async checkCreatorHistory(params: { creator: string }): Promise<{
     walletAge: number;
     tokensCreated: number;
     rugCount: number;
     ruggedTokens: string[];
   }> {
-    // Simulate creator history check
-    const rugCount = Math.random() > 0.9 ? Math.floor(Math.random() * 3) + 1 : 0;
+    const { creator } = params;
 
-    return {
-      walletAge: Math.floor(Math.random() * 365),
-      tokensCreated: Math.floor(Math.random() * 10) + 1,
-      rugCount,
-      ruggedTokens: rugCount > 0 ? ['RUGGED1', 'RUGGED2'] : []
-    };
+    try {
+      // Profile the wallet
+      const profile = await this.onChainTools.profileWallet(creator);
+
+      if (!profile) {
+        return {
+          walletAge: 0,
+          tokensCreated: 0,
+          rugCount: 0,
+          ruggedTokens: []
+        };
+      }
+
+      // Note: rugCount would need a database of known rugged tokens
+      // For now, we detect based on patterns (many tokens created = suspicious)
+      const suspiciousThreshold = 5;
+      const likelyRugger = profile.tokensHeld > suspiciousThreshold;
+
+      return {
+        walletAge: profile.age,
+        tokensCreated: profile.tokensHeld, // Approximation
+        rugCount: likelyRugger ? 1 : 0, // Conservative estimate
+        ruggedTokens: [] // Would need historical database
+      };
+    } catch (error) {
+      console.error('[AnalystAgent] Error checking creator history:', error);
+      return {
+        walletAge: 0,
+        tokensCreated: 0,
+        rugCount: 0,
+        ruggedTokens: []
+      };
+    }
   }
 
   /**

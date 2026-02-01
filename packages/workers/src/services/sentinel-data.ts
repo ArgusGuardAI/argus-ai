@@ -462,7 +462,9 @@ export function createSentinelDataFetcher(env: {
   ALCHEMY_RPC_URL?: string;
   TRITON_RPC_URL?: string;
 }): SentinelDataFetcher {
-  const mode = (env.DATA_PROVIDER_MODE || 'ON_CHAIN') as DataProviderMode;
+  // Default to HYBRID mode - on-chain data with DexScreener fallback for name/price
+  // This prevents missing data when Metaplex rate limits or tokens aren't on Pumpfun
+  const mode = (env.DATA_PROVIDER_MODE || 'HYBRID') as DataProviderMode;
 
   // Use multi-RPC client with automatic failover
   const multiRpcClient = createSolanaRpcClientFromEnv(env);

@@ -11,6 +11,7 @@
 
 import { BaseAgent, AgentConfig } from '../core/BaseAgent';
 import { MessageBus } from '../core/MessageBus';
+import { OnChainTools } from '../tools/OnChainTools';
 
 export interface ScammerProfile {
   wallet: string;
@@ -30,8 +31,10 @@ export class HunterAgent extends BaseAgent {
   private scammerProfiles: Map<string, ScammerProfile> = new Map();
   private watchlist: Set<string> = new Set();
   private walletNetwork: Map<string, Set<string>> = new Map(); // wallet -> connected wallets
+  private onChainTools: OnChainTools;
+  private rpcEndpoint: string;
 
-  constructor(messageBus: MessageBus, options: { name?: string } = {}) {
+  constructor(messageBus: MessageBus, options: { name?: string; rpcEndpoint?: string } = {}) {
     const config: AgentConfig = {
       name: options.name || 'hunter-1',
       role: 'Hunter - Track scammer networks and repeat offenders',
@@ -74,6 +77,8 @@ export class HunterAgent extends BaseAgent {
     };
 
     super(config, messageBus);
+    this.rpcEndpoint = options.rpcEndpoint || process.env.RPC_ENDPOINT || 'https://api.mainnet-beta.solana.com';
+    this.onChainTools = new OnChainTools({ rpcEndpoint: this.rpcEndpoint });
   }
 
   protected async onInitialize(): Promise<void> {
@@ -186,22 +191,54 @@ export class HunterAgent extends BaseAgent {
   }
 
   /**
-   * Build comprehensive wallet profile
+   * Build comprehensive wallet profile using real on-chain data
    */
   private async profileWallet(params: { wallet: string }): Promise<any> {
     const { wallet } = params;
 
-    // In production, this queries blockchain for full history
-    // Simulated for now
-    return {
-      wallet,
-      age: Math.floor(Math.random() * 365),
-      transactionCount: Math.floor(Math.random() * 1000),
-      tokensCreated: Math.floor(Math.random() * 10),
-      connections: [`connected_${Math.random().toString(36).slice(2, 10)}`],
-      balanceHistory: [],
-      tradingPattern: 'UNKNOWN'
-    };
+    try {
+      const profile = await this.onChainTools.profileWallet(wallet);
+
+      if (!profile) {
+        return {
+          wallet,
+          age: 0,
+          transactionCount: 0,
+          tokensCreated: 0,
+          connections: [],
+          balanceHistory: [],
+          tradingPattern: 'UNKNOWN'
+        };
+      }
+
+      // Get SOL balance
+      const balance = await this.onChainTools.getBalance(wallet);
+
+      return {
+        wallet,
+        age: profile.age,
+        transactionCount: profile.transactionCount,
+        tokensCreated: profile.tokensHeld, // Approximation
+        tokensHeld: profile.tokensHeld,
+        balance,
+        lastActive: profile.lastActive,
+        connections: [], // Would need transaction analysis
+        balanceHistory: [],
+        tradingPattern: profile.transactionCount > 500 ? 'ACTIVE' :
+                       profile.transactionCount > 100 ? 'MODERATE' : 'LIGHT'
+      };
+    } catch (error) {
+      console.error('[HunterAgent] Error profiling wallet:', error);
+      return {
+        wallet,
+        age: 0,
+        transactionCount: 0,
+        tokensCreated: 0,
+        connections: [],
+        balanceHistory: [],
+        tradingPattern: 'UNKNOWN'
+      };
+    }
   }
 
   /**

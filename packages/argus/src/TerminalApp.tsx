@@ -94,11 +94,24 @@ export default function TerminalApp() {
   const [showKey, setShowKey] = useState(false);
   const [keyCopied, setKeyCopied] = useState(false);
 
-  // Check if backup was already confirmed
+  // Settings modal state
+  const [showSettings, setShowSettings] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<'wallet' | 'import'>('wallet');
+  const [importKey, setImportKey] = useState('');
+  const [showExportKey, setShowExportKey] = useState(false);
+  const [exportedKey, setExportedKey] = useState('');
+  const [walletName, setWalletName] = useState('Trading Wallet');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  // Check if backup was already confirmed and load wallet name
   useEffect(() => {
     const confirmed = localStorage.getItem('argus_wallet_backup_confirmed');
     if (confirmed === 'true') {
       setBackupConfirmed(true);
+    }
+    const savedName = localStorage.getItem('argus_trading_wallet_name');
+    if (savedName) {
+      setWalletName(savedName);
     }
   }, []);
 
@@ -135,6 +148,46 @@ export default function TerminalApp() {
       await navigator.clipboard.writeText(newWalletKey);
       setKeyCopied(true);
     }
+  };
+
+  // Settings handlers
+  const handleCreateWallet = async () => {
+    await autoTrade.generateWallet();
+    setShowSettings(false);
+  };
+
+  const handleExportKey = async () => {
+    const key = await autoTrade.exportPrivateKey();
+    if (key) {
+      setExportedKey(key);
+      setShowExportKey(true);
+    }
+  };
+
+  const handleImportWallet = async () => {
+    if (!importKey.trim()) return;
+    try {
+      await autoTrade.importWallet(importKey.trim());
+      setImportKey('');
+      setSettingsTab('wallet');
+      log('Wallet imported successfully', 'success');
+    } catch (error) {
+      log('Failed to import wallet - invalid key', 'error');
+    }
+  };
+
+  const handleDeleteWallet = async () => {
+    await autoTrade.deleteWallet();
+    setShowDeleteConfirm(false);
+    setShowSettings(false);
+    localStorage.removeItem('argus_wallet_backup_confirmed');
+    setBackupConfirmed(false);
+  };
+
+  const handleSaveWalletName = (name: string) => {
+    setWalletName(name);
+    localStorage.setItem('argus_trading_wallet_name', name);
+    autoTrade.setWalletName(name);
   };
 
   // Analyze token and return result in Terminal format
@@ -377,6 +430,7 @@ export default function TerminalApp() {
         onBuy={autoTrade.wallet.isLoaded ? handleBuy : undefined}
         onSell={autoTrade.wallet.isLoaded ? handleSell : undefined}
         hasPosition={currentHasPosition}
+        onSettingsClick={() => setShowSettings(true)}
       />
 
       {/* Backup Modal */}
@@ -433,6 +487,200 @@ export default function TerminalApp() {
             <p className="text-[#555] text-xs text-center mt-4">
               You must copy the key before confirming
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Settings Modal */}
+      {showSettings && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4">
+          <div className="bg-[#0a0a0a] border border-[#333] rounded-lg max-w-md w-full overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[#222]">
+              <h2 className="text-lg font-bold text-[#FAFAFA]">Settings</h2>
+              <button
+                onClick={() => {
+                  setShowSettings(false);
+                  setShowExportKey(false);
+                  setShowDeleteConfirm(false);
+                }}
+                className="p-1 hover:bg-[#222] rounded transition-colors"
+              >
+                <svg className="w-5 h-5 text-[#666]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Tabs */}
+            <div className="flex border-b border-[#222]">
+              <button
+                onClick={() => setSettingsTab('wallet')}
+                className={`flex-1 py-2 text-sm font-mono transition-colors ${
+                  settingsTab === 'wallet'
+                    ? 'text-[#DC2626] border-b-2 border-[#DC2626]'
+                    : 'text-[#666] hover:text-[#888]'
+                }`}
+              >
+                WALLET
+              </button>
+              <button
+                onClick={() => setSettingsTab('import')}
+                className={`flex-1 py-2 text-sm font-mono transition-colors ${
+                  settingsTab === 'import'
+                    ? 'text-[#DC2626] border-b-2 border-[#DC2626]'
+                    : 'text-[#666] hover:text-[#888]'
+                }`}
+              >
+                IMPORT
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-4">
+              {settingsTab === 'wallet' ? (
+                autoTrade.wallet.isLoaded ? (
+                  <div className="space-y-4">
+                    {/* Wallet Info */}
+                    <div>
+                      <label className="text-xs text-[#666] uppercase">Wallet Name</label>
+                      <input
+                        type="text"
+                        value={walletName}
+                        onChange={(e) => handleSaveWalletName(e.target.value)}
+                        className="w-full mt-1 px-3 py-2 bg-[#111] border border-[#333] rounded text-[#FAFAFA] font-mono text-sm focus:outline-none focus:border-[#DC2626]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs text-[#666] uppercase">Address</label>
+                      <div className="flex items-center gap-2 mt-1">
+                        <code className="flex-1 px-3 py-2 bg-[#111] border border-[#333] rounded text-[#888] text-xs truncate">
+                          {autoTrade.wallet.address}
+                        </code>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(autoTrade.wallet.address || '');
+                          }}
+                          className="p-2 bg-[#111] border border-[#333] rounded hover:border-[#DC2626] transition-colors"
+                        >
+                          <svg className="w-4 h-4 text-[#888]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-xs text-[#666] uppercase">Balance</label>
+                      <div className="mt-1 px-3 py-2 bg-[#111] border border-[#333] rounded text-[#22C55E] font-mono font-bold">
+                        {autoTrade.wallet.balance.toFixed(4)} SOL
+                      </div>
+                    </div>
+
+                    {/* Export Key */}
+                    {showExportKey ? (
+                      <div className="bg-[#1a0a0a] border border-[#DC2626]/30 rounded p-3">
+                        <label className="text-xs text-[#DC2626] uppercase">Private Key (Keep Secret!)</label>
+                        <code className="block mt-2 text-xs text-[#FAFAFA] font-mono break-all bg-black p-2 rounded">
+                          {exportedKey}
+                        </code>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(exportedKey);
+                          }}
+                          className="mt-2 w-full py-2 bg-[#DC2626] text-white text-sm font-mono rounded hover:bg-[#b91c1c] transition-colors"
+                        >
+                          COPY KEY
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={handleExportKey}
+                        className="w-full py-2 bg-[#222] text-[#888] text-sm font-mono rounded hover:bg-[#333] hover:text-[#FAFAFA] transition-colors"
+                      >
+                        EXPORT PRIVATE KEY
+                      </button>
+                    )}
+
+                    {/* Delete Wallet */}
+                    {showDeleteConfirm ? (
+                      <div className="bg-[#1a0a0a] border border-[#DC2626]/30 rounded p-3">
+                        <p className="text-[#DC2626] text-sm mb-3">
+                          Are you sure? This will permanently delete your wallet. Make sure you have backed up your private key!
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setShowDeleteConfirm(false)}
+                            className="flex-1 py-2 bg-[#222] text-[#888] text-sm font-mono rounded hover:bg-[#333]"
+                          >
+                            CANCEL
+                          </button>
+                          <button
+                            onClick={handleDeleteWallet}
+                            className="flex-1 py-2 bg-[#DC2626] text-white text-sm font-mono rounded hover:bg-[#b91c1c]"
+                          >
+                            DELETE
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setShowDeleteConfirm(true)}
+                        className="w-full py-2 border border-[#DC2626]/30 text-[#DC2626] text-sm font-mono rounded hover:bg-[#DC2626]/10 transition-colors"
+                      >
+                        DELETE WALLET
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  /* No Wallet - Create */
+                  <div className="text-center py-6">
+                    <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[#111] border border-[#333] flex items-center justify-center">
+                      <svg className="w-8 h-8 text-[#DC2626]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-bold text-[#FAFAFA] mb-2">No Wallet</h3>
+                    <p className="text-[#666] text-sm mb-6">
+                      Create a trading wallet to analyze tokens and execute trades.
+                    </p>
+                    <button
+                      onClick={handleCreateWallet}
+                      className="w-full py-3 bg-[#DC2626] text-white font-mono font-bold rounded hover:bg-[#b91c1c] transition-colors"
+                    >
+                      CREATE WALLET
+                    </button>
+                  </div>
+                )
+              ) : (
+                /* Import Tab */
+                <div className="space-y-4">
+                  <p className="text-[#888] text-sm">
+                    Import an existing wallet by pasting your private key below.
+                  </p>
+                  <div>
+                    <label className="text-xs text-[#666] uppercase">Private Key</label>
+                    <textarea
+                      value={importKey}
+                      onChange={(e) => setImportKey(e.target.value)}
+                      placeholder="Paste your private key here..."
+                      className="w-full mt-1 px-3 py-2 bg-[#111] border border-[#333] rounded text-[#FAFAFA] font-mono text-sm focus:outline-none focus:border-[#DC2626] resize-none h-24"
+                    />
+                  </div>
+                  <button
+                    onClick={handleImportWallet}
+                    disabled={!importKey.trim()}
+                    className="w-full py-3 bg-[#DC2626] text-white font-mono font-bold rounded hover:bg-[#b91c1c] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    IMPORT WALLET
+                  </button>
+                  <p className="text-[#555] text-xs text-center">
+                    Warning: Importing will replace your current wallet if one exists.
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

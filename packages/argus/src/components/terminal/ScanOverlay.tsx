@@ -115,10 +115,10 @@ export const ScanOverlay: React.FC<ScanOverlayProps> = ({
 
         {/* Agent status during scan */}
         <div className="mt-6 text-[0.7rem] text-[#555] font-mono space-y-1">
-          <div className={stage !== 'connecting' ? 'text-[#00e676]' : 'animate-pulse'}>
+          <div className={stage !== 'connecting' ? 'text-[#DC2626]' : 'animate-pulse'}>
             [SCOUT] {stage === 'connecting' ? 'Initializing...' : 'Connected'}
           </div>
-          <div className={stage === 'fetching' || stage === 'analyzing' || stage === 'complete' ? 'text-[#00e676]' : 'text-[#333]'}>
+          <div className={stage === 'fetching' || stage === 'analyzing' || stage === 'complete' ? 'text-[#DC2626]' : 'text-[#333]'}>
             [ANALYST] {stage === 'fetching' ? 'Fetching data...' : stage === 'analyzing' || stage === 'complete' ? 'Analysis running' : 'Standby'}
           </div>
           <div className={stage === 'analyzing' || stage === 'complete' ? 'text-[#F59E0B]' : 'text-[#333]'}>

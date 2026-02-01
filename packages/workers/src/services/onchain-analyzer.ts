@@ -16,6 +16,7 @@ import { getSolPrice, getTokenPrice, calculatePriceFromPool, calculateLiquidity 
 import { findAllPools, type PoolInfo } from './dex-pools';
 import { fetchTokenMetadata } from './metaplex';
 import { isPumpfunToken, fetchPumpfunMetadata, getPumpfunPoolInfo } from './pumpfun';
+import { fetchDexScreenerData } from './dexscreener';
 
 // ============================================
 // INTERFACES
@@ -286,15 +287,37 @@ export class OnChainAnalyzer {
 
     const info = mintData?.parsed?.info || {};
 
-    // Use Pumpfun data if available, otherwise Metaplex, otherwise defaults
-    const name = pumpfunData?.name || metaplexData?.name || 'Unknown';
-    const symbol = pumpfunData?.symbol || metaplexData?.symbol || '???';
-    const updateAuthority = pumpfunData?.creator || metaplexData?.updateAuthority || null;
+    // Determine name/symbol with multiple fallbacks:
+    // 1. Pumpfun data (if available)
+    // 2. Metaplex data (on-chain metadata)
+    // 3. DexScreener data (API fallback when Metaplex fails due to rate limits)
+    // 4. Defaults
+    let name = pumpfunData?.name || metaplexData?.name;
+    let symbol = pumpfunData?.symbol || metaplexData?.symbol;
+    let updateAuthority = pumpfunData?.creator || metaplexData?.updateAuthority || null;
+
+    // Fallback to DexScreener if name/symbol not found (e.g., Metaplex rate limited)
+    if (!name || name === 'Unknown' || !symbol || symbol === '???') {
+      try {
+        const dexData = await fetchDexScreenerData(mint);
+        if (dexData) {
+          if (!name || name === 'Unknown') {
+            name = dexData.name || 'Unknown';
+          }
+          if (!symbol || symbol === '???') {
+            symbol = dexData.symbol || '???';
+          }
+          console.log(`[OnChain] Used DexScreener fallback for metadata: ${name} (${symbol})`);
+        }
+      } catch (err) {
+        console.warn('[OnChain] DexScreener fallback failed:', err);
+      }
+    }
 
     return {
       mint,
-      name,
-      symbol,
+      name: name || 'Unknown',
+      symbol: symbol || '???',
       decimals,
       supply,
       mintAuthority: info.mintAuthority || null,

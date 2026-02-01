@@ -803,13 +803,37 @@ function applyHardcodedRules(
   }
 
   // ============================================
-  // RULE 4: AUTHORITY RISKS
+  // RULE 4: AUTHORITY RISKS (CRITICAL RED FLAGS)
+  // Mint/Freeze authority = creator can rug at any time
+  // These are deal-breakers that cap max safety score
   // ============================================
-  if (tokenInfo.mintAuthorityActive) {
-    if (adjustedScore < 50) adjustedScore = 50;
-  }
-  if (tokenInfo.freezeAuthorityActive) {
-    if (adjustedScore < 55) adjustedScore = 55;
+  const hasMintAuth = tokenInfo.mintAuthorityActive;
+  const hasFreezeAuth = tokenInfo.freezeAuthorityActive;
+
+  if (hasMintAuth && hasFreezeAuth) {
+    // BOTH active = maximum danger, cap at 75 risk (25 safety)
+    if (adjustedScore < 75) adjustedScore = 75;
+    additionalFlags.push({
+      type: 'SECURITY',
+      severity: 'CRITICAL',
+      message: 'Both mint AND freeze authority active - creator has full control, extreme rug risk',
+    });
+  } else if (hasFreezeAuth) {
+    // Freeze alone is worse than mint - can trap your funds
+    if (adjustedScore < 70) adjustedScore = 70;
+    additionalFlags.push({
+      type: 'SECURITY',
+      severity: 'CRITICAL',
+      message: 'Freeze authority active - creator can freeze your wallet and prevent selling',
+    });
+  } else if (hasMintAuth) {
+    // Mint authority = can dilute supply
+    if (adjustedScore < 65) adjustedScore = 65;
+    additionalFlags.push({
+      type: 'SECURITY',
+      severity: 'HIGH',
+      message: 'Mint authority active - creator can mint unlimited tokens and dump',
+    });
   }
 
   // ============================================

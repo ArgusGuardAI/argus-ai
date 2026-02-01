@@ -40,7 +40,7 @@ export const VolumeChart: React.FC<VolumeChartProps> = ({
       >
         {chartData.map((value, idx) => {
           const heightPercent = (value / maxValue) * 100;
-          const color = heightPercent > 70 ? '#ff4444' : heightPercent < 30 ? '#00e676' : '#00bcd4';
+          const color = heightPercent > 70 ? '#EF4444' : heightPercent < 30 ? '#22C55E' : '#DC2626';
 
           return (
             <div
@@ -70,15 +70,15 @@ export const VolumeChart: React.FC<VolumeChartProps> = ({
       {/* Legend */}
       <div className="flex gap-4 mt-2 text-[0.65rem] text-[#666]">
         <div className="flex items-center gap-1">
-          <div className="w-2 h-2 bg-[#ff4444] rounded-sm" />
+          <div className="w-2 h-2 bg-[#EF4444] rounded-sm" />
           <span>High Volume</span>
         </div>
         <div className="flex items-center gap-1">
-          <div className="w-2 h-2 bg-[#00bcd4] rounded-sm" />
+          <div className="w-2 h-2 bg-[#DC2626] rounded-sm" />
           <span>Normal</span>
         </div>
         <div className="flex items-center gap-1">
-          <div className="w-2 h-2 bg-[#00e676] rounded-sm" />
+          <div className="w-2 h-2 bg-[#22C55E] rounded-sm" />
           <span>Low Volume</span>
         </div>
       </div>

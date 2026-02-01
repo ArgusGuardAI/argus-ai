@@ -29,7 +29,7 @@ export interface ActivityEvent {
   id: string;
   timestamp: number;
   agent: string;
-  type: 'scan' | 'alert' | 'analysis' | 'trade' | 'discovery';
+  type: 'scan' | 'alert' | 'analysis' | 'trade' | 'discovery' | 'comms';
   message: string;
   severity: 'info' | 'warning' | 'critical';
   data?: {
@@ -37,6 +37,8 @@ export interface ActivityEvent {
     tokenSymbol?: string;
     score?: number;
     walletAddress?: string;
+    targetAgent?: string;
+    requestType?: string;
   };
 }
 
@@ -145,6 +147,7 @@ export function useAgentStatus(options: UseAgentStatusOptions = {}): UseAgentSta
   const lastEventIdRef = useRef<string>('');
   const seenEventIdsRef = useRef<Set<string>>(new Set());
   const mountedRef = useRef(true);
+  const clearedAtRef = useRef<number>(0); // Track when user cleared the feed
 
   // Fetch agent status
   const fetchStatus = useCallback(async () => {
@@ -183,8 +186,10 @@ export function useAgentStatus(options: UseAgentStatusOptions = {}): UseAgentSta
 
       const data: ActivityFeedResponse = await response.json();
       if (mountedRef.current && data.events.length > 0) {
-        // Deduplicate events
-        const newEvents = data.events.filter(e => !seenEventIdsRef.current.has(e.id));
+        // Filter out events before user cleared, then deduplicate
+        const newEvents = data.events
+          .filter(e => e.timestamp > clearedAtRef.current)
+          .filter(e => !seenEventIdsRef.current.has(e.id));
 
         if (newEvents.length > 0) {
           // Track seen events
@@ -252,11 +257,12 @@ export function useAgentStatus(options: UseAgentStatusOptions = {}): UseAgentSta
     setIsLoading(false);
   }, [fetchStatus, fetchActivity, fetchStats, fetchGraduations]);
 
-  // Clear activity
+  // Clear activity - sets a timestamp so old events won't reappear
   const clearActivity = useCallback(() => {
     setActivity([]);
     seenEventIdsRef.current.clear();
     lastEventIdRef.current = '';
+    clearedAtRef.current = Date.now();
   }, []);
 
   // Initial fetch

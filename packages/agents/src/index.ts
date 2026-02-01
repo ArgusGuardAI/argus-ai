@@ -68,6 +68,12 @@ export { PatternLibrary } from './learning/PatternLibrary';
 export type { Prediction, Outcome, LearningStats, FeatureImportance } from './learning/OutcomeLearner';
 export type { ScamPattern, PatternMatch, PatternStats } from './learning/PatternLibrary';
 
+// Services - Classes
+export { WorkersSync } from './services/WorkersSync';
+
+// Services - Types
+export type { WorkersSyncConfig } from './services/WorkersSync';
+
 // Re-export convenience function to create and start the system
 export async function createArgusNetwork(config: {
   rpcEndpoint: string;

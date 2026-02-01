@@ -15,6 +15,7 @@ import { AnalystAgent } from '../agents/AnalystAgent';
 import { HunterAgent } from '../agents/HunterAgent';
 import { TraderAgent } from '../agents/TraderAgent';
 import { BaseAgent } from './BaseAgent';
+import { WorkersSync, WorkersSyncConfig } from '../services/WorkersSync';
 
 export interface CoordinatorConfig {
   rpcEndpoint: string;
@@ -25,6 +26,10 @@ export interface CoordinatorConfig {
   enableTrading?: boolean;
   maxDailyTrades?: number;
   maxPositionSize?: number;
+  // Workers sync for dashboard
+  workersUrl?: string;
+  workersApiSecret?: string;
+  enableWorkersSync?: boolean;
 }
 
 export interface SystemStatus {
@@ -55,6 +60,7 @@ export class AgentCoordinator {
   private config: CoordinatorConfig;
   private running: boolean = false;
   private startTime: number = 0;
+  private workersSync: WorkersSync | null = null;
 
   // Agent pools
   private scouts: ScoutAgent[] = [];
@@ -80,11 +86,22 @@ export class AgentCoordinator {
       enableTrading: false,
       maxDailyTrades: 10,
       maxPositionSize: 0.1,
+      enableWorkersSync: true,
       ...config
     };
 
     this.messageBus = new MessageBus();
     this.setupSystemHandlers();
+
+    // Initialize Workers sync if configured
+    if (this.config.enableWorkersSync && this.config.workersUrl) {
+      this.workersSync = new WorkersSync({
+        workersUrl: this.config.workersUrl,
+        apiSecret: this.config.workersApiSecret,
+        enabled: true,
+      });
+      console.log('[Coordinator] Workers sync configured');
+    }
   }
 
   /**
@@ -107,7 +124,8 @@ export class AgentCoordinator {
     // Create analyst agents
     for (let i = 0; i < this.config.analysts!; i++) {
       const analyst = new AnalystAgent(this.messageBus, {
-        name: `analyst-${i + 1}`
+        name: `analyst-${i + 1}`,
+        rpcEndpoint: this.config.rpcEndpoint
       });
       await analyst.initialize();
       this.analysts.push(analyst);
@@ -117,7 +135,8 @@ export class AgentCoordinator {
     // Create hunter agents
     for (let i = 0; i < this.config.hunters!; i++) {
       const hunter = new HunterAgent(this.messageBus, {
-        name: `hunter-${i + 1}`
+        name: `hunter-${i + 1}`,
+        rpcEndpoint: this.config.rpcEndpoint
       });
       await hunter.initialize();
       this.hunters.push(hunter);
@@ -130,7 +149,8 @@ export class AgentCoordinator {
         const trader = new TraderAgent(this.messageBus, {
           name: `trader-${i + 1}`,
           maxPositionSize: this.config.maxPositionSize!,
-          maxDailyTrades: this.config.maxDailyTrades!
+          maxDailyTrades: this.config.maxDailyTrades!,
+          rpcEndpoint: this.config.rpcEndpoint
         });
         await trader.initialize();
         this.traders.push(trader);
@@ -138,6 +158,12 @@ export class AgentCoordinator {
       console.log(`[Coordinator] ${this.traders.length} Trader agents ready`);
     } else {
       console.log('[Coordinator] Trading disabled');
+    }
+
+    // Connect Workers sync to message bus
+    if (this.workersSync) {
+      this.workersSync.connect(this.messageBus);
+      console.log('[Coordinator] Workers sync connected');
     }
 
     console.log('[Coordinator] All agents initialized');
@@ -213,6 +239,11 @@ export class AgentCoordinator {
     }
 
     await Promise.all(stopPromises);
+
+    // Stop Workers sync
+    if (this.workersSync) {
+      this.workersSync.stop();
+    }
 
     this.running = false;
     console.log('[Coordinator] All agents stopped');

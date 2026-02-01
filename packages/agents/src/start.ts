@@ -20,7 +20,11 @@ const config = {
   hunters: parseInt(process.env.HUNTER_COUNT || '1', 10),
   traders: parseInt(process.env.TRADER_COUNT || '1', 10),
   maxDailyTrades: parseInt(process.env.MAX_DAILY_TRADES || '10', 10),
-  maxPositionSize: parseFloat(process.env.MAX_POSITION_SIZE || '0.1')
+  maxPositionSize: parseFloat(process.env.MAX_POSITION_SIZE || '0.1'),
+  // Workers sync for dashboard
+  workersUrl: process.env.WORKERS_API_URL || '',
+  workersApiSecret: process.env.WORKERS_API_SECRET || '',
+  enableWorkersSync: process.env.ENABLE_WORKERS_SYNC !== 'false' && !!process.env.WORKERS_API_URL
 };
 
 async function main() {
@@ -37,13 +41,23 @@ async function main() {
     console.warn('⚠️  WARNING: Using default localhost RPC. Set RPC_ENDPOINT in .env');
   }
 
+  // Check if trading wallet is configured
+  const hasPrivateKey = !!process.env.TRADING_WALLET_PRIVATE_KEY;
+  const tradingMode = config.enableTrading && hasPrivateKey ? 'LIVE' : config.enableTrading ? 'SIMULATION' : 'DISABLED';
+
   console.log('Configuration:');
   console.log(`  RPC Endpoint:    ${config.rpcEndpoint}`);
-  console.log(`  Trading Enabled: ${config.enableTrading}`);
+  console.log(`  Trading Mode:    ${tradingMode}`);
+  if (config.enableTrading) {
+    console.log(`  Max Position:    ${config.maxPositionSize} SOL`);
+    console.log(`  Max Daily Trades: ${config.maxDailyTrades}`);
+    console.log(`  Trade Fee:       0.5% (to Argus wallet)`);
+  }
   console.log(`  Scouts:          ${config.scouts}`);
   console.log(`  Analysts:        ${config.analysts}`);
   console.log(`  Hunters:         ${config.hunters}`);
   console.log(`  Traders:         ${config.traders}`);
+  console.log(`  Workers Sync:    ${config.enableWorkersSync ? config.workersUrl : 'Disabled'}`);
   console.log('');
 
   try {

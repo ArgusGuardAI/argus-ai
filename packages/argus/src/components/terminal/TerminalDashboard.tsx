@@ -63,6 +63,7 @@ interface TerminalDashboardProps {
   onBuy?: (tokenAddress: string, amount: number) => Promise<void>;
   onSell?: (tokenAddress: string) => Promise<void>;
   hasPosition?: boolean;
+  onSettingsClick?: () => void;
 }
 
 export const TerminalDashboard: React.FC<TerminalDashboardProps> = ({
@@ -72,6 +73,7 @@ export const TerminalDashboard: React.FC<TerminalDashboardProps> = ({
   onBuy,
   onSell,
   hasPosition = false,
+  onSettingsClick,
 }) => {
   const [isScanning, setIsScanning] = useState(false);
   const [scanStage, setScanStage] = useState<'connecting' | 'fetching' | 'analyzing' | 'complete'>('connecting');
@@ -80,7 +82,7 @@ export const TerminalDashboard: React.FC<TerminalDashboardProps> = ({
   const [isBuying, setIsBuying] = useState(false);
 
   // Agent status for activity feed
-  const { activity } = useAgentStatus({ enabled: true });
+  const { activity, clearActivity } = useAgentStatus({ enabled: true });
 
   const handleSearch = useCallback(async (address: string) => {
     setIsScanning(true);
@@ -148,6 +150,7 @@ export const TerminalDashboard: React.FC<TerminalDashboardProps> = ({
         walletBalance={walletBalance}
         onSearch={handleSearch}
         isScanning={isScanning}
+        onSettingsClick={onSettingsClick}
       />
 
       {/* Main 3-Column Layout */}
@@ -161,6 +164,7 @@ export const TerminalDashboard: React.FC<TerminalDashboardProps> = ({
                 handleSearch(alert.data.tokenAddress);
               }
             }}
+            onClearComms={clearActivity}
           />
         </div>
 
@@ -184,8 +188,8 @@ export const TerminalDashboard: React.FC<TerminalDashboardProps> = ({
                   </div>
                   <div className="text-right">
                     <div className={`text-2xl font-bold font-mono ${
-                      analysisResult.score >= 60 ? 'text-[#00e676]' :
-                      analysisResult.score >= 40 ? 'text-[#F59E0B]' : 'text-[#ff4444]'
+                      analysisResult.score >= 60 ? 'text-[#22C55E]' :
+                      analysisResult.score >= 40 ? 'text-[#F59E0B]' : 'text-[#EF4444]'
                     }`}>
                       {analysisResult.score}/100
                     </div>

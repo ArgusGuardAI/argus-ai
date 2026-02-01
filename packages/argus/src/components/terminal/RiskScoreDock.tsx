@@ -37,9 +37,9 @@ export const RiskScoreDock: React.FC<RiskScoreDockProps> = ({
 
   const getScoreColor = (): string => {
     if (score === null) return '#666';
-    if (score >= 60) return '#00e676';
+    if (score >= 60) return '#22C55E';
     if (score >= 40) return '#F59E0B';
-    return '#ff4444';
+    return '#EF4444';
   };
 
   const getScoreLabel = (): string => {

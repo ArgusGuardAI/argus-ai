@@ -11,6 +11,14 @@
 
 import { BaseAgent, AgentConfig } from '../core/BaseAgent';
 import { MessageBus } from '../core/MessageBus';
+import { TradingTools } from '../tools/TradingTools';
+import { OnChainTools } from '../tools/OnChainTools';
+import { Keypair, VersionedTransaction, Connection } from '@solana/web3.js';
+import bs58 from 'bs58';
+
+const SOL_MINT = 'So11111111111111111111111111111111111111112';
+const LAMPORTS_PER_SOL = 1_000_000_000;
+const FEE_TRANSFER_THRESHOLD = 0.01; // Transfer fees when accumulated >= 0.01 SOL
 
 export interface TradingStrategy {
   name: string;
@@ -72,7 +80,6 @@ export class TraderAgent extends BaseAgent {
   private lossCount: number = 0;
 
   // Trading wallet (in production, loaded from secure vault)
-  // @ts-ignore - Reserved for future production use
   private walletAddress: string = '';
 
   // Config from coordinator
@@ -81,12 +88,24 @@ export class TraderAgent extends BaseAgent {
   private dailyTradeCount: number = 0;
   private lastTradeDate: string = '';
 
+  // Tools for real data
+  private tradingTools: TradingTools;
+  private onChainTools: OnChainTools;
+  private rpcEndpoint: string;
+  private connection: Connection;
+
+  // Keypair for signing transactions (loaded from env)
+  private keypair: Keypair | null = null;
+  private tradingEnabled: boolean = false;
+
   constructor(messageBus: MessageBus, options: {
     name?: string;
     walletAddress?: string;
+    privateKey?: string; // Base58 encoded private key for autonomous trading
     initialBalance?: number;
     maxPositionSize?: number;
     maxDailyTrades?: number;
+    rpcEndpoint?: string;
   } = {}) {
     const config: AgentConfig = {
       name: options.name || 'trader-1',
@@ -126,10 +145,36 @@ export class TraderAgent extends BaseAgent {
 
     super(config, messageBus);
 
-    this.walletAddress = options.walletAddress || 'SIMULATED_WALLET';
-    this.walletBalance = options.initialBalance || 1.0; // 1 SOL starting balance
     this.maxPositionSize = options.maxPositionSize || 0.1; // Default 0.1 SOL
     this.maxDailyTrades = options.maxDailyTrades || 10; // Default 10 trades/day
+    this.rpcEndpoint = options.rpcEndpoint || process.env.RPC_ENDPOINT || 'https://api.mainnet-beta.solana.com';
+    this.connection = new Connection(this.rpcEndpoint, 'confirmed');
+
+    // Initialize tools
+    this.tradingTools = new TradingTools({ rpcEndpoint: this.rpcEndpoint });
+    this.onChainTools = new OnChainTools({ rpcEndpoint: this.rpcEndpoint });
+
+    // Load keypair from private key if provided
+    const privateKey = options.privateKey || process.env.TRADING_WALLET_PRIVATE_KEY;
+    if (privateKey) {
+      try {
+        const secretKey = bs58.decode(privateKey);
+        this.keypair = Keypair.fromSecretKey(secretKey);
+        this.walletAddress = this.keypair.publicKey.toBase58();
+        this.tradingEnabled = true;
+        console.log(`[TraderAgent] Keypair loaded, wallet: ${this.walletAddress.slice(0, 8)}...`);
+      } catch (error) {
+        console.error('[TraderAgent] Failed to load keypair from private key:', error);
+        this.walletAddress = options.walletAddress || '';
+        this.tradingEnabled = false;
+      }
+    } else {
+      this.walletAddress = options.walletAddress || '';
+      this.tradingEnabled = false;
+      console.log('[TraderAgent] No private key provided, trading disabled (simulation mode)');
+    }
+
+    this.walletBalance = options.initialBalance || 0;
 
     this.initializeStrategies();
   }
@@ -137,6 +182,10 @@ export class TraderAgent extends BaseAgent {
   protected async onInitialize(): Promise<void> {
     await this.think('observation', `Trader initialized. Balance: ${this.walletBalance} SOL`);
     await this.think('observation', `Loaded ${this.strategies.length} trading strategies`);
+    await this.think('observation', `Trading enabled: ${this.tradingEnabled} | Fee: ${this.tradingTools.getFeePercent()}%`);
+    if (this.tradingEnabled) {
+      await this.think('observation', `Wallet: ${this.walletAddress.slice(0, 8)}...${this.walletAddress.slice(-4)}`);
+    }
   }
 
   protected async run(): Promise<void> {
@@ -156,6 +205,37 @@ export class TraderAgent extends BaseAgent {
         const errorMsg = error instanceof Error ? error.message : 'Unknown error';
         await this.think('reflection', `Trading error: ${errorMsg}`);
       }
+    }
+  }
+
+  /**
+   * Sign a transaction using the loaded keypair
+   * Returns base64-encoded signed transaction
+   */
+  private async signTransaction(serializedTx: string): Promise<string> {
+    if (!this.keypair) {
+      throw new Error('No keypair loaded for signing');
+    }
+
+    try {
+      // Decode the base64 transaction
+      const txBuffer = Buffer.from(serializedTx, 'base64');
+
+      // Try to deserialize as VersionedTransaction first (Jupiter typically uses this)
+      let signedTx: Buffer;
+      try {
+        const versionedTx = VersionedTransaction.deserialize(txBuffer);
+        versionedTx.sign([this.keypair]);
+        signedTx = Buffer.from(versionedTx.serialize());
+      } catch {
+        // Fallback: legacy transaction handling would go here
+        throw new Error('Only versioned transactions are supported');
+      }
+
+      return signedTx.toString('base64');
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown signing error';
+      throw new Error(`Transaction signing failed: ${errorMsg}`);
     }
   }
 
@@ -332,7 +412,7 @@ export class TraderAgent extends BaseAgent {
   }
 
   /**
-   * Execute buy order
+   * Execute buy order using real price data
    */
   private async executeBuy(params: {
     token: string;
@@ -344,77 +424,120 @@ export class TraderAgent extends BaseAgent {
 
     await this.think('action', `Executing BUY: ${amount} SOL of ${token.slice(0, 8)}...`);
 
-    // In production, execute via Jupiter
-    // Simulated for now
-    const price = analysis.price || (Math.random() * 0.0001);
-    const tokenAmount = amount / price;
+    // Get quote from Jupiter (SOL -> Token)
+    const inputLamports = Math.floor(amount * LAMPORTS_PER_SOL);
+    const quote = await this.tradingTools.getQuote(SOL_MINT, token, inputLamports, 100); // 1% slippage
 
-    // Simulate success
-    const success = Math.random() > 0.1; // 90% success rate
-
-    if (success) {
-      // Get strategy for stop-loss/take-profit
-      const strat = this.strategies.find(s => s.name === strategy);
-
-      // Create position
-      const position: Position = {
-        id: `pos_${Date.now()}`,
-        token,
-        entryPrice: price,
-        currentPrice: price,
-        amount: tokenAmount,
-        solInvested: amount,
-        entryTime: Date.now(),
-        strategy,
-        stopLoss: price * (1 - (strat?.exitConditions.stopLossPercent || 20) / 100),
-        takeProfit: price * (1 + (strat?.exitConditions.takeProfitPercent || 100) / 100),
-        pnl: 0,
-        pnlPercent: 0
-      };
-
-      this.positions.set(token, position);
-      this.walletBalance -= amount;
-      this.dailyTradeCount++;
-
-      // Record trade
-      this.tradeHistory.push({
-        token,
-        type: 'buy',
-        price,
-        amount: tokenAmount,
-        reason: `Strategy: ${strategy}`,
-        timestamp: Date.now()
-      });
-
-      // Store in memory for learning
-      await this.memory.store({
-        action: 'buy',
-        token,
-        price,
-        amount,
-        strategy,
-        analysis: {
-          score: analysis.score,
-          verdict: analysis.verdict
-        }
-      }, { type: 'action', tags: ['trade', 'buy', strategy] });
-
-      await this.think(
-        'action',
-        `Position opened: ${token.slice(0, 8)}... @ ${price.toFixed(8)} (SL: ${position.stopLoss.toFixed(8)}, TP: ${position.takeProfit.toFixed(8)})`
-      );
-
-      return {
-        success: true,
-        txSignature: `sim_${Date.now()}`,
-        price,
-        amount: tokenAmount
-      };
+    if (!quote) {
+      await this.think('reflection', `Failed to get quote for ${token.slice(0, 8)}...`);
+      return { success: false, error: 'Could not get swap quote' };
     }
 
+    const price = amount / quote.outputAmount; // SOL per token
+    const tokenAmount = quote.outputAmount;
+
+    await this.think('observation', `Quote received: ${amount} SOL -> ${tokenAmount.toFixed(2)} tokens (impact: ${quote.priceImpact.toFixed(2)}%)`);
+
+    // Execute real trade if trading is enabled
+    let txSignature: string | undefined;
+
+    if (this.tradingEnabled && this.keypair) {
+      await this.think('action', `Executing real swap via Jupiter...`);
+
+      try {
+        const result = await this.tradingTools.executeSwap(
+          quote,
+          this.walletAddress,
+          (tx) => this.signTransaction(tx),
+          true // withFee = true, applies 0.5% fee for Argus AI
+        );
+
+        if (!result.success) {
+          await this.think('reflection', `Swap failed: ${result.error}`);
+          return { success: false, error: result.error };
+        }
+
+        txSignature = result.signature;
+        await this.think('action', `Swap successful! TX: ${txSignature?.slice(0, 16)}...`);
+
+        // Check if pending fees should be transferred
+        if (this.tradingTools.getPendingFees() >= FEE_TRANSFER_THRESHOLD) {
+          await this.think('observation', `Transferring accumulated fees: ${this.tradingTools.getPendingFees().toFixed(6)} SOL`);
+          const feeResult = await this.tradingTools.transferFees(
+            this.walletAddress,
+            (tx) => this.signTransaction(tx)
+          );
+          if (feeResult.success) {
+            await this.think('action', `Fees transferred: ${feeResult.amount?.toFixed(6)} SOL to Argus wallet`);
+          }
+        }
+
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+        await this.think('reflection', `Trade execution error: ${errorMsg}`);
+        return { success: false, error: errorMsg };
+      }
+    } else {
+      await this.think('observation', `Simulation mode - trade not executed on-chain`);
+      txSignature = `sim_${Date.now()}`;
+    }
+
+    // Get strategy for stop-loss/take-profit
+    const strat = this.strategies.find(s => s.name === strategy);
+
+    // Create position
+    const position: Position = {
+      id: `pos_${Date.now()}`,
+      token,
+      entryPrice: price,
+      currentPrice: price,
+      amount: tokenAmount,
+      solInvested: amount,
+      entryTime: Date.now(),
+      strategy,
+      stopLoss: price * (1 - (strat?.exitConditions.stopLossPercent || 20) / 100),
+      takeProfit: price * (1 + (strat?.exitConditions.takeProfitPercent || 100) / 100),
+      pnl: 0,
+      pnlPercent: 0
+    };
+
+    this.positions.set(token, position);
+    this.walletBalance -= amount;
+    this.dailyTradeCount++;
+
+    // Record trade
+    this.tradeHistory.push({
+      token,
+      type: 'buy',
+      price,
+      amount: tokenAmount,
+      reason: `Strategy: ${strategy}`,
+      timestamp: Date.now()
+    });
+
+    // Store in memory for learning
+    await this.memory.store({
+      action: 'buy',
+      token,
+      price,
+      amount,
+      strategy,
+      analysis: {
+        score: analysis.score,
+        verdict: analysis.verdict
+      }
+    }, { type: 'action', tags: ['trade', 'buy', strategy] });
+
+    await this.think(
+      'action',
+      `Position opened: ${token.slice(0, 8)}... @ ${price.toFixed(8)} (SL: ${position.stopLoss.toFixed(8)}, TP: ${position.takeProfit.toFixed(8)})`
+    );
+
     return {
-      success: false,
-      error: 'Simulated transaction failure'
+      success: true,
+      txSignature,
+      price,
+      amount: tokenAmount
     };
   }
 
@@ -434,91 +557,145 @@ export class TraderAgent extends BaseAgent {
 
     await this.think('action', `Executing SELL: ${token.slice(0, 8)}... (${reason})`);
 
-    // In production, execute via Jupiter
-    // Simulated for now
-    const currentPrice = position.currentPrice;
-    const solReceived = position.amount * currentPrice;
+    // Get quote from Jupiter (Token -> SOL)
+    // Note: Need to get token decimals for accurate amount, assuming 6 decimals for most SPL tokens
+    const tokenDecimals = 6; // Most memecoins use 6 decimals
+    const inputAmount = Math.floor(position.amount * Math.pow(10, tokenDecimals));
 
-    // Simulate success
-    const success = Math.random() > 0.05; // 95% success rate
+    const quote = await this.tradingTools.getQuote(token, SOL_MINT, inputAmount, 100); // 1% slippage
 
-    if (success) {
-      // Calculate P&L
-      const pnl = solReceived - position.solInvested;
-      const pnlPercent = (pnl / position.solInvested) * 100;
-
-      this.walletBalance += solReceived;
-      this.totalPnl += pnl;
-
-      if (pnl >= 0) {
-        this.winCount++;
-      } else {
-        this.lossCount++;
-      }
-
-      // Record trade
-      this.tradeHistory.push({
-        token,
-        type: 'sell',
-        price: currentPrice,
-        amount: position.amount,
-        pnl,
-        reason,
-        timestamp: Date.now()
-      });
-
-      // Store in memory for learning
-      await this.memory.store({
-        action: 'sell',
-        token,
-        entryPrice: position.entryPrice,
-        exitPrice: currentPrice,
-        pnl,
-        pnlPercent,
-        holdTime: Date.now() - position.entryTime,
-        reason,
-        strategy: position.strategy
-      }, { type: 'outcome', tags: ['trade', 'sell', pnl >= 0 ? 'win' : 'loss'] });
-
-      // Report to coordinator
-      await this.sendMessage('coordinator', 'trade_complete', {
-        token,
-        pnl,
-        pnlPercent,
-        strategy: position.strategy,
-        reason
-      });
-
-      // Remove position
-      this.positions.delete(token);
-
-      await this.think(
-        'action',
-        `Position closed: ${token.slice(0, 8)}... | P&L: ${pnl.toFixed(4)} SOL (${pnlPercent.toFixed(1)}%)`
-      );
-
-      return {
-        success: true,
-        txSignature: `sim_${Date.now()}`,
-        price: currentPrice,
-        amount: solReceived
-      };
+    if (!quote) {
+      await this.think('reflection', `Failed to get sell quote for ${token.slice(0, 8)}...`);
+      // Fall back to last known price for position tracking
+      const estimatedSolReceived = position.amount * position.currentPrice;
+      return { success: false, error: 'Could not get sell quote', amount: estimatedSolReceived };
     }
 
+    const solReceived = quote.outputAmount / LAMPORTS_PER_SOL;
+    const currentPrice = solReceived / position.amount;
+
+    await this.think('observation', `Sell quote: ${position.amount.toFixed(2)} tokens -> ${solReceived.toFixed(6)} SOL`);
+
+    // Execute real trade if trading is enabled
+    let txSignature: string | undefined;
+
+    if (this.tradingEnabled && this.keypair) {
+      await this.think('action', `Executing real sell via Jupiter...`);
+
+      try {
+        const result = await this.tradingTools.executeSwap(
+          quote,
+          this.walletAddress,
+          (tx) => this.signTransaction(tx),
+          true // withFee = true, applies 0.5% fee for Argus AI
+        );
+
+        if (!result.success) {
+          await this.think('reflection', `Sell failed: ${result.error}`);
+          return { success: false, error: result.error };
+        }
+
+        txSignature = result.signature;
+        await this.think('action', `Sell successful! TX: ${txSignature?.slice(0, 16)}...`);
+
+        // Check if pending fees should be transferred
+        if (this.tradingTools.getPendingFees() >= FEE_TRANSFER_THRESHOLD) {
+          await this.think('observation', `Transferring accumulated fees: ${this.tradingTools.getPendingFees().toFixed(6)} SOL`);
+          const feeResult = await this.tradingTools.transferFees(
+            this.walletAddress,
+            (tx) => this.signTransaction(tx)
+          );
+          if (feeResult.success) {
+            await this.think('action', `Fees transferred: ${feeResult.amount?.toFixed(6)} SOL to Argus wallet`);
+          }
+        }
+
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+        await this.think('reflection', `Sell execution error: ${errorMsg}`);
+        return { success: false, error: errorMsg };
+      }
+    } else {
+      await this.think('observation', `Simulation mode - sell not executed on-chain`);
+      txSignature = `sim_${Date.now()}`;
+    }
+
+    // Calculate P&L
+    const pnl = solReceived - position.solInvested;
+    const pnlPercent = (pnl / position.solInvested) * 100;
+
+    this.walletBalance += solReceived;
+    this.totalPnl += pnl;
+
+    if (pnl >= 0) {
+      this.winCount++;
+    } else {
+      this.lossCount++;
+    }
+
+    // Record trade
+    this.tradeHistory.push({
+      token,
+      type: 'sell',
+      price: currentPrice,
+      amount: position.amount,
+      pnl,
+      reason,
+      timestamp: Date.now()
+    });
+
+    // Store in memory for learning
+    await this.memory.store({
+      action: 'sell',
+      token,
+      entryPrice: position.entryPrice,
+      exitPrice: currentPrice,
+      pnl,
+      pnlPercent,
+      holdTime: Date.now() - position.entryTime,
+      reason,
+      strategy: position.strategy
+    }, { type: 'outcome', tags: ['trade', 'sell', pnl >= 0 ? 'win' : 'loss'] });
+
+    // Report to coordinator
+    await this.sendMessage('coordinator', 'trade_complete', {
+      token,
+      pnl,
+      pnlPercent,
+      strategy: position.strategy,
+      reason
+    });
+
+    // Remove position
+    this.positions.delete(token);
+
+    await this.think(
+      'action',
+      `Position closed: ${token.slice(0, 8)}... | P&L: ${pnl.toFixed(4)} SOL (${pnlPercent.toFixed(1)}%)`
+    );
+
     return {
-      success: false,
-      error: 'Simulated transaction failure'
+      success: true,
+      txSignature,
+      price: currentPrice,
+      amount: solReceived
     };
   }
 
   /**
-   * Monitor all positions for exit signals
+   * Monitor all positions for exit signals using real price data
    */
   private async monitorPositions(): Promise<void> {
+    if (this.positions.size === 0) return;
+
+    // Batch fetch current prices for all positions
+    const tokens = Array.from(this.positions.keys());
+    const prices = await this.tradingTools.batchGetPrices(tokens);
+
     for (const [token, position] of this.positions) {
-      // Simulate price movement
-      const priceChange = (Math.random() - 0.45) * 0.1; // Slight upward bias
-      position.currentPrice = position.entryPrice * (1 + priceChange);
+      // Get real price, fallback to entry price if unavailable
+      const currentPrice = prices.get(token) || position.currentPrice;
+      position.currentPrice = currentPrice;
       position.pnl = (position.currentPrice * position.amount) - position.solInvested;
       position.pnlPercent = (position.pnl / position.solInvested) * 100;
 
@@ -570,11 +747,19 @@ export class TraderAgent extends BaseAgent {
   }
 
   /**
-   * Update wallet balance
+   * Update wallet balance from on-chain
    */
   private async updateBalances(): Promise<void> {
-    // In production, query actual wallet balance
-    // For simulation, balance is tracked in memory
+    if (!this.walletAddress || this.walletAddress === '') {
+      return; // No wallet configured
+    }
+
+    try {
+      const balance = await this.onChainTools.getBalance(this.walletAddress);
+      this.walletBalance = balance;
+    } catch (error) {
+      console.error('[TraderAgent] Error updating balance:', error);
+    }
   }
 
   protected getConstraints(): Record<string, any> {
@@ -629,6 +814,9 @@ export class TraderAgent extends BaseAgent {
     totalPnl: number;
     winRate: number;
     positions: Position[];
+    tradingEnabled: boolean;
+    pendingFees: number;
+    walletAddress: string;
   } {
     const totalTrades = this.winCount + this.lossCount;
 
@@ -637,7 +825,10 @@ export class TraderAgent extends BaseAgent {
       positionCount: this.positions.size,
       totalPnl: this.totalPnl,
       winRate: totalTrades > 0 ? this.winCount / totalTrades : 0,
-      positions: Array.from(this.positions.values())
+      positions: Array.from(this.positions.values()),
+      tradingEnabled: this.tradingEnabled,
+      pendingFees: this.tradingTools.getPendingFees(),
+      walletAddress: this.walletAddress
     };
   }
 }

@@ -24,6 +24,144 @@ Argus Agents are:
 
 ---
 
+## What Agents Actually Do (Production Mode)
+
+When you start the agent system on your VPS, here's exactly what happens:
+
+### SCOUT Agents (Every 10 seconds)
+1. Subscribe to Solana WebSocket for new token mints
+2. Query Token Program for InitializeMint transactions
+3. Extract features from each new token (29-dimensional vector)
+4. Run BitNet classification (< 100ms inference)
+5. If score >= 50: Send to ANALYST for investigation
+6. If score >= 80: Broadcast critical alert to all agents
+
+**Real Output Example:**
+```
+[SCOUT] Found 3 new launches in slot range 245678901-245678950
+[SCOUT] Quick scanning So11111111111111111...
+[SCOUT] Scan complete: score=67 suspicious=true
+[SCOUT] → ANALYST: Requesting investigation (priority: high)
+```
+
+### ANALYST Agent (On-Demand)
+1. Receive investigation requests from SCOUT
+2. Fetch comprehensive on-chain data:
+   - Token metadata and authorities
+   - Holder distribution (top 50)
+   - LP pool status and lock info
+   - Creator wallet history
+3. Run deep analysis:
+   - Bundle detection (coordinated wallets)
+   - Whale concentration analysis
+   - Creator rug history check
+   - Pattern matching against known scams
+4. Generate investigation report with verdict
+5. Route to HUNTER (if dangerous) or TRADER (if safe)
+
+**Real Output Example:**
+```
+[ANALYST] Investigation started: $EXAMPLE (priority: high)
+[ANALYST] Fetching holder distribution...
+[ANALYST] Analyzing bundles... 12 coordinated wallets found
+[ANALYST] Checking creator history... 2 previous rugs
+[ANALYST] VERDICT: DANGEROUS (score: 82/100)
+[ANALYST] → HUNTER: Track scammer wallet Abc123...
+[ANALYST] → ALL: Broadcast scam_detected alert
+```
+
+### HUNTER Agent (Every 60 seconds + On-Demand)
+1. Monitor watchlist of known scammer wallets
+2. When alert received from ANALYST:
+   - Build scammer profile
+   - Detect pattern (BUNDLE_COORDINATOR, RUG_PULLER, etc.)
+   - Map wallet connections/network
+   - Add to watchlist
+3. When known scammer launches new token:
+   - Broadcast immediate alert
+   - Send to ANALYST with critical priority
+   - Notify dashboard users
+
+**Real Output Example:**
+```
+[HUNTER] Tracking scammer: Abc123... (pattern: RUG_PULLER)
+[HUNTER] Found 8 connected wallets in network
+[HUNTER] ⚠️ REPEAT SCAMMER: Abc123... launched new token!
+[HUNTER] → ALL: SYNDICATE ALERT - 3 previous rugs
+```
+
+### TRADER Agent (Every 30 seconds + On-Demand)
+1. Monitor all open positions for exit signals:
+   - Stop-loss triggers
+   - Take-profit targets
+   - Max hold time exceeded
+2. When opportunity received from ANALYST:
+   - Evaluate against strategies (SAFE_EARLY, MOMENTUM, SNIPER)
+   - Check position limits and balance
+   - Execute buy via Jupiter if criteria met
+3. On scammer alert: Emergency exit all related positions
+
+**Real Output Example:**
+```
+[TRADER] Evaluating opportunity: $EXAMPLE (score: 28)
+[TRADER] Matches SAFE_EARLY strategy
+[TRADER] Executing BUY: 0.1 SOL @ 0.00000234
+[TRADER] Position opened with SL: -25%, TP: +100%
+---
+[TRADER] ⚠️ Scammer alert received
+[TRADER] EMERGENCY EXIT: $RUGGED position
+[TRADER] Position closed: -0.02 SOL (-18%)
+```
+
+### Inter-Agent Communication Flow
+
+```
+New Token Detected
+       │
+       ▼
+┌──────────────┐
+│    SCOUT     │ ──────► Quick scan (29 features)
+└──────┬───────┘
+       │ score >= 50
+       ▼
+┌──────────────┐
+│   ANALYST    │ ──────► Deep investigation
+└──────┬───────┘
+       │
+       ├─── DANGEROUS/SCAM ──────┐
+       │                         ▼
+       │                  ┌──────────────┐
+       │                  │    HUNTER    │ ──► Track scammer
+       │                  └──────────────┘
+       │
+       └─── SAFE (score < 30) ───┐
+                                 ▼
+                          ┌──────────────┐
+                          │    TRADER    │ ──► Consider position
+                          └──────────────┘
+```
+
+### Dashboard Sync
+
+All agent activity syncs to your Cloudflare Workers for dashboard display:
+
+| Event Type | Agent | Dashboard Display |
+|------------|-------|-------------------|
+| `comms` | ALL | Agent Comms panel (left sidebar) |
+| `scan` | SCOUT | Updates scan count |
+| `alert` | ANALYST | Triggers notification |
+| `discovery` | HUNTER | Shows bundle detection |
+| `trade` | TRADER | Updates position display |
+
+**Current Limitation:** The agents currently use simulated data for:
+- New token detection (random 1% of signatures)
+- Price movements (random walk)
+- Transaction execution (90% success simulation)
+
+**To Enable Real Data:** Update the RPC calls in each agent to use real on-chain queries instead of simulations. See the `// In production` comments in the code.
+
+---
+
 ## Architecture Overview
 
 ```
@@ -444,6 +582,214 @@ interface CoordinatorConfig {
   maxDailyTrades?: number;  // Max trades per day (default: 10)
   maxPositionSize?: number; // Max position in SOL (default: 0.1)
 }
+```
+
+---
+
+## VPS Deployment
+
+### Prerequisites
+
+- Ubuntu 22.04+ VPS with 4GB+ RAM
+- Node.js 18+
+- PM2 (`npm install -g pm2`)
+- PostgreSQL (for persistent storage)
+- Solana RPC access (self-hosted node or provider)
+
+### Directory Structure
+
+```
+/opt/argus-agents/
+├── solana-safeguard-ai/    # Cloned repository
+│   └── packages/agents/
+├── logs/                    # Application logs
+├── data/                    # Persistent data
+└── .env                     # Environment configuration
+```
+
+### Step 1: Clone and Build
+
+```bash
+# Create directory structure
+sudo mkdir -p /opt/argus-agents/logs
+sudo chown -R $USER:$USER /opt/argus-agents
+
+# Clone repository
+cd /opt/argus-agents
+git clone https://github.com/your-org/solana-safeguard-ai.git
+cd solana-safeguard-ai/packages/agents
+
+# Install dependencies
+pnpm install
+
+# Build
+pnpm build
+```
+
+### Step 2: Configure Environment
+
+```bash
+cat > /opt/argus-agents/.env << 'EOF'
+# Solana RPC - Your self-hosted node or provider
+RPC_ENDPOINT=http://localhost:8899
+
+# Agent Configuration
+SCOUT_COUNT=2
+ANALYST_COUNT=1
+HUNTER_COUNT=1
+TRADER_COUNT=1
+
+# Trading (disabled by default for safety)
+ENABLE_TRADING=false
+MAX_DAILY_TRADES=10
+MAX_POSITION_SIZE=0.1
+
+# BitNet Inference (optional - uses rule-based if not set)
+BITNET_ENDPOINT=http://localhost:8080
+
+# Workers API (for dashboard sync)
+WORKERS_API_URL=https://your-workers.dev
+WORKERS_API_SECRET=your-secret-key
+
+# PostgreSQL (for scammer database)
+DATABASE_URL=postgresql://user:password@localhost:5432/argus
+EOF
+```
+
+### Step 3: PM2 Ecosystem Configuration
+
+```bash
+cat > /opt/argus-agents/ecosystem.config.cjs << 'EOF'
+module.exports = {
+  apps: [{
+    name: 'argus-agents',
+    script: './dist/start.js',
+    cwd: '/opt/argus-agents/solana-safeguard-ai/packages/agents',
+    instances: 1,
+    exec_mode: 'fork',
+    wait_ready: true,
+    listen_timeout: 10000,
+    node_args: '--env-file=/opt/argus-agents/.env',
+    env: {
+      NODE_ENV: 'production',
+    },
+    error_file: '/opt/argus-agents/logs/agents-error.log',
+    out_file: '/opt/argus-agents/logs/agents-out.log',
+    log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+    max_memory_restart: '500M',
+    restart_delay: 5000,
+    max_restarts: 10,
+  }]
+};
+EOF
+```
+
+### Step 4: Start the Agents
+
+```bash
+cd /opt/argus-agents
+pm2 start ecosystem.config.cjs
+pm2 save
+pm2 startup  # Follow prompts to enable auto-start on boot
+```
+
+### Step 5: Verify Deployment
+
+```bash
+# Check status
+pm2 status
+
+# View logs
+pm2 logs argus-agents
+
+# Monitor in real-time
+pm2 monit
+```
+
+### Updating the Deployment
+
+```bash
+cd /opt/argus-agents/solana-safeguard-ai
+git pull
+cd packages/agents
+pnpm install
+pnpm build
+pm2 restart argus-agents
+```
+
+### Connecting to Self-Hosted Solana Node
+
+If you're running your own Solana node:
+
+```bash
+# Your Solana node should expose:
+# - JSON-RPC on port 8899
+# - WebSocket on port 8900
+
+# Update .env
+RPC_ENDPOINT=http://localhost:8899
+WS_ENDPOINT=ws://localhost:8900
+```
+
+### Workers API Integration
+
+The agents sync events to Cloudflare Workers for dashboard display. Add this to your agent code to push events:
+
+```typescript
+// Automatically syncs to Workers when events occur
+await coordinator.getMessageBus().subscribe('user.alert', async (msg) => {
+  await fetch(`${process.env.WORKERS_API_URL}/agents/command`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${process.env.WORKERS_API_SECRET}`
+    },
+    body: JSON.stringify({
+      type: 'monitor_alert',
+      alert: {
+        agent: msg.from,
+        type: 'alert',
+        message: msg.data.message,
+        severity: msg.data.severity,
+        data: msg.data
+      }
+    })
+  });
+});
+```
+
+### Troubleshooting
+
+**Agents not starting:**
+```bash
+# Check logs for errors
+pm2 logs argus-agents --lines 100
+
+# Verify Node version
+node --version  # Should be 18+
+
+# Check RPC connectivity
+curl -X POST -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"getSlot"}' \
+  http://localhost:8899
+```
+
+**High memory usage:**
+```bash
+# Reduce agent counts
+SCOUT_COUNT=1
+ANALYST_COUNT=1
+HUNTER_COUNT=1
+TRADER_COUNT=0  # Disable if not trading
+```
+
+**Events not syncing to dashboard:**
+```bash
+# Check Workers API
+curl https://your-workers.dev/agents/status
+
+# Verify secret is set
+echo $WORKERS_API_SECRET
 ```
 
 ---

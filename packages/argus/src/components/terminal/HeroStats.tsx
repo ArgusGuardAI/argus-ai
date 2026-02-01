@@ -48,7 +48,7 @@ export const HeroStats: React.FC<HeroStatsProps> = ({
           {formatPrice(price)}
         </div>
         {priceChange5m !== null && (
-          <div className={`text-[0.65rem] mt-0.5 ${priceChange5m >= 0 ? 'text-[#00e676]' : 'text-[#ff4444]'}`}>
+          <div className={`text-[0.65rem] mt-0.5 ${priceChange5m >= 0 ? 'text-[#22C55E]' : 'text-[#EF4444]'}`}>
             {priceChange5m >= 0 ? '+' : ''}{priceChange5m.toFixed(1)}% (5m)
           </div>
         )}
@@ -75,8 +75,8 @@ export const HeroStats: React.FC<HeroStatsProps> = ({
         </div>
         {liquidityStatus && (
           <div className={`text-[0.65rem] mt-0.5 ${
-            liquidityStatus === 'High' ? 'text-[#00e676]' :
-            liquidityStatus === 'Low' ? 'text-[#ff4444]' : 'text-[#F59E0B]'
+            liquidityStatus === 'High' ? 'text-[#22C55E]' :
+            liquidityStatus === 'Low' ? 'text-[#EF4444]' : 'text-[#F59E0B]'
           }`}>
             {liquidityStatus}
           </div>
@@ -87,7 +87,7 @@ export const HeroStats: React.FC<HeroStatsProps> = ({
       <div className="bg-[#111] border border-[#222] p-3">
         <div className="text-[0.65rem] text-[#666] uppercase">Top 10</div>
         <div className={`text-[1.1rem] font-mono font-bold mt-1 ${
-          top10Percent !== null && top10Percent > 50 ? 'text-[#ff4444]' : 'text-[#FAFAFA]'
+          top10Percent !== null && top10Percent > 50 ? 'text-[#EF4444]' : 'text-[#FAFAFA]'
         }`}>
           {top10Percent !== null ? `${top10Percent.toFixed(1)}%` : '---'}
         </div>
