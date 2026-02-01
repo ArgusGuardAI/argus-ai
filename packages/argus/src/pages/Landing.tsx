@@ -684,16 +684,6 @@ const styles = `
     color: var(--text-main);
   }
 
-  .pricing-note {
-    text-align: center;
-    margin-top: 40px;
-    font-size: 0.85rem;
-    color: var(--text-dim);
-    max-width: 500px;
-    margin-left: auto;
-    margin-right: auto;
-  }
-
   /* Section: Token */
   .section-token {
     background:
@@ -1037,6 +1027,8 @@ const styles = `
     margin: 60px auto 40px;
     background:
       radial-gradient(ellipse at center, rgba(220, 38, 38, 0.03) 0%, transparent 70%);
+    contain: layout style paint;
+    will-change: contents;
   }
 
   /* World map - dark fill with glowing red outline */
@@ -1064,6 +1056,9 @@ const styles = `
       linear-gradient(90deg, rgba(220, 38, 38, 0.03) 1px, transparent 1px);
     background-size: 40px 40px;
     animation: grid-scan 8s linear infinite;
+    animation-fill-mode: both;
+    will-change: background-position;
+    backface-visibility: hidden;
   }
 
   @keyframes grid-scan {
@@ -1082,6 +1077,9 @@ const styles = `
     background: transparent;
     filter: drop-shadow(0 0 10px var(--accent)) drop-shadow(0 0 20px var(--accent));
     animation: node-pulse-war 1.5s ease-in-out infinite;
+    animation-fill-mode: both;
+    will-change: transform, filter;
+    backface-visibility: hidden;
     z-index: 10;
   }
 
@@ -1098,6 +1096,8 @@ const styles = `
     border-bottom-color: rgba(220, 38, 38, 0.3);
     opacity: 0;
     animation: triangle-ring 2s ease-out infinite;
+    animation-fill-mode: both;
+    will-change: transform, opacity;
   }
 
   .network-node::after {
@@ -1112,6 +1112,8 @@ const styles = `
     border-bottom: 38px solid transparent;
     border-bottom-color: rgba(220, 38, 38, 0.15);
     opacity: 0;
+    animation-fill-mode: both;
+    will-change: transform, opacity;
     animation: triangle-ring 2s ease-out infinite 0.5s;
   }
 
@@ -1129,6 +1131,7 @@ const styles = `
     border-bottom-color: var(--amber);
     filter: drop-shadow(0 0 10px var(--amber)) drop-shadow(0 0 20px var(--amber));
     animation: threat-blink 0.5s ease-in-out infinite;
+    animation-fill-mode: both;
   }
 
   @keyframes node-pulse-war {
@@ -1159,6 +1162,9 @@ const styles = `
     transform-origin: left center;
     box-shadow: 0 0 10px var(--accent), 0 0 20px rgba(220, 38, 38, 0.5);
     animation: laser-fire 2s ease-in-out infinite;
+    animation-fill-mode: both;
+    will-change: clip-path, opacity;
+    backface-visibility: hidden;
     z-index: 5;
   }
 
@@ -1174,6 +1180,8 @@ const styles = `
     border-radius: 50%;
     box-shadow: 0 0 15px var(--accent), 0 0 30px var(--accent);
     animation: packet-glow 0.3s ease-in-out infinite;
+    animation-fill-mode: both;
+    will-change: opacity;
   }
 
   @keyframes laser-fire {
@@ -2060,9 +2068,6 @@ export default function Landing() {
                 <a href="https://app.argusguard.io" className="pricing-cta pricing-cta-outline">Hold $ARGUS</a>
               </div>
             </div>
-            <p className="pricing-note">
-              <strong>No subscriptions.</strong> Hold $ARGUS tokens in your wallet to unlock premium features instantly.
-            </p>
           </section>
 
           {/* Section: Token */}
