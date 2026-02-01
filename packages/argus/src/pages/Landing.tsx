@@ -691,11 +691,558 @@ const styles = `
     margin-right: auto;
   }
 
-  /* Section: Join */
-  .section-join {
+  /* Section: Token */
+  .section-token {
+    background:
+      radial-gradient(ellipse at 50% 0%, rgba(220, 38, 38, 0.08) 0%, transparent 50%),
+      var(--bg-void);
+    padding: 100px 24px;
+  }
+
+  .token-card {
+    max-width: 600px;
+    margin: 60px auto 0;
+    background: var(--bg-card);
+    border: 1px solid rgba(220, 38, 38, 0.2);
+    border-radius: 20px;
+    padding: 40px;
+    text-align: center;
+    box-shadow: 0 0 60px var(--accent-dim);
+  }
+
+  .token-symbol {
+    font-size: 3rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--accent) 0%, #EF4444 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 8px;
+  }
+
+  .token-name {
+    font-size: 1rem;
+    color: var(--text-muted);
+    margin-bottom: 32px;
+  }
+
+  .token-ca {
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 32px;
+  }
+
+  .token-ca-label {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  .token-ca-address {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
+    color: var(--text-main);
+    word-break: break-all;
+  }
+
+  .token-ca-copy {
+    background: var(--accent);
+    border: none;
+    border-radius: 8px;
+    padding: 8px 16px;
+    color: white;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+  }
+
+  .token-ca-copy:hover {
+    background: #EF4444;
+    transform: scale(1.05);
+  }
+
+  .token-ca-copy.copied {
+    background: var(--emerald);
+  }
+
+  .token-links {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .token-link {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 24px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    color: var(--text-main);
+    font-size: 0.9rem;
+    font-weight: 500;
+    text-decoration: none;
+    transition: all 0.2s ease;
+  }
+
+  .token-link:hover {
+    border-color: var(--accent);
+    background: rgba(220, 38, 38, 0.1);
+    transform: translateY(-2px);
+  }
+
+  .token-link svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  /* Section: Roadmap */
+  .section-roadmap {
+    background: var(--bg-dark);
+    padding: 100px 24px;
+  }
+
+  .roadmap-timeline {
+    max-width: 800px;
+    margin: 60px auto 0;
+    position: relative;
+  }
+
+  .roadmap-timeline::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: linear-gradient(180deg, var(--accent) 0%, var(--accent-dim) 100%);
+    transform: translateX(-50%);
+  }
+
+  @media (max-width: 700px) {
+    .roadmap-timeline::before {
+      left: 20px;
+    }
+  }
+
+  .roadmap-phase {
+    display: flex;
+    align-items: flex-start;
+    margin-bottom: 60px;
+    opacity: 0;
+    transform: translateY(30px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+
+  .roadmap-phase.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .roadmap-phase:nth-child(odd) {
+    flex-direction: row;
+    text-align: right;
+  }
+
+  .roadmap-phase:nth-child(even) {
+    flex-direction: row-reverse;
+    text-align: left;
+  }
+
+  @media (max-width: 700px) {
+    .roadmap-phase:nth-child(odd),
+    .roadmap-phase:nth-child(even) {
+      flex-direction: row;
+      text-align: left;
+    }
+  }
+
+  .roadmap-content {
+    flex: 1;
+    padding: 0 40px;
+  }
+
+  @media (max-width: 700px) {
+    .roadmap-content {
+      padding: 0 0 0 40px;
+    }
+  }
+
+  .roadmap-marker {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--bg-card);
+    border: 3px solid var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 1;
+    box-shadow: 0 0 20px var(--accent-dim);
+  }
+
+  .roadmap-marker.completed {
+    background: var(--accent);
+  }
+
+  .roadmap-marker.completed svg {
+    color: white;
+  }
+
+  .roadmap-marker.current {
+    animation: pulse-marker 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-marker {
+    0%, 100% { box-shadow: 0 0 20px var(--accent-dim); }
+    50% { box-shadow: 0 0 40px var(--accent-glow); }
+  }
+
+  .roadmap-marker svg {
+    width: 20px;
+    height: 20px;
+    color: var(--accent);
+  }
+
+  .roadmap-phase-label {
+    font-size: 0.75rem;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+
+  .roadmap-phase-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-main);
+    margin-bottom: 12px;
+  }
+
+  .roadmap-items {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .roadmap-items li {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    padding: 6px 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .roadmap-phase:nth-child(odd) .roadmap-items li {
+    justify-content: flex-end;
+  }
+
+  @media (max-width: 700px) {
+    .roadmap-phase:nth-child(odd) .roadmap-items li {
+      justify-content: flex-start;
+    }
+  }
+
+  .roadmap-items .done {
+    color: var(--emerald);
+  }
+
+  .roadmap-items .progress {
+    color: var(--amber);
+  }
+
+  /* Section: Final Chapter - The Global Network */
+  .section-network {
     background: var(--bg-void);
     padding: 120px 24px;
     text-align: center;
+    position: relative;
+    overflow: hidden;
+    min-height: 100vh;
+  }
+
+  .network-globe-container {
+    position: relative;
+    width: 100%;
+    max-width: 900px;
+    height: 550px;
+    margin: 60px auto 40px;
+    background:
+      radial-gradient(ellipse at center, rgba(220, 38, 38, 0.03) 0%, transparent 70%);
+  }
+
+  /* World map silhouette */
+  .world-map {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 100%;
+    height: 100%;
+    opacity: 0.15;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 500'%3E%3Cpath fill='%23DC2626' d='M170 120c10-5 25-8 40-5 15 3 20 15 35 18 10 2 25-5 35-2 8 2 12 10 20 12 15 3 30-8 45-5 12 2 18 12 30 15 8 2 18-2 25 2 10 5 12 18 22 22 12 5 28 0 38 8 8 6 10 18 18 24 10 8 25 8 35 16 8 6 12 18 20 24 10 8 25 10 32 20 5 8 2 20 8 28 8 10 25 12 30 24 4 10-5 22 0 32 6 12 22 18 25 32 2 10-8 20-5 30 4 12 20 18 22 30 2 10-10 18-8 28 3 12 18 20 18 32 0 10-15 18-12 28 4 12 22 18 22 32 0 8-12 14-10 22M280 95c-8 5-20 2-28 8-10 8-12 25-22 32-12 8-30 5-40 15-8 8-8 22-15 30-10 10-28 12-35 25-5 10 0 25-8 33-10 10-30 10-38 22-6 10 0 25-8 34-10 12-32 12-40 26-6 10 2 25-6 34-10 12-32 15-40 28M480 80c12 2 22 12 34 15 15 4 32-2 45 5 10 5 15 18 26 22 14 5 32 0 44 8 10 6 14 20 24 26 12 8 30 8 40 18 8 8 10 22 18 30 10 10 28 14 35 26 5 10-2 24 5 33 10 12 30 15 38 28 6 10 0 25 8 34 10 12 30 15 38 28 6 10 0 24 8 33 10 12 30 16 38 30M620 110c8-6 22-4 30-12 10-10 10-28 22-36 10-6 25-2 35-10 12-10 15-30 28-38 10-6 25 0 35-8 12-10 18-28 32-35M750 140c-10 8-15 24-28 30-15 8-35 2-48 12-10 8-12 25-24 32-14 8-35 4-46 15-8 8-8 24-18 30-12 8-32 4-42 14-8 8-6 24-16 30-12 8-32 5-42 16-8 10-4 26-14 34-12 10-34 8-44 20-8 10-2 26-12 35-12 10-34 10-44 22-8 10-2 28-12 36M850 180c5 10 2 24 10 32 10 10 30 10 38 22 6 10-2 25 6 34 10 10 30 12 38 24 6 10-2 26 6 35 10 10 28 14 36 26M150 280c10-2 20 5 30 2 12-4 18-18 30-22 14-5 32 2 44-6 10-6 12-22 24-26 14-5 32 4 44-4 10-6 14-22 26-26 14-4 30 5 42-2 10-6 16-20 28-24 14-5 32 2 44-6 10-6 14-20 26-25 14-6 32 0 45-8M200 350c12 4 22 15 35 18 15 4 32-5 46 2 12 6 18 22 30 28 14 7 32 2 45 12 10 8 14 24 26 30 14 8 34 4 46 14 10 8 12 26 24 32 14 8 34 4 48 14M100 400c15 0 28 10 42 12 18 3 35-8 52-4 14 3 24 16 38 20 16 5 35-4 50 4 12 6 18 22 32 26 16 5 35-2 50 6 12 6 20 22 34 26'/%3E%3C/svg%3E");
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+  }
+
+  /* Scanning grid overlay */
+  .scan-grid {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-image:
+      linear-gradient(rgba(220, 38, 38, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(220, 38, 38, 0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    animation: grid-scan 8s linear infinite;
+  }
+
+  @keyframes grid-scan {
+    0% { background-position: 0 0; }
+    100% { background-position: 40px 40px; }
+  }
+
+  /* Horizontal scan line */
+  .scan-line {
+    position: absolute;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    box-shadow: 0 0 20px var(--accent), 0 0 40px var(--accent);
+    animation: scan-sweep 4s ease-in-out infinite;
+  }
+
+  @keyframes scan-sweep {
+    0%, 100% { top: 10%; opacity: 0; }
+    10% { opacity: 1; }
+    90% { opacity: 1; }
+    100% { top: 90%; opacity: 0; }
+  }
+
+  /* Network nodes - War style */
+  .network-node {
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    background: var(--accent);
+    border-radius: 50%;
+    box-shadow:
+      0 0 20px var(--accent),
+      0 0 40px var(--accent),
+      0 0 60px rgba(220, 38, 38, 0.5);
+    animation: node-pulse-war 1s ease-in-out infinite;
+    z-index: 10;
+  }
+
+  .network-node::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 40px;
+    height: 40px;
+    border: 2px solid var(--accent);
+    border-radius: 50%;
+    opacity: 0;
+    animation: node-ring-war 1.5s ease-out infinite;
+  }
+
+  .network-node::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 60px;
+    height: 60px;
+    border: 1px solid rgba(220, 38, 38, 0.3);
+    border-radius: 50%;
+    opacity: 0;
+    animation: node-ring-war 1.5s ease-out infinite 0.5s;
+  }
+
+  .network-node.core {
+    width: 24px;
+    height: 24px;
+    background: linear-gradient(135deg, #EF4444, #DC2626);
+    box-shadow:
+      0 0 30px var(--accent),
+      0 0 60px var(--accent),
+      0 0 100px rgba(220, 38, 38, 0.8);
+  }
+
+  .network-node.threat {
+    background: var(--amber);
+    box-shadow:
+      0 0 20px var(--amber),
+      0 0 40px var(--amber);
+    animation: threat-blink 0.5s ease-in-out infinite;
+  }
+
+  @keyframes node-pulse-war {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.3); }
+  }
+
+  @keyframes node-ring-war {
+    0% { transform: translate(-50%, -50%) scale(0.5); opacity: 1; }
+    100% { transform: translate(-50%, -50%) scale(2); opacity: 0; }
+  }
+
+  @keyframes threat-blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* Laser beams - aggressive */
+  .laser-beam {
+    position: absolute;
+    height: 3px;
+    background: linear-gradient(90deg,
+      transparent 0%,
+      rgba(220, 38, 38, 0.3) 10%,
+      var(--accent) 50%,
+      rgba(220, 38, 38, 0.3) 90%,
+      transparent 100%);
+    transform-origin: left center;
+    box-shadow: 0 0 10px var(--accent), 0 0 20px rgba(220, 38, 38, 0.5);
+    animation: laser-fire 2s ease-in-out infinite;
+    z-index: 5;
+  }
+
+  .laser-beam::before {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 8px;
+    height: 8px;
+    background: white;
+    border-radius: 50%;
+    box-shadow: 0 0 15px var(--accent), 0 0 30px var(--accent);
+    animation: packet-glow 0.3s ease-in-out infinite;
+  }
+
+  @keyframes laser-fire {
+    0% {
+      clip-path: inset(0 100% 0 0);
+      opacity: 0;
+    }
+    10% { opacity: 1; }
+    50% {
+      clip-path: inset(0 0 0 0);
+    }
+    90% { opacity: 1; }
+    100% {
+      clip-path: inset(0 0 0 100%);
+      opacity: 0;
+    }
+  }
+
+  @keyframes packet-glow {
+    0%, 100% { box-shadow: 0 0 15px var(--accent), 0 0 30px var(--accent); }
+    50% { box-shadow: 0 0 25px white, 0 0 50px var(--accent); }
+  }
+
+  /* Threat indicators */
+  .threat-indicator {
+    position: absolute;
+    padding: 4px 8px;
+    background: rgba(0, 0, 0, 0.8);
+    border: 1px solid var(--accent);
+    border-radius: 4px;
+    font-size: 0.65rem;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--accent);
+    white-space: nowrap;
+    animation: threat-popup 3s ease-in-out infinite;
+    z-index: 20;
+  }
+
+  @keyframes threat-popup {
+    0%, 100% { opacity: 0; transform: translateY(10px); }
+    20%, 80% { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Data burst effect */
+  .data-burst {
+    position: absolute;
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(220, 38, 38, 0.4) 0%, transparent 70%);
+    animation: burst 2s ease-out infinite;
+    pointer-events: none;
+  }
+
+  @keyframes burst {
+    0% { transform: translate(-50%, -50%) scale(0); opacity: 1; }
+    100% { transform: translate(-50%, -50%) scale(3); opacity: 0; }
+  }
+
+  /* Network stats overlay */
+  .network-stats {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 60px;
+    justify-content: center;
+    flex-wrap: wrap;
+    background: rgba(0, 0, 0, 0.6);
+    padding: 16px 32px;
+    border-radius: 12px;
+    border: 1px solid rgba(220, 38, 38, 0.2);
+  }
+
+  .network-stat {
+    text-align: center;
+  }
+
+  .network-stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--accent);
+    font-family: 'JetBrains Mono', monospace;
+    text-shadow: 0 0 20px var(--accent);
+  }
+
+  .network-stat-value.live {
+    animation: value-pulse 1s ease-in-out infinite;
+  }
+
+  @keyframes value-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+  }
+
+  .network-stat-label {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
   }
 
   .join-eye {
@@ -960,6 +1507,12 @@ export default function Landing() {
   const [terminalLines, setTerminalLines] = useState(0);
   const terminalRef = useRef<HTMLDivElement>(null);
 
+  // Token copy state
+  const [copied, setCopied] = useState(false);
+
+  // Token contract address - PLACEHOLDER until official launch
+  const TOKEN_CA = 'COMING_SOON';
+
   // Handle intro click
   const handleIntroClick = useCallback(() => {
     setIntroDiving(true);
@@ -967,6 +1520,13 @@ export default function Landing() {
       setIntroVisible(false);
       setJourneyVisible(true);
     }, 1000);
+  }, []);
+
+  // Copy token address
+  const handleCopy = useCallback(() => {
+    navigator.clipboard.writeText(TOKEN_CA);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   }, []);
 
   // Intersection observer for sections
@@ -1025,6 +1585,49 @@ export default function Landing() {
     animationDelay: `${Math.random() * 8}s`,
     animationDuration: `${6 + Math.random() * 4}s`,
   }));
+
+  // Network nodes (agents around the globe) - more spread out for war map look
+  const networkNodes = [
+    { id: 1, x: 12, y: 28, label: 'NA-WEST', type: 'agent' },
+    { id: 2, x: 22, y: 32, label: 'NA-EAST', type: 'agent' },
+    { id: 3, x: 18, y: 58, label: 'SA-1', type: 'agent' },
+    { id: 4, x: 42, y: 22, label: 'EU-NORTH', type: 'agent' },
+    { id: 5, x: 48, y: 35, label: 'EU-SOUTH', type: 'agent' },
+    { id: 6, x: 52, y: 50, label: 'AF-1', type: 'threat' },
+    { id: 7, x: 68, y: 25, label: 'AS-NORTH', type: 'agent' },
+    { id: 8, x: 75, y: 40, label: 'AS-EAST', type: 'agent' },
+    { id: 9, x: 82, y: 60, label: 'OC-1', type: 'agent' },
+    { id: 10, x: 50, y: 42, label: 'CORE', type: 'core' },
+  ];
+
+  // Laser beams between nodes - more connections for war effect
+  const laserBeams = [
+    { from: 0, to: 9, delay: '0s' },
+    { from: 1, to: 9, delay: '0.3s' },
+    { from: 2, to: 9, delay: '0.6s' },
+    { from: 3, to: 9, delay: '0.9s' },
+    { from: 4, to: 9, delay: '1.2s' },
+    { from: 5, to: 9, delay: '1.5s' },
+    { from: 6, to: 9, delay: '1.8s' },
+    { from: 7, to: 9, delay: '2.1s' },
+    { from: 8, to: 9, delay: '2.4s' },
+    // Cross connections
+    { from: 0, to: 1, delay: '2.7s' },
+    { from: 3, to: 4, delay: '3.0s' },
+    { from: 6, to: 7, delay: '3.3s' },
+    { from: 1, to: 3, delay: '3.6s' },
+    { from: 4, to: 6, delay: '3.9s' },
+    { from: 7, to: 8, delay: '4.2s' },
+    { from: 2, to: 5, delay: '4.5s' },
+  ];
+
+  // Threat indicators that pop up
+  const threats = [
+    { x: 30, y: 40, text: 'SCAM DETECTED', delay: '0s' },
+    { x: 65, y: 55, text: 'RUG ALERT', delay: '2s' },
+    { x: 20, y: 25, text: 'BUNDLE FOUND', delay: '4s' },
+    { x: 78, y: 35, text: 'SYNDICATE', delay: '6s' },
+  ];
 
   return (
     <>
@@ -1393,21 +1996,280 @@ export default function Landing() {
             </p>
           </section>
 
-          {/* Section: Join */}
+          {/* Section: Token */}
           <section
-            id="join"
-            className="narrative-section section-join"
-            ref={(el) => (sectionRefs.current['join'] = el)}
+            id="token"
+            className="narrative-section section-token"
+            ref={(el) => (sectionRefs.current['token'] = el)}
           >
-            <div className={`narrative-content ${visibleSections.has('join') ? 'visible' : ''}`}>
-              <ArgusEye className="join-eye" />
+            <div className={`narrative-content ${visibleSections.has('token') ? 'visible' : ''}`}>
               <div className="narrative-label">Chapter V</div>
               <h1 className="narrative-title">
-                Will you join<br /><span>the watchers?</span>
+                The <span>$ARGUS</span> token
               </h1>
               <p className="narrative-text">
-                The shadows await. Let the agents hunt for you.<br />
-                Nothing escapes the hundred eyes.
+                Hold $ARGUS to unlock unlimited scans and premium features.
+                No subscriptions. Just hold.
+              </p>
+            </div>
+            <div className={`token-card ${visibleSections.has('token') ? 'visible' : ''}`}>
+              <div className="token-symbol">$ARGUS</div>
+              <div className="token-name">The Watcher Token</div>
+              <div className="token-ca">
+                <div>
+                  <div className="token-ca-label">Contract Address</div>
+                  <div className="token-ca-address">{TOKEN_CA}</div>
+                </div>
+                <button className={`token-ca-copy ${copied ? 'copied' : ''}`} onClick={handleCopy}>
+                  {copied ? 'Copied!' : 'Copy'}
+                </button>
+              </div>
+              <div className="token-links">
+                <a
+                  href={`https://jup.ag/swap/SOL-${TOKEN_CA}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="token-link"
+                >
+                  <svg viewBox="0 0 24 24" fill="currentColor">
+                    <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="2"/>
+                    <path d="M8 12h8M12 8v8" stroke="currentColor" strokeWidth="2"/>
+                  </svg>
+                  Buy on Jupiter
+                </a>
+                <a
+                  href={`https://raydium.io/swap/?inputCurrency=sol&outputCurrency=${TOKEN_CA}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="token-link"
+                >
+                  <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                  </svg>
+                  Buy on Raydium
+                </a>
+                <a
+                  href={`https://dexscreener.com/solana/${TOKEN_CA}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="token-link"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M3 3v18h18"/>
+                    <path d="M18 9l-5 5-4-4-3 3"/>
+                  </svg>
+                  DexScreener
+                </a>
+              </div>
+            </div>
+          </section>
+
+          {/* Section: Roadmap */}
+          <section
+            id="roadmap"
+            className="narrative-section section-roadmap"
+            ref={(el) => (sectionRefs.current['roadmap'] = el)}
+          >
+            <div className={`narrative-content ${visibleSections.has('roadmap') ? 'visible' : ''}`}>
+              <div className="narrative-label">Chapter VI</div>
+              <h1 className="narrative-title">
+                The path <span>ahead</span>
+              </h1>
+              <p className="narrative-text">
+                Building the most powerful AI-driven crypto defense network.
+              </p>
+            </div>
+            <div className="roadmap-timeline">
+              {/* Phase 1 */}
+              <div className={`roadmap-phase ${visibleSections.has('roadmap') ? 'visible' : ''}`} style={{ transitionDelay: '0.1s' }}>
+                <div className="roadmap-content">
+                  <div className="roadmap-phase-label">Phase 1 — Foundation</div>
+                  <div className="roadmap-phase-title">The Awakening</div>
+                  <ul className="roadmap-items">
+                    <li><span className="done">&#10003;</span> Token launch & initial liquidity</li>
+                    <li><span className="done">&#10003;</span> AI risk analysis engine</li>
+                    <li><span className="done">&#10003;</span> Bundle detection system</li>
+                    <li><span className="done">&#10003;</span> One-click Jupiter trading</li>
+                  </ul>
+                </div>
+                <div className="roadmap-marker completed">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                    <path d="M5 13l4 4L19 7"/>
+                  </svg>
+                </div>
+              </div>
+
+              {/* Phase 2 */}
+              <div className={`roadmap-phase ${visibleSections.has('roadmap') ? 'visible' : ''}`} style={{ transitionDelay: '0.2s' }}>
+                <div className="roadmap-content">
+                  <div className="roadmap-phase-label">Phase 2 — Evolution</div>
+                  <div className="roadmap-phase-title">The Swarm Awakens</div>
+                  <ul className="roadmap-items">
+                    <li><span className="done">&#10003;</span> Multi-agent architecture</li>
+                    <li><span className="done">&#10003;</span> BitNet 1-bit AI engine</li>
+                    <li><span className="progress">&#9679;</span> Autonomous trading agents</li>
+                    <li><span className="progress">&#9679;</span> Real-time dashboard</li>
+                  </ul>
+                </div>
+                <div className="roadmap-marker current">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="4"/>
+                  </svg>
+                </div>
+              </div>
+
+              {/* Phase 3 */}
+              <div className={`roadmap-phase ${visibleSections.has('roadmap') ? 'visible' : ''}`} style={{ transitionDelay: '0.3s' }}>
+                <div className="roadmap-content">
+                  <div className="roadmap-phase-label">Phase 3 — Expansion</div>
+                  <div className="roadmap-phase-title">The Network Spreads</div>
+                  <ul className="roadmap-items">
+                    <li>Telegram alert bot</li>
+                    <li>Public API for developers</li>
+                    <li>Mobile companion app</li>
+                    <li>Portfolio guardian mode</li>
+                  </ul>
+                </div>
+                <div className="roadmap-marker">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M12 5v14M5 12h14"/>
+                  </svg>
+                </div>
+              </div>
+
+              {/* Phase 4 */}
+              <div className={`roadmap-phase ${visibleSections.has('roadmap') ? 'visible' : ''}`} style={{ transitionDelay: '0.4s' }}>
+                <div className="roadmap-content">
+                  <div className="roadmap-phase-label">Phase 4 — Dominion</div>
+                  <div className="roadmap-phase-title">The Global Network</div>
+                  <ul className="roadmap-items">
+                    <li>Multi-chain expansion (Base, ETH)</li>
+                    <li>Decentralized agent nodes</li>
+                    <li>Community-powered threat intel</li>
+                    <li>Governance for $ARGUS holders</li>
+                  </ul>
+                </div>
+                <div className="roadmap-marker">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Final Chapter: The Global Network */}
+          <section
+            id="network"
+            className="narrative-section section-network"
+            ref={(el) => (sectionRefs.current['network'] = el)}
+          >
+            <div className={`narrative-content ${visibleSections.has('network') ? 'visible' : ''}`}>
+              <div className="narrative-label">Final Chapter</div>
+              <h1 className="narrative-title">
+                A <span>global swarm</span><br />protecting crypto
+              </h1>
+              <p className="narrative-text">
+                Argus agents scattered across the world, sharing intelligence,
+                learning from every threat, growing stronger together.
+              </p>
+            </div>
+
+            {/* War Map visualization */}
+            <div className="network-globe-container">
+              {/* World map silhouette */}
+              <div className="world-map" />
+
+              {/* Scanning grid */}
+              <div className="scan-grid" />
+
+              {/* Horizontal scan line */}
+              <div className="scan-line" />
+
+              {/* Data bursts at core */}
+              <div className="data-burst" style={{ left: '50%', top: '42%', animationDelay: '0s' }} />
+              <div className="data-burst" style={{ left: '50%', top: '42%', animationDelay: '1s' }} />
+              <div className="data-burst" style={{ left: '50%', top: '42%', animationDelay: '2s' }} />
+
+              {/* Laser beams */}
+              {laserBeams.map((beam, i) => {
+                const from = networkNodes[beam.from];
+                const to = networkNodes[beam.to];
+                const dx = to.x - from.x;
+                const dy = to.y - from.y;
+                const length = Math.sqrt(dx * dx + dy * dy);
+                const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+
+                return (
+                  <div
+                    key={i}
+                    className="laser-beam"
+                    style={{
+                      left: `${from.x}%`,
+                      top: `${from.y}%`,
+                      width: `${length}%`,
+                      transform: `rotate(${angle}deg)`,
+                      animationDelay: beam.delay,
+                    }}
+                  />
+                );
+              })}
+
+              {/* Network nodes */}
+              {networkNodes.map((node, i) => (
+                <div
+                  key={node.id}
+                  className={`network-node ${node.type === 'core' ? 'core' : ''} ${node.type === 'threat' ? 'threat' : ''}`}
+                  style={{
+                    left: `${node.x}%`,
+                    top: `${node.y}%`,
+                    animationDelay: `${i * 0.15}s`,
+                  }}
+                  title={node.label}
+                />
+              ))}
+
+              {/* Threat indicators */}
+              {threats.map((threat, i) => (
+                <div
+                  key={i}
+                  className="threat-indicator"
+                  style={{
+                    left: `${threat.x}%`,
+                    top: `${threat.y}%`,
+                    animationDelay: threat.delay,
+                  }}
+                >
+                  {threat.text}
+                </div>
+              ))}
+
+              {/* Network stats */}
+              <div className="network-stats">
+                <div className="network-stat">
+                  <div className="network-stat-value live">10</div>
+                  <div className="network-stat-label">Active Agents</div>
+                </div>
+                <div className="network-stat">
+                  <div className="network-stat-value">847</div>
+                  <div className="network-stat-label">Threats Blocked</div>
+                </div>
+                <div className="network-stat">
+                  <div className="network-stat-value live">24/7</div>
+                  <div className="network-stat-label">Watch Mode</div>
+                </div>
+                <div className="network-stat">
+                  <div className="network-stat-value">&lt;13ms</div>
+                  <div className="network-stat-label">Response Time</div>
+                </div>
+              </div>
+            </div>
+
+            <div className={`narrative-content ${visibleSections.has('network') ? 'visible' : ''}`} style={{ marginTop: '40px' }}>
+              <ArgusEye className="join-eye" />
+              <p className="narrative-text" style={{ marginBottom: '0' }}>
+                The shadows await. Nothing escapes the hundred eyes.
               </p>
               <div>
                 <a href="https://app.argusguard.io" className="join-cta">

@@ -45,6 +45,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                   <TerminalApp />
                 </WalletContextProvider>
               } />
+              <Route path="/landing" element={<Landing />} />
               <Route path="/dashboard" element={
                 <WalletContextProvider>
                   <TerminalApp />
