@@ -322,22 +322,18 @@ const styles = `
   .agent-card:nth-child(4) { transition-delay: 0.4s; }
 
   .agent-icon {
-    width: 60px;
-    height: 60px;
-    border-radius: 16px;
+    width: 80px;
+    height: 80px;
     display: flex;
     align-items: center;
     justify-content: center;
     margin-bottom: 20px;
-    font-size: 1.5rem;
-    color: white;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
   }
 
-  .agent-icon.scout { background: linear-gradient(135deg, var(--purple) 0%, #5B21B6 100%); box-shadow: 0 4px 20px rgba(139, 92, 246, 0.3); }
-  .agent-icon.analyst { background: linear-gradient(135deg, var(--accent) 0%, #991B1B 100%); box-shadow: 0 4px 20px rgba(220, 38, 38, 0.3); }
-  .agent-icon.hunter { background: linear-gradient(135deg, var(--amber) 0%, #D97706 100%); box-shadow: 0 4px 20px rgba(245, 158, 11, 0.3); }
-  .agent-icon.trader { background: linear-gradient(135deg, var(--emerald) 0%, #16A34A 100%); box-shadow: 0 4px 20px rgba(16, 185, 129, 0.3); }
+  .agent-icon.scout { filter: drop-shadow(0 4px 15px rgba(139, 92, 246, 0.4)); }
+  .agent-icon.analyst { filter: drop-shadow(0 4px 15px rgba(220, 38, 38, 0.4)); }
+  .agent-icon.hunter { filter: drop-shadow(0 4px 15px rgba(245, 158, 11, 0.4)); }
+  .agent-icon.trader { filter: drop-shadow(0 4px 15px rgba(16, 185, 129, 0.4)); }
 
   .agent-name {
     font-size: 1.25rem;
@@ -424,228 +420,6 @@ const styles = `
     font-size: 0.95rem;
     color: var(--text-muted);
     line-height: 1.6;
-  }
-
-  /* Section: Origin Vault */
-  .section-vault {
-    background:
-      radial-gradient(ellipse at 30% 50%, rgba(124, 58, 237, 0.08) 0%, transparent 50%),
-      radial-gradient(ellipse at 70% 50%, rgba(220, 38, 38, 0.08) 0%, transparent 50%),
-      var(--bg-void);
-    padding: 120px 24px;
-  }
-
-  .vault-diagram {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 40px;
-    margin-top: 60px;
-    flex-wrap: wrap;
-  }
-
-  .vault-box {
-    width: 280px;
-    background: var(--bg-card);
-    border: 2px solid rgba(255, 255, 255, 0.1);
-    border-radius: 16px;
-    padding: 32px 24px;
-    text-align: center;
-    position: relative;
-    opacity: 0;
-    transform: translateY(30px);
-    transition: opacity 0.6s ease, transform 0.6s ease, border-color 0.3s ease;
-  }
-
-  .vault-box.visible {
-    opacity: 1;
-    transform: translateY(0);
-  }
-
-  .vault-box.app {
-    border-color: rgba(220, 38, 38, 0.4);
-    transition-delay: 0.1s;
-  }
-
-  .vault-box.secure {
-    border-color: rgba(124, 58, 237, 0.4);
-    transition-delay: 0.3s;
-    background: linear-gradient(180deg, rgba(124, 58, 237, 0.1) 0%, var(--bg-card) 100%);
-  }
-
-  .vault-box-icon {
-    font-size: 2.5rem;
-    margin-bottom: 16px;
-  }
-
-  .vault-box.app .vault-box-icon {
-    color: var(--accent);
-  }
-
-  .vault-box.secure .vault-box-icon {
-    color: var(--purple);
-  }
-
-  .vault-box-domain {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    margin-bottom: 12px;
-    padding: 6px 12px;
-    background: rgba(0, 0, 0, 0.3);
-    border-radius: 6px;
-    display: inline-block;
-  }
-
-  .vault-box-title {
-    font-size: 1.1rem;
-    font-weight: 600;
-    color: var(--text-main);
-    margin-bottom: 8px;
-  }
-
-  .vault-box-desc {
-    font-size: 0.85rem;
-    color: var(--text-muted);
-    line-height: 1.5;
-  }
-
-  .vault-box.secure .vault-box-desc {
-    color: var(--purple);
-    font-weight: 500;
-  }
-
-  /* Message arrows */
-  .vault-arrows {
-    display: flex;
-    flex-direction: column;
-    gap: 24px;
-    opacity: 0;
-    transition: opacity 0.6s ease 0.5s;
-  }
-
-  .vault-arrows.visible {
-    opacity: 1;
-  }
-
-  .vault-arrow {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.75rem;
-    white-space: nowrap;
-  }
-
-  .vault-arrow-line {
-    width: 80px;
-    height: 2px;
-    position: relative;
-    overflow: hidden;
-  }
-
-  .vault-arrow.outgoing .vault-arrow-line {
-    background: linear-gradient(90deg, var(--accent), transparent);
-  }
-
-  .vault-arrow.incoming .vault-arrow-line {
-    background: linear-gradient(90deg, transparent, var(--purple));
-  }
-
-  .vault-arrow-line::after {
-    content: '';
-    position: absolute;
-    top: -2px;
-    width: 16px;
-    height: 6px;
-    background: white;
-    border-radius: 3px;
-    animation: vault-packet 2s ease-in-out infinite;
-    box-shadow: 0 0 10px currentColor;
-  }
-
-  .vault-arrow.outgoing .vault-arrow-line::after {
-    left: -16px;
-    background: var(--accent);
-    animation-name: vault-packet-out;
-  }
-
-  .vault-arrow.incoming .vault-arrow-line::after {
-    right: -16px;
-    background: var(--purple);
-    animation-name: vault-packet-in;
-  }
-
-  @keyframes vault-packet-out {
-    0%, 100% { left: -16px; opacity: 0; }
-    10% { opacity: 1; }
-    90% { opacity: 1; }
-    95%, 100% { left: 100%; opacity: 0; }
-  }
-
-  @keyframes vault-packet-in {
-    0%, 100% { right: -16px; opacity: 0; }
-    10% { opacity: 1; }
-    90% { opacity: 1; }
-    95%, 100% { right: 100%; opacity: 0; }
-  }
-
-  .vault-arrow-label {
-    color: var(--text-dim);
-  }
-
-  .vault-arrow.outgoing .vault-arrow-label {
-    color: var(--accent);
-  }
-
-  .vault-arrow.incoming .vault-arrow-label {
-    color: var(--purple);
-  }
-
-  .vault-benefits {
-    display: flex;
-    justify-content: center;
-    gap: 40px;
-    margin-top: 60px;
-    flex-wrap: wrap;
-  }
-
-  .vault-benefit {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    opacity: 0;
-    transform: translateY(20px);
-    transition: opacity 0.5s ease, transform 0.5s ease;
-  }
-
-  .vault-benefit.visible {
-    opacity: 1;
-    transform: translateY(0);
-  }
-
-  .vault-benefit i {
-    color: var(--emerald);
-    font-size: 1rem;
-  }
-
-  .vault-benefit span {
-    color: var(--text-muted);
-    font-size: 0.9rem;
-  }
-
-  @media (max-width: 768px) {
-    .vault-diagram {
-      flex-direction: column;
-    }
-    .vault-arrows {
-      transform: rotate(90deg);
-    }
-    .vault-benefits {
-      flex-direction: column;
-      align-items: center;
-      gap: 16px;
-    }
   }
 
   /* Section: The Arsenal (Features) */
@@ -1768,6 +1542,67 @@ const ArgusEye = ({ className }: { className?: string }) => (
   </svg>
 );
 
+// Agent Eye SVG - Colorized version for agent cards
+const AgentEye = ({ color, glowColor }: { color: string; glowColor: string }) => (
+  <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '60px', height: '60px' }}>
+    {/* Outer triangle */}
+    <path
+      d="M50 8L92 85H8L50 8Z"
+      stroke={color}
+      strokeWidth="2"
+      fill="none"
+      opacity="0.9"
+    />
+    {/* Inner triangle glow */}
+    <path
+      d="M50 20L80 75H20L50 20Z"
+      stroke={color}
+      strokeWidth="0.5"
+      fill="none"
+      opacity="0.4"
+    />
+    {/* Eye outer */}
+    <ellipse
+      cx="50"
+      cy="50"
+      rx="22"
+      ry="12"
+      stroke={color}
+      strokeWidth="2"
+      fill="none"
+    />
+    {/* Eye inner glow */}
+    <ellipse
+      cx="50"
+      cy="50"
+      rx="18"
+      ry="9"
+      fill={glowColor}
+    />
+    {/* Pupil */}
+    <circle
+      cx="50"
+      cy="50"
+      r="8"
+      fill={color}
+    />
+    {/* Pupil inner */}
+    <circle
+      cx="50"
+      cy="50"
+      r="4"
+      fill="#0A0A0A"
+    />
+    {/* Highlight */}
+    <circle
+      cx="47"
+      cy="48"
+      r="2"
+      fill="rgba(255, 255, 255, 0.7)"
+    />
+  </svg>
+);
+
 export default function Landing() {
   // Intro state
   const [introVisible, setIntroVisible] = useState(true);
@@ -2045,7 +1880,7 @@ export default function Landing() {
             <div className="agents-grid">
               <div className={`agent-card ${visibleSections.has('swarm') ? 'visible' : ''}`}>
                 <div className="agent-icon scout">
-                  <i className="fa-solid fa-satellite-dish"></i>
+                  <AgentEye color="#8B5CF6" glowColor="rgba(139, 92, 246, 0.15)" />
                 </div>
                 <div className="agent-name">Scout</div>
                 <div className="agent-role">Mempool Patrol</div>
@@ -2056,7 +1891,7 @@ export default function Landing() {
               </div>
               <div className={`agent-card ${visibleSections.has('swarm') ? 'visible' : ''}`}>
                 <div className="agent-icon analyst">
-                  <i className="fa-solid fa-eye"></i>
+                  <AgentEye color="#DC2626" glowColor="rgba(220, 38, 38, 0.15)" />
                 </div>
                 <div className="agent-name">Analyst</div>
                 <div className="agent-role">Deep Investigation</div>
@@ -2067,7 +1902,7 @@ export default function Landing() {
               </div>
               <div className={`agent-card ${visibleSections.has('swarm') ? 'visible' : ''}`}>
                 <div className="agent-icon hunter">
-                  <i className="fa-solid fa-crosshairs"></i>
+                  <AgentEye color="#F59E0B" glowColor="rgba(245, 158, 11, 0.15)" />
                 </div>
                 <div className="agent-name">Hunter</div>
                 <div className="agent-role">Network Tracker</div>
@@ -2078,7 +1913,7 @@ export default function Landing() {
               </div>
               <div className={`agent-card ${visibleSections.has('swarm') ? 'visible' : ''}`}>
                 <div className="agent-icon trader">
-                  <i className="fa-solid fa-coins"></i>
+                  <AgentEye color="#10B981" glowColor="rgba(16, 185, 129, 0.15)" />
                 </div>
                 <div className="agent-name">Trader</div>
                 <div className="agent-role">Position Guardian</div>
@@ -2195,77 +2030,6 @@ export default function Landing() {
             </div>
           </section>
 
-          {/* Section: Origin Vault */}
-          <section
-            id="vault"
-            className="narrative-section section-vault"
-            ref={(el) => (sectionRefs.current['vault'] = el)}
-          >
-            <div className={`narrative-content ${visibleSections.has('vault') ? 'visible' : ''}`}>
-              <div className="narrative-label">Chapter VI</div>
-              <h1 className="narrative-title">
-                Origin <span>Vault</span>
-              </h1>
-              <p className="narrative-text">
-                Your private keys never touch the main app. Isolated on a separate domain,
-                protected from every attack vector.
-              </p>
-            </div>
-
-            <div className="vault-diagram">
-              <div className={`vault-box app ${visibleSections.has('vault') ? 'visible' : ''}`}>
-                <div className="vault-box-icon">
-                  <i className="fa-solid fa-display"></i>
-                </div>
-                <div className="vault-box-domain">app.argusguard.io</div>
-                <div className="vault-box-title">Main App</div>
-                <div className="vault-box-desc">
-                  UI, analysis, trading logic.<br />
-                  Never sees your private key.
-                </div>
-              </div>
-
-              <div className={`vault-arrows ${visibleSections.has('vault') ? 'visible' : ''}`}>
-                <div className="vault-arrow outgoing">
-                  <span className="vault-arrow-label">sign tx</span>
-                  <div className="vault-arrow-line"></div>
-                  <i className="fa-solid fa-chevron-right" style={{ color: 'var(--accent)' }}></i>
-                </div>
-                <div className="vault-arrow incoming">
-                  <i className="fa-solid fa-chevron-left" style={{ color: 'var(--purple)' }}></i>
-                  <div className="vault-arrow-line"></div>
-                  <span className="vault-arrow-label">signature</span>
-                </div>
-              </div>
-
-              <div className={`vault-box secure ${visibleSections.has('vault') ? 'visible' : ''}`}>
-                <div className="vault-box-icon">
-                  <i className="fa-solid fa-key"></i>
-                </div>
-                <div className="vault-box-domain">secure.argusguard.io</div>
-                <div className="vault-box-title">Origin Vault</div>
-                <div className="vault-box-desc">
-                  Private key lives here only.
-                </div>
-              </div>
-            </div>
-
-            <div className="vault-benefits">
-              <div className={`vault-benefit ${visibleSections.has('vault') ? 'visible' : ''}`} style={{ transitionDelay: '0.6s' }}>
-                <i className="fa-solid fa-shield-halved"></i>
-                <span>Protected from XSS attacks</span>
-              </div>
-              <div className={`vault-benefit ${visibleSections.has('vault') ? 'visible' : ''}`} style={{ transitionDelay: '0.7s' }}>
-                <i className="fa-solid fa-shield-halved"></i>
-                <span>Safe from malicious extensions</span>
-              </div>
-              <div className={`vault-benefit ${visibleSections.has('vault') ? 'visible' : ''}`} style={{ transitionDelay: '0.8s' }}>
-                <i className="fa-solid fa-shield-halved"></i>
-                <span>Immune to supply chain attacks</span>
-              </div>
-            </div>
-          </section>
-
           {/* Section: Arsenal */}
           <section
             id="arsenal"
@@ -2273,7 +2037,7 @@ export default function Landing() {
             ref={(el) => (sectionRefs.current['arsenal'] = el)}
           >
             <div className={`narrative-content ${visibleSections.has('arsenal') ? 'visible' : ''}`}>
-              <div className="narrative-label">Chapter VII</div>
+              <div className="narrative-label">Chapter VI</div>
               <h1 className="narrative-title">
                 Weapons <span>forged in darkness</span>
               </h1>
@@ -2283,14 +2047,12 @@ export default function Landing() {
                 { title: 'Syndicate Scanner', desc: 'Same-block transaction analysis exposes coordinated pump groups' },
                 { title: 'Bundle Detection', desc: 'Identify wallet clusters controlling supply before they dump' },
                 { title: 'Security Check', desc: 'Instant checks on mint/freeze authority, LP lock, contract risks' },
-                { title: 'Holder Chart', desc: 'Visual breakdown of top 10 holders with bundle highlighting' },
                 { title: 'Dev Tracker', desc: 'Analyze creator wallet age, deployment history, activity patterns' },
-                { title: 'Position Tracker', desc: 'Real-time P&L tracking with entry price and current value' },
-                { title: 'Quick Trade', desc: 'One-click Jupiter swaps with dedicated trading wallet' },
                 { title: 'AutoGuard', desc: 'Set take profit, stop loss, trailing stops for autonomous exits' },
-                { title: 'Multi-RPC Failover', desc: 'Dedicated RPC node with automatic failover to backups for 99.9% uptime' },
-                { title: 'Pump.fun Support', desc: 'Native bonding curve detection and accurate LP display' },
+                { title: 'Quick Trade', desc: 'One-click Jupiter swaps with dedicated trading wallet' },
+                { title: 'Origin Vault', desc: 'Private keys isolated in separate secure origin, protected from XSS' },
                 { title: 'Pattern Library', desc: '8 known scam patterns with weighted similarity scoring' },
+                { title: 'Outcome Learning', desc: 'Self-improving AI that tracks predictions vs actual outcomes' },
               ].map((item, i) => (
                 <div
                   key={i}
@@ -2311,7 +2073,7 @@ export default function Landing() {
             ref={(el) => (sectionRefs.current['pricing'] = el)}
           >
             <div className={`narrative-content ${visibleSections.has('pricing') ? 'visible' : ''}`}>
-              <div className="narrative-label">Chapter VIII</div>
+              <div className="narrative-label">Chapter VII</div>
               <h1 className="narrative-title">
                 Choose your <span>tier</span>
               </h1>
@@ -2372,7 +2134,7 @@ export default function Landing() {
             ref={(el) => (sectionRefs.current['token'] = el)}
           >
             <div className={`narrative-content ${visibleSections.has('token') ? 'visible' : ''}`}>
-              <div className="narrative-label">Chapter IX</div>
+              <div className="narrative-label">Chapter VIII</div>
               <h1 className="narrative-title">
                 The <span>$ARGUS</span> token
               </h1>
@@ -2432,7 +2194,7 @@ export default function Landing() {
             ref={(el) => (sectionRefs.current['roadmap'] = el)}
           >
             <div className={`narrative-content ${visibleSections.has('roadmap') ? 'visible' : ''}`}>
-              <div className="narrative-label">Chapter X</div>
+              <div className="narrative-label">Chapter IX</div>
               <h1 className="narrative-title">
                 The path <span>ahead</span>
               </h1>
