@@ -2,7 +2,7 @@
 # =============================================================================
 # Argus Agent VPS Setup Script
 # Target: Ubuntu 22.04/24.04 on Hetzner/Vultr/DigitalOcean
-# VPS IP: 46.225.3.208
+# VPS IP: 46.XXX.X.XXX
 # =============================================================================
 
 set -e  # Exit on error
