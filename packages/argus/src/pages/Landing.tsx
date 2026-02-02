@@ -1307,16 +1307,16 @@ const styles = `
     will-change: contents;
   }
 
-  /* World map - dark fill with glowing red outline */
+  /* World map - subtle dark outline */
   .world-map {
     position: absolute;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    width: 90%;
+    width: 95%;
     height: auto;
-    opacity: 0.6;
-    filter: brightness(0.15) sepia(1) hue-rotate(-50deg) saturate(3) drop-shadow(0 0 8px rgba(220, 38, 38, 0.8)) drop-shadow(0 0 20px rgba(220, 38, 38, 0.4));
+    opacity: 0.4;
+    filter: brightness(0.2) sepia(1) hue-rotate(-50deg) saturate(2) drop-shadow(0 0 4px rgba(220, 38, 38, 0.5));
     pointer-events: none;
   }
 
@@ -1328,116 +1328,107 @@ const styles = `
     width: 100%;
     height: 100%;
     background-image:
-      linear-gradient(rgba(220, 38, 38, 0.03) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(220, 38, 38, 0.03) 1px, transparent 1px);
-    background-size: 40px 40px;
-    animation: grid-scan 8s linear infinite;
+      linear-gradient(rgba(220, 38, 38, 0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(220, 38, 38, 0.02) 1px, transparent 1px);
+    background-size: 50px 50px;
+    animation: grid-scan 10s linear infinite;
     animation-fill-mode: both;
     will-change: background-position;
     backface-visibility: hidden;
+    opacity: 0.8;
   }
 
   @keyframes grid-scan {
     0% { background-position: 0 0; }
-    100% { background-position: 40px 40px; }
+    100% { background-position: 50px 50px; }
   }
 
-  /* Network nodes - Triangle style (Argus eye aesthetic) */
+  /* Network nodes - Clean dots with glow */
   .network-node {
     position: absolute;
-    width: 0;
-    height: 0;
-    border-left: 10px solid transparent;
-    border-right: 10px solid transparent;
-    border-bottom: 18px solid var(--accent);
-    background: transparent;
-    filter: drop-shadow(0 0 10px var(--accent)) drop-shadow(0 0 20px var(--accent));
-    animation: node-pulse-war 1.5s ease-in-out infinite;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    filter: drop-shadow(0 0 6px var(--accent)) drop-shadow(0 0 12px var(--accent));
+    animation: node-pulse-war 2s ease-in-out infinite;
     animation-fill-mode: both;
     will-change: transform, filter;
     backface-visibility: hidden;
     z-index: 10;
+    transform: translate(-50%, -50%);
   }
 
   .network-node::before {
     content: '';
     position: absolute;
-    top: 6px;
-    left: -16px;
-    width: 0;
-    height: 0;
-    border-left: 16px solid transparent;
-    border-right: 16px solid transparent;
-    border-bottom: 28px solid transparent;
-    border-bottom-color: rgba(220, 38, 38, 0.3);
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 20px;
+    height: 20px;
+    border: 1px solid var(--accent);
+    border-radius: 50%;
     opacity: 0;
-    animation: triangle-ring 2s ease-out infinite;
+    animation: node-ring 2s ease-out infinite;
     animation-fill-mode: both;
     will-change: transform, opacity;
-  }
-
-  .network-node::after {
-    content: '';
-    position: absolute;
-    top: 6px;
-    left: -22px;
-    width: 0;
-    height: 0;
-    border-left: 22px solid transparent;
-    border-right: 22px solid transparent;
-    border-bottom: 38px solid transparent;
-    border-bottom-color: rgba(220, 38, 38, 0.15);
-    opacity: 0;
-    animation-fill-mode: both;
-    will-change: transform, opacity;
-    animation: triangle-ring 2s ease-out infinite 0.5s;
   }
 
   .network-node.core {
-    border-left: 14px solid transparent;
-    border-right: 14px solid transparent;
-    border-bottom: 24px solid var(--accent);
+    width: 12px;
+    height: 12px;
+    background: var(--accent);
     filter:
-      drop-shadow(0 0 15px var(--accent))
-      drop-shadow(0 0 30px var(--accent))
-      drop-shadow(0 0 60px rgba(220, 38, 38, 0.8));
+      drop-shadow(0 0 10px var(--accent))
+      drop-shadow(0 0 20px var(--accent))
+      drop-shadow(0 0 40px rgba(220, 38, 38, 0.6));
+  }
+
+  .network-node.core::before {
+    width: 28px;
+    height: 28px;
   }
 
   .network-node.threat {
-    border-bottom-color: var(--amber);
-    filter: drop-shadow(0 0 10px var(--amber)) drop-shadow(0 0 20px var(--amber));
-    animation: threat-blink 0.5s ease-in-out infinite;
+    background: var(--amber);
+    filter: drop-shadow(0 0 6px var(--amber)) drop-shadow(0 0 12px var(--amber));
+    animation: threat-blink 1s ease-in-out infinite;
     animation-fill-mode: both;
   }
 
-  @keyframes node-pulse-war {
-    0%, 100% { transform: scale(1); filter: drop-shadow(0 0 10px var(--accent)) drop-shadow(0 0 20px var(--accent)); }
-    50% { transform: scale(1.2); filter: drop-shadow(0 0 20px var(--accent)) drop-shadow(0 0 40px var(--accent)); }
+  .network-node.threat::before {
+    border-color: var(--amber);
   }
 
-  @keyframes triangle-ring {
-    0% { transform: scale(0.5); opacity: 0.8; }
-    100% { transform: scale(2); opacity: 0; }
+  @keyframes node-pulse-war {
+    0%, 100% { transform: translate(-50%, -50%) scale(1); }
+    50% { transform: translate(-50%, -50%) scale(1.3); }
+  }
+
+  @keyframes node-ring {
+    0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0.6; }
+    100% { transform: translate(-50%, -50%) scale(2); opacity: 0; }
   }
 
   @keyframes threat-blink {
     0%, 100% { opacity: 1; }
-    50% { opacity: 0.3; }
+    50% { opacity: 0.4; }
   }
 
-  /* Laser beams - aggressive */
+  /* Laser beams - thin and elegant */
   .laser-beam {
     position: absolute;
-    height: 3px;
+    height: 2px;
     background: linear-gradient(90deg,
       transparent 0%,
-      rgba(220, 38, 38, 0.3) 10%,
+      rgba(220, 38, 38, 0.4) 20%,
       var(--accent) 50%,
-      rgba(220, 38, 38, 0.3) 90%,
+      rgba(220, 38, 38, 0.4) 80%,
       transparent 100%);
     transform-origin: left center;
-    box-shadow: 0 0 10px var(--accent), 0 0 20px rgba(220, 38, 38, 0.5);
-    animation: laser-fire 2s ease-in-out infinite;
+    box-shadow: 0 0 4px var(--accent), 0 0 8px rgba(220, 38, 38, 0.4);
+    animation: laser-fire 2.5s ease-in-out infinite;
     animation-fill-mode: both;
     will-change: clip-path, opacity;
     backface-visibility: hidden;
@@ -1447,15 +1438,15 @@ const styles = `
   .laser-beam::before {
     content: '';
     position: absolute;
-    right: 0;
+    right: -3px;
     top: 50%;
     transform: translateY(-50%);
-    width: 8px;
-    height: 8px;
+    width: 6px;
+    height: 6px;
     background: white;
     border-radius: 50%;
-    box-shadow: 0 0 15px var(--accent), 0 0 30px var(--accent);
-    animation: packet-glow 0.3s ease-in-out infinite;
+    box-shadow: 0 0 8px var(--accent), 0 0 16px var(--accent);
+    animation: packet-glow 0.4s ease-in-out infinite;
     animation-fill-mode: both;
     will-change: opacity;
   }
@@ -1465,11 +1456,11 @@ const styles = `
       clip-path: inset(0 100% 0 0);
       opacity: 0;
     }
-    10% { opacity: 1; }
+    5% { opacity: 1; }
     50% {
       clip-path: inset(0 0 0 0);
     }
-    90% { opacity: 1; }
+    95% { opacity: 1; }
     100% {
       clip-path: inset(0 0 0 100%);
       opacity: 0;
@@ -1477,28 +1468,30 @@ const styles = `
   }
 
   @keyframes packet-glow {
-    0%, 100% { box-shadow: 0 0 15px var(--accent), 0 0 30px var(--accent); }
-    50% { box-shadow: 0 0 25px white, 0 0 50px var(--accent); }
+    0%, 100% { box-shadow: 0 0 8px var(--accent), 0 0 16px var(--accent); }
+    50% { box-shadow: 0 0 12px white, 0 0 24px var(--accent); }
   }
 
   /* Threat indicators */
   .threat-indicator {
     position: absolute;
-    padding: 4px 8px;
-    background: rgba(0, 0, 0, 0.8);
+    padding: 6px 10px;
+    background: rgba(0, 0, 0, 0.9);
     border: 1px solid var(--accent);
     border-radius: 4px;
-    font-size: 0.65rem;
+    font-size: 0.7rem;
     font-family: 'JetBrains Mono', monospace;
     color: var(--accent);
     white-space: nowrap;
-    animation: threat-popup 3s ease-in-out infinite;
+    animation: threat-popup 4s ease-in-out infinite;
     z-index: 20;
+    transform: translateX(-50%);
+    box-shadow: 0 0 10px rgba(220, 38, 38, 0.3);
   }
 
   @keyframes threat-popup {
-    0%, 100% { opacity: 0; transform: translateY(10px); }
-    20%, 80% { opacity: 1; transform: translateY(0); }
+    0%, 100% { opacity: 0; transform: translateX(-50%) translateY(8px); }
+    15%, 85% { opacity: 1; transform: translateX(-50%) translateY(0); }
   }
 
   /* Network stats overlay */
@@ -1981,82 +1974,66 @@ export default function Landing() {
     animationDuration: `${6 + Math.random() * 4}s`,
   }));
 
-  // Network nodes - FULL GLOBAL COVERAGE
+  // Network nodes - Strategic placement on world map
   const networkNodes = [
-    // North America
-    { id: 0, x: 15, y: 28, label: 'NA-W', type: 'agent' },
-    { id: 1, x: 22, y: 32, label: 'NA-C', type: 'agent' },
-    { id: 2, x: 28, y: 35, label: 'NA-E', type: 'agent' },
-    // South America
-    { id: 3, x: 28, y: 55, label: 'SA-N', type: 'agent' },
-    { id: 4, x: 30, y: 65, label: 'SA-S', type: 'agent' },
-    // Europe
-    { id: 5, x: 45, y: 25, label: 'EU-N', type: 'agent' },
-    { id: 6, x: 48, y: 32, label: 'EU-C', type: 'agent' },
-    { id: 7, x: 52, y: 35, label: 'EU-S', type: 'agent' },
-    // Africa
-    { id: 8, x: 48, y: 45, label: 'AF-N', type: 'threat' },
-    { id: 9, x: 52, y: 55, label: 'AF-S', type: 'threat' },
-    // Middle East - CORE
-    { id: 10, x: 58, y: 38, label: 'CORE', type: 'core' },
-    // Asia
-    { id: 11, x: 65, y: 28, label: 'AS-W', type: 'agent' },
-    { id: 12, x: 72, y: 32, label: 'AS-C', type: 'agent' },
-    { id: 13, x: 80, y: 30, label: 'AS-E', type: 'agent' },
-    // Southeast Asia
-    { id: 14, x: 75, y: 48, label: 'SEA', type: 'agent' },
-    // Australia
-    { id: 15, x: 82, y: 60, label: 'OC', type: 'agent' },
-    // Antarctica
-    { id: 16, x: 40, y: 78, label: 'ANT-W', type: 'agent' },
-    { id: 17, x: 60, y: 78, label: 'ANT-E', type: 'agent' },
+    // North America - West Coast, Central, East Coast
+    { id: 0, x: 12, y: 32, label: 'LA', type: 'agent' },
+    { id: 1, x: 18, y: 28, label: 'CHI', type: 'agent' },
+    { id: 2, x: 24, y: 30, label: 'NYC', type: 'agent' },
+    // South America - Brazil, Argentina
+    { id: 3, x: 28, y: 58, label: 'SAO', type: 'agent' },
+    { id: 4, x: 26, y: 70, label: 'BUE', type: 'agent' },
+    // Europe - London, Frankfurt, Paris
+    { id: 5, x: 46, y: 28, label: 'LON', type: 'agent' },
+    { id: 6, x: 50, y: 30, label: 'FRA', type: 'core' },
+    // Africa - Lagos (threat zone)
+    { id: 7, x: 48, y: 50, label: 'LAG', type: 'threat' },
+    // Middle East - Dubai
+    { id: 8, x: 58, y: 38, label: 'DXB', type: 'agent' },
+    // Asia - Mumbai, Singapore, Tokyo, Seoul
+    { id: 9, x: 66, y: 40, label: 'MUM', type: 'agent' },
+    { id: 10, x: 74, y: 52, label: 'SIN', type: 'agent' },
+    { id: 11, x: 84, y: 32, label: 'TYO', type: 'agent' },
+    { id: 12, x: 80, y: 28, label: 'SEO', type: 'agent' },
+    // Australia - Sydney
+    { id: 13, x: 86, y: 68, label: 'SYD', type: 'agent' },
   ];
 
-  // Laser beams - FULL NETWORK
+  // Laser beams - Clean connections
   const laserBeams = [
-    // North America chain
+    // North America internal
     { from: 0, to: 1, delay: '0s' },
-    { from: 1, to: 2, delay: '0.2s' },
+    { from: 1, to: 2, delay: '0.3s' },
     // NA to SA
-    { from: 2, to: 3, delay: '0.4s' },
-    { from: 3, to: 4, delay: '0.6s' },
-    // NA to EU
-    { from: 1, to: 6, delay: '0.8s' },
-    // Europe chain
-    { from: 5, to: 6, delay: '1s' },
-    { from: 6, to: 7, delay: '1.2s' },
+    { from: 2, to: 3, delay: '0.6s' },
+    { from: 3, to: 4, delay: '0.9s' },
+    // NA to EU (transatlantic)
+    { from: 2, to: 5, delay: '1.2s' },
+    // Europe internal
+    { from: 5, to: 6, delay: '1.5s' },
     // EU to Africa
-    { from: 7, to: 8, delay: '1.4s' },
-    { from: 8, to: 9, delay: '1.6s' },
-    // EU to CORE
-    { from: 7, to: 10, delay: '1.8s' },
-    // CORE connections
-    { from: 10, to: 11, delay: '2s' },
-    { from: 10, to: 8, delay: '2.2s' },
-    // Asia chain
-    { from: 11, to: 12, delay: '2.4s' },
-    { from: 12, to: 13, delay: '2.6s' },
-    // Asia to SEA
-    { from: 12, to: 14, delay: '2.8s' },
-    // SEA to Australia
-    { from: 14, to: 15, delay: '3s' },
-    { from: 13, to: 15, delay: '3.2s' },
-    // Antarctica connections
-    { from: 4, to: 16, delay: '3.4s' },
-    { from: 16, to: 17, delay: '3.6s' },
-    { from: 9, to: 17, delay: '3.8s' },
-    // Cross-continental
-    { from: 0, to: 5, delay: '4s' },
-    { from: 6, to: 11, delay: '4.2s' },
-    { from: 15, to: 17, delay: '4.4s' },
+    { from: 6, to: 7, delay: '1.8s' },
+    // EU to Middle East
+    { from: 6, to: 8, delay: '2.1s' },
+    // Middle East to Asia
+    { from: 8, to: 9, delay: '2.4s' },
+    // Asia connections
+    { from: 9, to: 10, delay: '2.7s' },
+    { from: 10, to: 11, delay: '3s' },
+    { from: 11, to: 12, delay: '3.3s' },
+    // Asia to Australia
+    { from: 10, to: 13, delay: '3.6s' },
+    // Cross-continental backbone
+    { from: 0, to: 11, delay: '4s' },
+    { from: 6, to: 9, delay: '4.3s' },
   ];
 
-  // Threat indicators that pop up near nodes
+  // Threat indicators that pop up
   const threats = [
-    { x: 25, y: 28, text: 'BUNDLE FOUND', delay: '0s' },
-    { x: 45, y: 35, text: 'SCAM DETECTED', delay: '2s' },
-    { x: 72, y: 38, text: 'SYNDICATE', delay: '4s' },
-    { x: 75, y: 55, text: 'RUG ALERT', delay: '6s' },
+    { x: 20, y: 24, text: 'BUNDLE DETECTED', delay: '0.5s' },
+    { x: 52, y: 24, text: 'SCAM FLAGGED', delay: '2.5s' },
+    { x: 78, y: 24, text: 'SYNDICATE MAPPED', delay: '4.5s' },
+    { x: 44, y: 56, text: 'RUG BLOCKED', delay: '6.5s' },
   ];
 
   return (
@@ -2701,18 +2678,17 @@ export default function Landing() {
               {laserBeams.map((beam, i) => {
                 const from = networkNodes[beam.from];
                 const to = networkNodes[beam.to];
-                // Offset to center of triangle
-                const fromX = from.x + 1;
-                const fromY = from.y + 2;
-                const toX = to.x + 1;
-                const toY = to.y + 2;
+                // Nodes are now centered, no offset needed
+                const fromX = from.x;
+                const fromY = from.y;
+                const toX = to.x;
+                const toY = to.y;
 
                 const dx = toX - fromX;
                 const dy = toY - fromY;
 
-                // Container aspect ratio correction (width:height ≈ 2:1)
-                // Convert dy to "width-percent" equivalent
-                const dyScaled = dy * 0.5;
+                // Container aspect ratio correction (width:height ≈ 1.6:1)
+                const dyScaled = dy * 0.6;
 
                 // Length in width-percent units
                 const length = Math.sqrt(dx * dx + dyScaled * dyScaled);
