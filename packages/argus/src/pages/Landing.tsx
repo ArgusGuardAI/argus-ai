@@ -1343,13 +1343,14 @@ const styles = `
     100% { background-position: 50px 50px; }
   }
 
-  /* Network nodes - Clean dots with glow */
+  /* Network nodes - Clean triangles (Argus eye) */
   .network-node {
     position: absolute;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--accent);
+    width: 0;
+    height: 0;
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-bottom: 10px solid var(--accent);
     filter: drop-shadow(0 0 6px var(--accent)) drop-shadow(0 0 12px var(--accent));
     animation: node-pulse-war 2s ease-in-out infinite;
     animation-fill-mode: both;
@@ -1362,13 +1363,13 @@ const styles = `
   .network-node::before {
     content: '';
     position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 20px;
-    height: 20px;
-    border: 1px solid var(--accent);
-    border-radius: 50%;
+    top: 3px;
+    left: -10px;
+    width: 0;
+    height: 0;
+    border-left: 10px solid transparent;
+    border-right: 10px solid transparent;
+    border-bottom: 16px solid var(--accent);
     opacity: 0;
     animation: node-ring 2s ease-out infinite;
     animation-fill-mode: both;
@@ -1376,9 +1377,9 @@ const styles = `
   }
 
   .network-node.core {
-    width: 12px;
-    height: 12px;
-    background: var(--accent);
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-bottom: 14px solid var(--accent);
     filter:
       drop-shadow(0 0 10px var(--accent))
       drop-shadow(0 0 20px var(--accent))
@@ -1386,29 +1387,32 @@ const styles = `
   }
 
   .network-node.core::before {
-    width: 28px;
-    height: 28px;
+    top: 4px;
+    left: -14px;
+    border-left: 14px solid transparent;
+    border-right: 14px solid transparent;
+    border-bottom: 22px solid var(--accent);
   }
 
   .network-node.threat {
-    background: var(--amber);
+    border-bottom-color: var(--amber);
     filter: drop-shadow(0 0 6px var(--amber)) drop-shadow(0 0 12px var(--amber));
     animation: threat-blink 1s ease-in-out infinite;
     animation-fill-mode: both;
   }
 
   .network-node.threat::before {
-    border-color: var(--amber);
+    border-bottom-color: var(--amber);
   }
 
   @keyframes node-pulse-war {
     0%, 100% { transform: translate(-50%, -50%) scale(1); }
-    50% { transform: translate(-50%, -50%) scale(1.3); }
+    50% { transform: translate(-50%, -50%) scale(1.2); }
   }
 
   @keyframes node-ring {
-    0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0.6; }
-    100% { transform: translate(-50%, -50%) scale(2); opacity: 0; }
+    0% { transform: scale(0.5); opacity: 0.5; }
+    100% { transform: scale(2); opacity: 0; }
   }
 
   @keyframes threat-blink {
