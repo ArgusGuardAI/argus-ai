@@ -337,6 +337,53 @@ Automated position protection runs in a 10-second monitoring loop:
 - **Stop Loss:** Exit when loss exceeds threshold (20%, 30%, 50%, 70%)
 - **Trailing Stop:** Sell when price drops from peak by threshold (10%, 20%, 30%)
 
+### 6.4 Feature Compression (17,000x)
+
+Raw token analysis data is compressed into 116-byte feature vectors for efficient storage and pattern matching:
+
+| Category | Features | Description |
+|----------|----------|-------------|
+| **Market (5)** | liquidityLog, volumeToLiquidity, marketCapLog, priceVelocity, volumeLog | Price and liquidity metrics |
+| **Holders (6)** | holderCountLog, top10Concentration, giniCoefficient, freshWalletRatio, whaleCount, topWhalePercent | Distribution analysis |
+| **Security (4)** | mintDisabled, freezeDisabled, lpLocked, lpBurned | Authority checks |
+| **Bundle (5)** | bundleDetected, bundleCountNorm, bundleControlPercent, bundleConfidence, bundleQuality | Coordination detection |
+| **Trading (4)** | buyRatio24h, buyRatio1h, activityLevel, momentum | Buy/sell patterns |
+| **Time (2)** | ageDecay, tradingRecency | Temporal signals |
+| **Creator (3)** | creatorIdentified, creatorRugHistory, creatorHoldings | Developer risk |
+
+**Compression Result:** 2MB raw data → 116 bytes (Float32Array of 29 dimensions)
+
+### 6.5 BitNet 1-bit AI
+
+The risk classification engine uses quantized weights for edge-native inference:
+
+- **Ternary Weights:** -1, 0, +1 instead of 32-bit floats (20x smaller models)
+- **Inference Time:** 13ms on CPU (no GPU required)
+- **Monthly Cost:** $0 (no cloud AI APIs for classification)
+- **Deployment:** Runs directly on Cloudflare Workers
+
+### 6.6 Multi-Agent Swarm
+
+Four autonomous AI agents coordinate via pub/sub MessageBus:
+
+| Agent | Role | Capabilities |
+|-------|------|--------------|
+| **Scout** | Mempool Patrol | Monitors new launches, extracts 29-feature vectors in <100ms |
+| **Analyst** | Deep Investigation | Fetches top 50 holders, traces funding sources, builds threat profiles |
+| **Hunter** | Network Tracker | Maintains scammer database, alerts on repeat offenders |
+| **Trader** | Position Guardian | Executes trades with stop-loss, take-profit, trailing stops |
+
+### 6.7 Origin Vault
+
+The trading wallet uses cross-origin key isolation for security:
+
+- **Separate Domain:** Private keys stored on `secure.argusguard.io`
+- **Main App:** UI and trading logic on `app.argusguard.io`
+- **Communication:** postMessage only (never exposes raw keys)
+- **Protection:** Immune to XSS, malicious extensions, supply chain attacks
+
+This is the **first trading tool** with this architecture, enabling fully autonomous trading without wallet popups.
+
 ---
 
 ## 7. Tokenomics

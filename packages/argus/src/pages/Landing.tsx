@@ -532,6 +532,286 @@ const styles = `
     color: var(--text-muted);
   }
 
+  .engine-stat-detail {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+    margin-top: 4px;
+  }
+
+  /* Section: Origin Vault */
+  .section-vault {
+    background:
+      radial-gradient(ellipse at 30% 50%, rgba(124, 58, 237, 0.08) 0%, transparent 50%),
+      radial-gradient(ellipse at 70% 50%, rgba(220, 38, 38, 0.08) 0%, transparent 50%),
+      var(--bg-void);
+    padding: 120px 24px;
+  }
+
+  .vault-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    max-width: 900px;
+  }
+
+  .vault-diagram {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    margin-top: 60px;
+  }
+
+  .vault-box {
+    width: 260px;
+    flex-shrink: 0;
+    background: var(--bg-card);
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    padding: 28px 20px;
+    text-align: center;
+    position: relative;
+    opacity: 0;
+    transform: translateY(30px);
+    transition: opacity 0.6s ease, transform 0.6s ease, border-color 0.3s ease;
+  }
+
+  .vault-box.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .vault-box.app {
+    border-color: rgba(220, 38, 38, 0.4);
+    transition-delay: 0.1s;
+  }
+
+  .vault-box.secure {
+    border-color: rgba(16, 185, 129, 0.4);
+    transition-delay: 0.3s;
+    background: linear-gradient(180deg, rgba(16, 185, 129, 0.08) 0%, var(--bg-card) 100%);
+  }
+
+  .vault-box-icon {
+    font-size: 2.5rem;
+    margin-bottom: 16px;
+  }
+
+  .vault-box.app .vault-box-icon {
+    color: var(--accent);
+  }
+
+  .vault-box.secure .vault-box-icon {
+    color: var(--emerald);
+  }
+
+  .vault-box-domain {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+    padding: 6px 12px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 6px;
+    display: inline-block;
+  }
+
+  .vault-box-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-main);
+    margin-bottom: 8px;
+  }
+
+  .vault-box-desc {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+
+  .vault-box.secure .vault-box-desc {
+    color: var(--emerald);
+    font-weight: 500;
+  }
+
+  /* Barrier/arrows section */
+  .vault-arrows {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 0 24px;
+    position: relative;
+    opacity: 0;
+    transition: opacity 0.6s ease 0.5s;
+  }
+
+  .vault-arrows.visible {
+    opacity: 1;
+  }
+
+  /* Vertical barrier line */
+  .vault-arrows::before {
+    content: '';
+    position: absolute;
+    top: -40px;
+    bottom: -40px;
+    left: 50%;
+    width: 2px;
+    background: linear-gradient(180deg, transparent, var(--emerald), transparent);
+    transform: translateX(-50%);
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.6);
+  }
+
+  /* Shield icon in center */
+  .vault-arrows::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 36px;
+    height: 36px;
+    background: var(--bg-void);
+    border: 2px solid var(--emerald);
+    border-radius: 50%;
+    box-shadow: 0 0 25px rgba(16, 185, 129, 0.6);
+  }
+
+  .vault-arrow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    white-space: nowrap;
+    z-index: 1;
+  }
+
+  .vault-arrow-line {
+    width: 70px;
+    height: 2px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .vault-arrow.outgoing .vault-arrow-line {
+    background: linear-gradient(90deg, var(--accent), var(--emerald));
+  }
+
+  .vault-arrow.incoming .vault-arrow-line {
+    background: linear-gradient(90deg, var(--emerald), var(--purple));
+  }
+
+  .vault-arrow-line::after {
+    content: '';
+    position: absolute;
+    top: -3px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    box-shadow: 0 0 8px currentColor;
+  }
+
+  .vault-arrow.outgoing .vault-arrow-line::after {
+    left: -8px;
+    background: var(--accent);
+    animation: vault-packet-out 2s ease-in-out infinite;
+  }
+
+  .vault-arrow.incoming .vault-arrow-line::after {
+    right: -8px;
+    background: var(--purple);
+    animation: vault-packet-in 2s ease-in-out infinite;
+    animation-delay: 1s;
+  }
+
+  @keyframes vault-packet-out {
+    0%, 100% { left: -8px; opacity: 0; }
+    10% { opacity: 1; }
+    90% { opacity: 1; }
+    95%, 100% { left: 100%; opacity: 0; }
+  }
+
+  @keyframes vault-packet-in {
+    0%, 100% { right: -8px; opacity: 0; }
+    10% { opacity: 1; }
+    90% { opacity: 1; }
+    95%, 100% { right: 100%; opacity: 0; }
+  }
+
+  .vault-arrow-label {
+    color: var(--text-dim);
+  }
+
+  .vault-arrow.outgoing .vault-arrow-label {
+    color: var(--accent);
+  }
+
+  .vault-arrow.incoming .vault-arrow-label {
+    color: var(--purple);
+  }
+
+  .vault-benefits {
+    display: flex;
+    justify-content: center;
+    gap: 40px;
+    margin-top: 60px;
+    flex-wrap: wrap;
+  }
+
+  .vault-benefit {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.5s ease, transform 0.5s ease;
+  }
+
+  .vault-benefit.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .vault-benefit i {
+    color: var(--emerald);
+    font-size: 1rem;
+  }
+
+  .vault-benefit span {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+  }
+
+  @media (max-width: 768px) {
+    .vault-diagram {
+      flex-direction: column;
+    }
+    .vault-arrows {
+      transform: rotate(90deg);
+      padding: 24px 0;
+    }
+    .vault-arrows::before {
+      top: auto;
+      bottom: auto;
+      left: -40px;
+      right: -40px;
+      width: auto;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--emerald), transparent);
+    }
+    .vault-benefits {
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+    }
+  }
+
   /* Section: Pricing */
   .section-pricing {
     background: var(--bg-dark);
@@ -1667,7 +1947,7 @@ export default function Landing() {
 
     const interval = setInterval(() => {
       setTerminalLines((prev) => {
-        if (prev >= 8) {
+        if (prev >= 13) {
           clearInterval(interval);
           return prev;
         }
@@ -1679,14 +1959,19 @@ export default function Landing() {
   }, [visibleSections]);
 
   const terminalContent = [
-    { text: '$ argus hunt 7xKp...pump', class: 'white' },
-    { text: '[SCOUT-1] Target acquired. Scanning mempool...', class: 'purple' },
-    { text: '[ANALYST-1] Compressing 2.1MB → 116 bytes', class: 'cyan' },
-    { text: '[ANALYST-1] Pattern: BUNDLE_COORDINATOR (87%)', class: 'amber' },
-    { text: '[HUNTER-1] WARNING: 3 wallets linked to previous rug', class: 'red' },
-    { text: '[HUNTER-1] Syndicate network: 8 tokens, 75% rug rate', class: 'red' },
-    { text: '[TRADER-1] Auto-exit engaged. Position protected.', class: 'green' },
-    { text: '[ARGUS] The shadows remember. Target flagged.', class: 'dim' },
+    { text: '$ argus hunt 7xKpRn3...pump', class: 'white' },
+    { text: '[SCOUT] TOKEN DETECTED • Block 284719362 • Age: 0.3s', class: 'purple' },
+    { text: '[SCOUT] Feature extraction complete: 29 dims in 47ms', class: 'purple' },
+    { text: '[SCOUT] Anomaly score: 0.847 — FLAGGING FOR DEEP SCAN', class: 'amber' },
+    { text: '[ANALYST] Ingesting 2.1MB raw data... compressing...', class: 'cyan' },
+    { text: '[ANALYST] 116-byte fingerprint generated. Scanning pattern library...', class: 'cyan' },
+    { text: '[ANALYST] MATCH: BUNDLE_COORDINATOR — 91.3% similarity', class: 'red' },
+    { text: '[ANALYST] 23 wallets bought in same block. Syndicate confirmed.', class: 'red' },
+    { text: '[HUNTER] Cross-referencing creator wallet 8xMn7...', class: 'amber' },
+    { text: '[HUNTER] DATABASE HIT: 3 prior rugs. Total stolen: $847,291', class: 'red' },
+    { text: '[HUNTER] Syndicate mapped: 47 connected wallets. Fingerprinting all.', class: 'red' },
+    { text: '[TRADER] THREAT LEVEL: CRITICAL. Blocking all positions.', class: 'green' },
+    { text: '[ARGUS] Syndicate added to eternal memory. They can run. We remember.', class: 'dim' },
   ];
 
   // Generate particles
@@ -1817,25 +2102,26 @@ export default function Landing() {
             <div className={`narrative-content ${visibleSections.has('darkness') ? 'visible' : ''}`}>
               <div className="narrative-label">Chapter I</div>
               <h1 className="narrative-title">
-                In the shadows,<br /><span>scammers lurk</span>
+                The mempool is a <span>killing field</span>
               </h1>
               <p className="narrative-text">
-                Every day, thousands of traders lose millions to coordinated pump-and-dump schemes,
-                honeypots, and rug pulls. The predators hide in plain sight, moving from token to token,
-                leaving devastation in their wake.
+                They hunt in packs. Syndicates of 50+ wallets deploy tokens every 3 minutes.
+                Within seconds, insiders accumulate. Within hours, they dump. By the time you see
+                the green candle, you're already the exit liquidity. They've done this a thousand times.
+                They'll do it again tonight. Same wallets. Same playbook. Different victims.
               </p>
               <div className="darkness-stats">
                 <div className="darkness-stat">
                   <div className="darkness-stat-value">$2.8B</div>
-                  <div className="darkness-stat-label">Lost to rugs in 2024</div>
+                  <div className="darkness-stat-label">Stolen in 2024</div>
                 </div>
                 <div className="darkness-stat">
                   <div className="darkness-stat-value">47%</div>
-                  <div className="darkness-stat-label">Tokens are scams</div>
+                  <div className="darkness-stat-label">Tokens are traps</div>
                 </div>
                 <div className="darkness-stat">
                   <div className="darkness-stat-value">3.2s</div>
-                  <div className="darkness-stat-label">Average rug time</div>
+                  <div className="darkness-stat-label">To lose everything</div>
                 </div>
               </div>
             </div>
@@ -1851,12 +2137,16 @@ export default function Landing() {
               <ArgusEye className="awakening-eye" />
               <div className="narrative-label">Chapter II</div>
               <h1 className="narrative-title">
-                Until the <span>eye opened</span>
+                Then <span>something woke up</span>
               </h1>
               <p className="narrative-text">
-                Argus AI emerged from the void — a hundred-eyed watcher that never sleeps.
-                Compressing 2MB of blockchain data into 116 bytes. Running inference in 13 milliseconds.
-                Seeing patterns humans cannot perceive. Remembering every scammer who dared to rug.
+                Argus Panoptes. The all-seeing titan with one hundred eyes. In myth, he was slain.
+                In code, he was reborn. We gave him a new body: a neural architecture that compresses
+                the entire chaos of blockchain into crystalline memory. 2 megabytes of raw token data —
+                holders, transactions, funding sources, timing patterns — crushed into 116 bytes.
+                A fingerprint so dense that one million scammer profiles fit in 116 megabytes of RAM.
+                He remembers every wallet that ever rugged. He recognizes their new disguises.
+                He never sleeps. He never forgets. And now he's watching the mempool.
               </p>
             </div>
           </section>
@@ -1870,11 +2160,13 @@ export default function Landing() {
             <div className={`narrative-content ${visibleSections.has('swarm') ? 'visible' : ''}`}>
               <div className="narrative-label">Chapter III</div>
               <h1 className="narrative-title">
-                Four agents<br /><span>emerged from darkness</span>
+                The titan <span>fractured into four</span>
               </h1>
               <p className="narrative-text">
-                A coordinated swarm of autonomous AI agents, each with a specialized purpose.
-                Working together. Sharing intelligence. Hunting as one.
+                One mind. Four bodies. Argus divided himself into specialized hunters, each with
+                a singular obsession. They share thoughts through a neural pub/sub mesh — when one
+                agent learns a new pattern, the knowledge propagates to all in 3 milliseconds.
+                They don't take turns. They swarm simultaneously. Predators hunting predators.
               </p>
             </div>
             <div className="agents-grid">
@@ -1883,10 +2175,11 @@ export default function Landing() {
                   <AgentEye color="#8B5CF6" glowColor="rgba(139, 92, 246, 0.15)" />
                 </div>
                 <div className="agent-name">Scout</div>
-                <div className="agent-role">Mempool Patrol</div>
+                <div className="agent-role">The First Eye</div>
                 <div className="agent-desc">
-                  Prowls the mempool 24/7, detecting new token launches within milliseconds.
-                  Performs rapid triage scans and flags suspicious activity before others even notice.
+                  Stares into the raw mempool. Never blinks. A new token appears — Scout has already
+                  extracted 29 dimensional features before the first candle forms. 47 milliseconds.
+                  Suspicion flagged. Signal sent. The pack is alerted.
                 </div>
               </div>
               <div className={`agent-card ${visibleSections.has('swarm') ? 'visible' : ''}`}>
@@ -1894,10 +2187,11 @@ export default function Landing() {
                   <AgentEye color="#DC2626" glowColor="rgba(220, 38, 38, 0.15)" />
                 </div>
                 <div className="agent-name">Analyst</div>
-                <div className="agent-role">Deep Investigation</div>
+                <div className="agent-role">The Deep Mind</div>
                 <div className="agent-desc">
-                  Dissects contracts, traces fund flows, and builds complete threat profiles.
-                  Compresses raw blockchain data into dense feature vectors for pattern matching.
+                  Receives the signal. Inhales 2 megabytes of chaos — holders, transactions,
+                  funding sources, wallet ages, transaction timing. Exhales a 116-byte crystalline
+                  fingerprint. Pattern match initiated. 87% similarity to BUNDLE_COORDINATOR.
                 </div>
               </div>
               <div className={`agent-card ${visibleSections.has('swarm') ? 'visible' : ''}`}>
@@ -1905,10 +2199,11 @@ export default function Landing() {
                   <AgentEye color="#F59E0B" glowColor="rgba(245, 158, 11, 0.15)" />
                 </div>
                 <div className="agent-name">Hunter</div>
-                <div className="agent-role">Network Tracker</div>
+                <div className="agent-role">The Long Memory</div>
                 <div className="agent-desc">
-                  Tracks scammer wallets across tokens, building profiles of repeat offenders.
-                  Maintains a database of syndicate networks and alerts when they resurface.
+                  The archive of sin. Every scammer who ever rugged is indexed here. The Hunter
+                  cross-references the creator's wallet: "Match found. This one rugged 3 tokens
+                  in 72 hours. Same funding wallet. Same timing pattern. Same predator, new mask."
                 </div>
               </div>
               <div className={`agent-card ${visibleSections.has('swarm') ? 'visible' : ''}`}>
@@ -1916,10 +2211,11 @@ export default function Landing() {
                   <AgentEye color="#10B981" glowColor="rgba(16, 185, 129, 0.15)" />
                 </div>
                 <div className="agent-name">Trader</div>
-                <div className="agent-role">Position Guardian</div>
+                <div className="agent-role">The Guardian</div>
                 <div className="agent-desc">
-                  Executes autonomous trades based on swarm intelligence. Auto-exits positions
-                  when danger signals emerge. Your guardian while you sleep.
+                  The swarm speaks: DANGER. The Trader moves before you can think. Position closed.
+                  Stop-loss triggered. Exit confirmed. You wake up to a notification: "Threat
+                  neutralized while you slept. The pack protected you."
                 </div>
               </div>
             </div>
@@ -1934,10 +2230,13 @@ export default function Landing() {
             <div className={`narrative-content ${visibleSections.has('hunt') ? 'visible' : ''}`}>
               <div className="narrative-label">Chapter IV</div>
               <h1 className="narrative-title">
-                Now they <span>hunt as one</span>
+                Watch the <span>kill chain</span>
               </h1>
               <p className="narrative-text">
-                Watch the swarm coordinate in real-time as they expose a threat.
+                This is what happens when you paste a contract. In real-time. No external API calls —
+                the entire analysis runs on edge compute in under 500ms. By the time a scammer's
+                token appears, Argus has already remembered their past, mapped their network,
+                and blocked your capital.
               </p>
 
               {/* Terminal Preview */}
@@ -1966,29 +2265,29 @@ export default function Landing() {
               <div className={`hunt-step ${visibleSections.has('hunt') ? 'visible' : ''}`}>
                 <div className="hunt-step-num">1</div>
                 <div className="hunt-step-content">
-                  <h4>Mark the Target</h4>
-                  <p>Submit a token address. The hunt begins.</p>
+                  <h4>Target Acquired</h4>
+                  <p>Paste the contract. The hundred eyes snap to focus. Clock starts.</p>
                 </div>
               </div>
               <div className={`hunt-step ${visibleSections.has('hunt') ? 'visible' : ''}`}>
                 <div className="hunt-step-num">2</div>
                 <div className="hunt-step-content">
-                  <h4>Deploy the Swarm</h4>
-                  <p>Scouts scan, Analysts dissect, Hunters trace wallet networks across tokens.</p>
+                  <h4>Neural Compression</h4>
+                  <p>2MB of chaos compressed to 116 bytes. Pattern library queried. Similarity scores calculated.</p>
                 </div>
               </div>
               <div className={`hunt-step ${visibleSections.has('hunt') ? 'visible' : ''}`}>
                 <div className="hunt-step-num">3</div>
                 <div className="hunt-step-content">
-                  <h4>Expose the Threat</h4>
-                  <p>Pattern matching reveals syndicates, honeypots, and repeat offenders.</p>
+                  <h4>Syndicate Mapped</h4>
+                  <p>Creator wallet traced. Funding sources identified. Prior rugs surfaced. The entire network exposed.</p>
                 </div>
               </div>
               <div className={`hunt-step ${visibleSections.has('hunt') ? 'visible' : ''}`}>
                 <div className="hunt-step-num">4</div>
                 <div className="hunt-step-content">
-                  <h4>Execute or Retreat</h4>
-                  <p>Trade with intelligence or walk away. The choice is yours.</p>
+                  <h4>Verdict Delivered</h4>
+                  <p>SAFE or DANGER. Enter or retreat. Either way, you saw what they tried to hide.</p>
                 </div>
               </div>
             </div>
@@ -2003,29 +2302,116 @@ export default function Landing() {
             <div className={`narrative-content ${visibleSections.has('engine') ? 'visible' : ''}`}>
               <div className="narrative-label">Chapter V</div>
               <h1 className="narrative-title">
-                BitNet <span>1-bit AI</span>
+                The impossible <span>engine</span>
               </h1>
               <p className="narrative-text">
-                We compress the entire blockchain state into a neural fingerprint.
-                Every transaction. Every wallet. Every sin — remembered forever.
+                They said you can't run AI without burning money. They were wrong.
+                BitNet uses ternary weights: just -1, 0, and +1. No 32-bit floats. No GPU. No cloud.
+                The model is 20x smaller. Inference takes 13 milliseconds on a CPU.
+                We compress 2MB of blockchain data into 116 bytes — a 17,000x reduction that fits
+                a million token fingerprints in 116MB of RAM. This is what lets Argus run forever
+                at zero cost. The titan doesn't need to eat.
               </p>
             </div>
             <div className="engine-stats">
               <div className={`engine-stat ${visibleSections.has('engine') ? 'visible' : ''}`} style={{ transitionDelay: '0.1s' }}>
                 <div className="engine-stat-value">17,000x</div>
-                <div className="engine-stat-label">Data Compression</div>
+                <div className="engine-stat-label">Compression</div>
+                <div className="engine-stat-detail">2MB → 116 bytes</div>
               </div>
               <div className={`engine-stat ${visibleSections.has('engine') ? 'visible' : ''}`} style={{ transitionDelay: '0.2s' }}>
                 <div className="engine-stat-value">13ms</div>
-                <div className="engine-stat-label">Inference Time</div>
+                <div className="engine-stat-label">Inference</div>
+                <div className="engine-stat-detail">CPU only. No GPU.</div>
               </div>
               <div className={`engine-stat ${visibleSections.has('engine') ? 'visible' : ''}`} style={{ transitionDelay: '0.3s' }}>
-                <div className="engine-stat-value">116B</div>
-                <div className="engine-stat-label">Feature Vector</div>
+                <div className="engine-stat-value">29</div>
+                <div className="engine-stat-label">Dimensions</div>
+                <div className="engine-stat-detail">Per token fingerprint</div>
               </div>
               <div className={`engine-stat ${visibleSections.has('engine') ? 'visible' : ''}`} style={{ transitionDelay: '0.4s' }}>
                 <div className="engine-stat-value">$0</div>
-                <div className="engine-stat-label">Monthly AI Cost</div>
+                <div className="engine-stat-label">Forever</div>
+                <div className="engine-stat-detail">No cloud. No bills.</div>
+              </div>
+            </div>
+          </section>
+
+          {/* Section: Origin Vault */}
+          <section
+            id="vault"
+            className="narrative-section section-vault"
+            ref={(el) => (sectionRefs.current['vault'] = el)}
+          >
+            <div className="vault-container">
+              <div className={`narrative-content ${visibleSections.has('vault') ? 'visible' : ''}`}>
+                <div className="narrative-label">Chapter VI</div>
+                <h1 className="narrative-title">
+                  The <span>unhackable</span> vault
+                </h1>
+                <p className="narrative-text">
+                  Every trading tool on Solana stores your keys where attackers can reach them.
+                  In the same JavaScript context. Accessible to browser extensions. Vulnerable to XSS.
+                  One malicious npm package and you're drained. We said: never again.
+                  Origin Vault isolates your private key on a separate domain — a fortress with zero
+                  dependencies, strict CSP, and a single purpose: sign what you authorize. Nothing else
+                  can cross that boundary. Not extensions. Not injected scripts. Not supply chain attacks.
+                  This is the first trading tool with cross-origin key isolation. Trade autonomously. Sleep soundly.
+                </p>
+              </div>
+
+              <div className="vault-diagram">
+                <div className={`vault-box app ${visibleSections.has('vault') ? 'visible' : ''}`}>
+                  <div className="vault-box-icon">
+                    <i className="fa-solid fa-display"></i>
+                  </div>
+                  <div className="vault-box-domain">app.argusguard.io</div>
+                  <div className="vault-box-title">The App</div>
+                  <div className="vault-box-desc">
+                    Analysis. Trading logic. UI.<br />
+                    Never touches your key.
+                  </div>
+                </div>
+
+                <div className={`vault-arrows ${visibleSections.has('vault') ? 'visible' : ''}`}>
+                  <div className="vault-arrow outgoing">
+                    <span className="vault-arrow-label">sign this</span>
+                    <div className="vault-arrow-line"></div>
+                    <i className="fa-solid fa-chevron-right" style={{ color: 'var(--accent)' }}></i>
+                  </div>
+                  <div className="vault-arrow incoming">
+                    <i className="fa-solid fa-chevron-left" style={{ color: 'var(--purple)' }}></i>
+                    <div className="vault-arrow-line"></div>
+                    <span className="vault-arrow-label">signed</span>
+                  </div>
+                </div>
+
+                <div className={`vault-box secure ${visibleSections.has('vault') ? 'visible' : ''}`}>
+                  <div className="vault-box-icon">
+                    <i className="fa-solid fa-shield-halved"></i>
+                  </div>
+                  <div className="vault-box-domain">secure.argusguard.io</div>
+                  <div className="vault-box-title">The Vault</div>
+                  <div className="vault-box-desc">
+                    Your key lives here. Alone.<br />
+                    Zero dependencies. Unhackable.
+                  </div>
+                </div>
+              </div>
+
+              <div className="vault-benefits">
+                <div className={`vault-benefit ${visibleSections.has('vault') ? 'visible' : ''}`} style={{ transitionDelay: '0.6s' }}>
+                  <i className="fa-solid fa-robot"></i>
+                  <span>Full autonomy — no wallet popups, no interruptions, the swarm executes instantly</span>
+                </div>
+                <div className={`vault-benefit ${visibleSections.has('vault') ? 'visible' : ''}`} style={{ transitionDelay: '0.7s' }}>
+                  <i className="fa-solid fa-shield-halved"></i>
+                  <span>Zero attack surface — XSS, extensions, npm supply chain attacks all blocked at the origin boundary</span>
+                </div>
+                <div className={`vault-benefit ${visibleSections.has('vault') ? 'visible' : ''}`} style={{ transitionDelay: '0.8s' }}>
+                  <i className="fa-solid fa-moon"></i>
+                  <span>24/7 protection — set your stop-loss, go to sleep, wake up with your capital intact</span>
+                </div>
               </div>
             </div>
           </section>
@@ -2037,22 +2423,26 @@ export default function Landing() {
             ref={(el) => (sectionRefs.current['arsenal'] = el)}
           >
             <div className={`narrative-content ${visibleSections.has('arsenal') ? 'visible' : ''}`}>
-              <div className="narrative-label">Chapter VI</div>
+              <div className="narrative-label">Chapter VII</div>
               <h1 className="narrative-title">
-                Weapons <span>forged in darkness</span>
+                The <span>arsenal</span>
               </h1>
+              <p className="narrative-text">
+                Every weapon below runs in your browser. No API keys. No cloud dependencies.
+                This is sovereign technology. You own it the moment you load the page.
+              </p>
             </div>
             <div className="arsenal-grid">
               {[
-                { title: 'Syndicate Scanner', desc: 'Same-block transaction analysis exposes coordinated pump groups' },
-                { title: 'Bundle Detection', desc: 'Identify wallet clusters controlling supply before they dump' },
-                { title: 'Security Check', desc: 'Instant checks on mint/freeze authority, LP lock, contract risks' },
-                { title: 'Dev Tracker', desc: 'Analyze creator wallet age, deployment history, activity patterns' },
-                { title: 'AutoGuard', desc: 'Set take profit, stop loss, trailing stops for autonomous exits' },
-                { title: 'Quick Trade', desc: 'One-click Jupiter swaps with dedicated trading wallet' },
-                { title: 'Origin Vault', desc: 'Private keys isolated in separate secure origin, protected from XSS' },
-                { title: 'Pattern Library', desc: '8 known scam patterns with weighted similarity scoring' },
-                { title: 'Outcome Learning', desc: 'Self-improving AI that tracks predictions vs actual outcomes' },
+                { title: 'Syndicate Scanner', desc: 'Detects coordinated buys in the same block. Exposes pump groups before they dump.' },
+                { title: 'Bundle Mapper', desc: 'Traces funding sources between wallets. Reveals hidden coordination through on-chain money flow.' },
+                { title: 'Pattern Library', desc: '8 known scam signatures: BUNDLE_COORDINATOR, RUG_PULLER, WASH_TRADER, and more. Weighted similarity matching.' },
+                { title: 'Smart Multi-RPC', desc: '5+ RPC endpoints with intelligent routing. Auto-failover. Latency tracking. Never go down.' },
+                { title: 'Scammer Archive', desc: 'Every wallet that ever rugged, indexed and fingerprinted. New mask? Same sins. We remember.' },
+                { title: 'AutoGuard', desc: 'Stop-loss, take-profit, trailing stops — executing autonomously while you sleep.' },
+                { title: 'Instant Swap', desc: 'One-click Jupiter execution through Origin Vault. No popups. No confirmation delays.' },
+                { title: 'Outcome Learning', desc: 'Tracks every prediction against reality. Gradient descent on feature weights. Always improving.' },
+                { title: 'Neural Compression', desc: '2MB → 116 bytes. 17,000x reduction. Store a million scammer profiles in RAM.' },
               ].map((item, i) => (
                 <div
                   key={i}
@@ -2073,12 +2463,13 @@ export default function Landing() {
             ref={(el) => (sectionRefs.current['pricing'] = el)}
           >
             <div className={`narrative-content ${visibleSections.has('pricing') ? 'visible' : ''}`}>
-              <div className="narrative-label">Chapter VII</div>
+              <div className="narrative-label">Chapter VIII</div>
               <h1 className="narrative-title">
-                Choose your <span>tier</span>
+                No subscriptions. <span>Just hold.</span>
               </h1>
               <p className="narrative-text">
-                Start free. Unlock unlimited power with $ARGUS tokens.
+                Access is simple. Free users get 10 scans per day. Hold $ARGUS tokens
+                and the limits disappear. No monthly bills. No credit cards. Just proof of stake.
               </p>
             </div>
             <div className="pricing-grid">
@@ -2134,13 +2525,14 @@ export default function Landing() {
             ref={(el) => (sectionRefs.current['token'] = el)}
           >
             <div className={`narrative-content ${visibleSections.has('token') ? 'visible' : ''}`}>
-              <div className="narrative-label">Chapter VIII</div>
+              <div className="narrative-label">Chapter IX</div>
               <h1 className="narrative-title">
-                The <span>$ARGUS</span> token
+                Stake your <span>claim</span>
               </h1>
               <p className="narrative-text">
-                Hold $ARGUS to unlock unlimited scans and premium features.
-                No subscriptions. Just hold.
+                $ARGUS is the key to the kingdom. Hold it, and the swarm works for you —
+                unlimited scans, priority routing, early access to new weapons.
+                The more you hold, the deeper your access. No middlemen. No subscriptions.
               </p>
             </div>
             <div className={`token-card ${visibleSections.has('token') ? 'visible' : ''}`}>
@@ -2194,12 +2586,13 @@ export default function Landing() {
             ref={(el) => (sectionRefs.current['roadmap'] = el)}
           >
             <div className={`narrative-content ${visibleSections.has('roadmap') ? 'visible' : ''}`}>
-              <div className="narrative-label">Chapter IX</div>
+              <div className="narrative-label">Chapter X</div>
               <h1 className="narrative-title">
-                The path <span>ahead</span>
+                The <span>evolution</span>
               </h1>
               <p className="narrative-text">
-                Building the most powerful AI-driven crypto defense network.
+                What's built is just the beginning. The swarm grows stronger with every deployment.
+                Vector search at scale. Multi-chain expansion. A decentralized network of watchers.
               </p>
             </div>
             <div className="roadmap-timeline">
@@ -2240,13 +2633,13 @@ export default function Landing() {
               {/* Phase 3 */}
               <div className={`roadmap-phase ${visibleSections.has('roadmap') ? 'visible' : ''}`} style={{ transitionDelay: '0.3s' }}>
                 <div className="roadmap-content">
-                  <div className="roadmap-phase-label">Phase 3 — Expansion</div>
+                  <div className="roadmap-phase-label">Phase 3 — Scale</div>
                   <div className="roadmap-phase-title">The Network Spreads</div>
                   <ul className="roadmap-items">
-                    <li><i className="fa-solid fa-circle pending"></i> Telegram alert bot</li>
-                    <li><i className="fa-solid fa-circle pending"></i> Public API for developers</li>
-                    <li><i className="fa-solid fa-circle pending"></i> Mobile companion app</li>
-                    <li><i className="fa-solid fa-circle pending"></i> Portfolio guardian mode</li>
+                    <li><i className="fa-solid fa-circle pending"></i> HNSW vector index — O(log n) similarity search</li>
+                    <li><i className="fa-solid fa-circle pending"></i> Distributed agent nodes across regions</li>
+                    <li><i className="fa-solid fa-circle pending"></i> Real-time Telegram/Discord alerts</li>
+                    <li><i className="fa-solid fa-circle pending"></i> Public REST API for developers</li>
                   </ul>
                 </div>
                 <div className="roadmap-marker">
@@ -2258,12 +2651,12 @@ export default function Landing() {
               <div className={`roadmap-phase ${visibleSections.has('roadmap') ? 'visible' : ''}`} style={{ transitionDelay: '0.4s' }}>
                 <div className="roadmap-content">
                   <div className="roadmap-phase-label">Phase 4 — Dominion</div>
-                  <div className="roadmap-phase-title">The Global Network</div>
+                  <div className="roadmap-phase-title">Full Deployment</div>
                   <ul className="roadmap-items">
-                    <li><i className="fa-solid fa-circle pending"></i> Multi-chain expansion (Base, ETH)</li>
-                    <li><i className="fa-solid fa-circle pending"></i> Decentralized agent nodes</li>
-                    <li><i className="fa-solid fa-circle pending"></i> Community-powered threat intel</li>
-                    <li><i className="fa-solid fa-circle pending"></i> Governance for $ARGUS holders</li>
+                    <li><i className="fa-solid fa-circle pending"></i> Complete BitNet model (no cloud fallback)</li>
+                    <li><i className="fa-solid fa-circle pending"></i> Multi-chain: Base, Ethereum, Arbitrum</li>
+                    <li><i className="fa-solid fa-circle pending"></i> Community-sourced scammer database</li>
+                    <li><i className="fa-solid fa-circle pending"></i> $ARGUS holder governance</li>
                   </ul>
                 </div>
                 <div className="roadmap-marker">
@@ -2282,11 +2675,13 @@ export default function Landing() {
             <div className={`narrative-content ${visibleSections.has('network') ? 'visible' : ''}`}>
               <div className="narrative-label">Final Chapter</div>
               <h1 className="narrative-title">
-                A <span>global swarm</span><br />protecting crypto
+                The <span>war room</span>
               </h1>
               <p className="narrative-text">
-                Argus agents scattered across the world, sharing intelligence,
-                learning from every threat, growing stronger together.
+                This is the view from inside Argus. Agents deployed across every continent.
+                Laser links carrying threat intelligence at the speed of light. Syndicates detected.
+                Rugs prevented. Scammers fingerprinted and added to the eternal archive.
+                The red triangles are watching. The network never sleeps.
               </p>
             </div>
 
@@ -2372,20 +2767,20 @@ export default function Landing() {
               {/* Network stats */}
               <div className="network-stats">
                 <div className="network-stat">
-                  <div className="network-stat-value live">10</div>
-                  <div className="network-stat-label">Active Agents</div>
+                  <div className="network-stat-value live">4</div>
+                  <div className="network-stat-label">AI Agents</div>
                 </div>
                 <div className="network-stat">
-                  <div className="network-stat-value">847</div>
-                  <div className="network-stat-label">Threats Blocked</div>
+                  <div className="network-stat-value">8</div>
+                  <div className="network-stat-label">Scam Patterns</div>
                 </div>
                 <div className="network-stat">
-                  <div className="network-stat-value live">24/7</div>
-                  <div className="network-stat-label">Watch Mode</div>
+                  <div className="network-stat-value">29</div>
+                  <div className="network-stat-label">Feature Dims</div>
                 </div>
                 <div className="network-stat">
-                  <div className="network-stat-value">&lt;13ms</div>
-                  <div className="network-stat-label">Response Time</div>
+                  <div className="network-stat-value live">13ms</div>
+                  <div className="network-stat-label">Kill Time</div>
                 </div>
               </div>
             </div>
@@ -2393,15 +2788,16 @@ export default function Landing() {
             <div className={`narrative-content ${visibleSections.has('network') ? 'visible' : ''}`} style={{ marginTop: '40px' }}>
               <ArgusEye className="join-eye" />
               <p className="narrative-text" style={{ marginBottom: '0' }}>
-                The shadows await. Nothing escapes the hundred eyes.
+                The hunt begins now. Paste a contract. Expose the predators.<br />
+                Nothing escapes the hundred eyes.
               </p>
               <div>
                 <a href="https://app.argusguard.io" className="join-cta">
-                  Enter the Darkness
+                  Begin Hunting
                 </a>
                 <a href="https://github.com/ArgusGuardAI/argus-ai" target="_blank" rel="noopener noreferrer" className="join-secondary">
                   <i className="fa-brands fa-github"></i>
-                  View Source
+                  Read the Code
                 </a>
               </div>
             </div>
@@ -2412,11 +2808,11 @@ export default function Landing() {
             <div className="footer-links">
               <a href="https://app.argusguard.io">Launch App</a>
               <a href="https://github.com/ArgusGuardAI/argus-ai" target="_blank" rel="noopener noreferrer">GitHub</a>
-              <a href="https://x.com/ArgusPanoptes7z" target="_blank" rel="noopener noreferrer">Twitter</a>
+              <a href="https://x.com/ArgusPanoptes7z" target="_blank" rel="noopener noreferrer">X (Twitter)</a>
               <a href="https://t.me/ArgusAIAlerts" target="_blank" rel="noopener noreferrer">Telegram</a>
             </div>
             <div className="footer-copy">
-              2026 Argus AI — The Watcher in the Dark. Open Source under MIT License.
+              Argus AI — Built by hunters, for hunters. 100% open source. MIT License.
             </div>
           </footer>
         </div>

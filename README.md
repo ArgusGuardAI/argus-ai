@@ -55,6 +55,20 @@ Argus AI is a comprehensive token research tool that provides instant AI analysi
 
 ---
 
+## Technical Innovations
+
+| Innovation | Description |
+|------------|-------------|
+| **17,000x Compression** | 2MB raw token data → 116-byte feature vectors (29 dimensions) |
+| **BitNet 1-bit AI** | Ternary weights (-1, 0, +1), 13ms inference, CPU-only, $0/month |
+| **Multi-Agent Swarm** | Scout, Analyst, Hunter, Trader communicating via pub/sub |
+| **Origin Vault** | Cross-origin key isolation — first trading tool with this |
+| **Smart Multi-RPC** | Intelligent routing across 5+ endpoints with auto-failover |
+| **8 Scam Patterns** | BUNDLE_COORDINATOR, RUG_PULLER, WASH_TRADER, and more |
+| **Outcome Learning** | Self-improving AI that tracks predictions vs reality |
+
+---
+
 ## Quick Start
 
 ### Prerequisites

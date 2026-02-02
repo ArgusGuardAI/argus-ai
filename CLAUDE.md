@@ -21,6 +21,15 @@ Development guidance for AI assistants working on the Solana Safeguard AI codeba
 - **Training** (`packages/training`) - ML training data collection
 - **Sniper** (`packages/sniper`) - Token scanner backend (deprecated, use Workers)
 
+### Technical Innovations
+- **17,000x Compression**: 2MB raw data → 116-byte feature vectors (29 dimensions)
+- **BitNet 1-bit AI**: Ternary weights (-1, 0, +1), CPU-only inference in 13ms
+- **Multi-Agent Swarm**: Scout, Analyst, Hunter, Trader communicating via pub/sub MessageBus
+- **Origin Vault**: Cross-origin key isolation — first trading tool with this architecture
+- **Smart Multi-RPC**: Intelligent routing across 5+ endpoints with auto-failover
+- **8 Scam Patterns**: Pattern matching with cosine similarity scoring
+- **Outcome Learning**: Self-improving AI through prediction tracking
+
 ### Key Features
 - Manual token address input with analysis
 - AI-powered risk scoring (0-100, inverted from API)
