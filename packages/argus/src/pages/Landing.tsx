@@ -553,7 +553,7 @@ const styles = `
     flex-direction: column;
     align-items: center;
     width: 100%;
-    max-width: 900px;
+    max-width: 1100px;
   }
 
   .vault-diagram {
@@ -561,7 +561,7 @@ const styles = `
     flex-direction: row;
     align-items: center;
     justify-content: center;
-    gap: 0;
+    gap: 40px;
     margin-top: 60px;
   }
 
@@ -643,109 +643,254 @@ const styles = `
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 16px;
-    padding: 0 24px;
+    gap: 24px;
+    padding: 0 20px;
     position: relative;
     opacity: 0;
     transition: opacity 0.6s ease 0.5s;
+    min-width: 160px;
   }
 
   .vault-arrows.visible {
     opacity: 1;
   }
 
-  /* Vertical barrier line */
-  .vault-arrows::before {
-    content: '';
-    position: absolute;
-    top: -40px;
-    bottom: -40px;
-    left: 50%;
-    width: 2px;
-    background: linear-gradient(180deg, transparent, var(--emerald), transparent);
-    transform: translateX(-50%);
-    box-shadow: 0 0 20px rgba(16, 185, 129, 0.6);
+  /* Clean barrier container */
+  .vault-barrier {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 0 40px;
+    min-width: 140px;
   }
 
-  /* Shield icon in center */
-  .vault-arrows::after {
+  /* Central energy barrier - clean vertical beam */
+  .vault-energy-beam {
+    position: absolute;
+    top: -60px;
+    bottom: -60px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 4px;
+    background: linear-gradient(180deg,
+      transparent 0%,
+      var(--emerald) 15%,
+      var(--emerald) 85%,
+      transparent 100%);
+    box-shadow:
+      0 0 20px var(--emerald),
+      0 0 40px rgba(16, 185, 129, 0.6),
+      0 0 60px rgba(16, 185, 129, 0.4);
+    animation: beam-pulse 2s ease-in-out infinite;
+  }
+
+  .vault-energy-beam::before,
+  .vault-energy-beam::after {
     content: '';
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 30px;
+    height: 30px;
+    border: 2px solid var(--emerald);
+    border-radius: 50%;
+    opacity: 0;
+    animation: beam-ripple 3s ease-out infinite;
+  }
+
+  .vault-energy-beam::after {
+    animation-delay: 1.5s;
+  }
+
+  @keyframes beam-pulse {
+    0%, 100% {
+      box-shadow:
+        0 0 20px var(--emerald),
+        0 0 40px rgba(16, 185, 129, 0.6),
+        0 0 60px rgba(16, 185, 129, 0.4);
+    }
+    50% {
+      box-shadow:
+        0 0 30px var(--emerald),
+        0 0 60px rgba(16, 185, 129, 0.8),
+        0 0 80px rgba(16, 185, 129, 0.5);
+    }
+  }
+
+  @keyframes beam-ripple {
+    0% {
+      top: 50%;
+      transform: translate(-50%, -50%) scale(0.5);
+      opacity: 0.8;
+    }
+    100% {
+      top: 50%;
+      transform: translate(-50%, -50%) scale(2);
+      opacity: 0;
+    }
+  }
+
+  /* Clean shield icon */
+  .vault-shield-icon {
+    position: relative;
+    width: 56px;
+    height: 56px;
+    background: var(--bg-void);
+    border: 3px solid var(--emerald);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    box-shadow:
+      0 0 30px rgba(16, 185, 129, 0.6),
+      inset 0 0 20px rgba(16, 185, 129, 0.2);
+  }
+
+  .vault-shield-icon i {
+    color: var(--emerald);
+    font-size: 1.4rem;
+    filter: drop-shadow(0 0 10px var(--emerald));
+  }
+
+  /* Data flow labels */
+  .vault-data-flow {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--emerald);
+  }
+
+  .vault-data-flow.left {
+    right: calc(50% + 50px);
+    top: 50%;
+    transform: translateY(-50%);
+  }
+
+  .vault-data-flow.right {
+    left: calc(50% + 50px);
+    top: 50%;
+    transform: translateY(-50%);
+  }
+
+  .vault-data-flow span {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
+    font-weight: 500;
+    white-space: nowrap;
+    text-shadow: 0 0 10px var(--emerald);
+  }
+
+  .vault-data-flow i {
+    font-size: 0.75rem;
+    animation: arrow-pulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes arrow-pulse {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
+  }
+
+  @keyframes icon-glow {
+    0%, 100% { filter: drop-shadow(0 0 8px var(--emerald)); }
+    50% { filter: drop-shadow(0 0 15px var(--emerald)) drop-shadow(0 0 25px var(--emerald)); }
+  }
+
+  /* Impact ripples */
+  .vault-ripple {
     position: absolute;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    width: 36px;
-    height: 36px;
-    background: var(--bg-void);
+    width: 50px;
+    height: 50px;
     border: 2px solid var(--emerald);
     border-radius: 50%;
-    box-shadow: 0 0 25px rgba(16, 185, 129, 0.6);
+    opacity: 0;
   }
 
+  .vault-ripple:nth-child(1) { animation: ripple-expand 3s ease-out infinite 0s; }
+  .vault-ripple:nth-child(2) { animation: ripple-expand 3s ease-out infinite 1s; }
+  .vault-ripple:nth-child(3) { animation: ripple-expand 3s ease-out infinite 2s; }
+
+  @keyframes ripple-expand {
+    0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0.8; }
+    100% { transform: translate(-50%, -50%) scale(3); opacity: 0; }
+  }
+
+  /* Data flow arrows */
   .vault-arrow {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.7rem;
+    font-size: 0.75rem;
     white-space: nowrap;
-    z-index: 1;
+    z-index: 15;
   }
 
   .vault-arrow-line {
-    width: 70px;
-    height: 2px;
+    width: 60px;
+    height: 3px;
     position: relative;
-    overflow: hidden;
+    overflow: visible;
+    border-radius: 2px;
   }
 
   .vault-arrow.outgoing .vault-arrow-line {
-    background: linear-gradient(90deg, var(--accent), var(--emerald));
+    background: linear-gradient(90deg, var(--accent), rgba(220, 38, 38, 0.2));
   }
 
   .vault-arrow.incoming .vault-arrow-line {
-    background: linear-gradient(90deg, var(--emerald), var(--purple));
+    background: linear-gradient(90deg, rgba(124, 58, 237, 0.2), var(--purple));
   }
 
   .vault-arrow-line::after {
     content: '';
     position: absolute;
-    top: -3px;
-    width: 8px;
-    height: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 12px;
+    height: 12px;
     border-radius: 50%;
-    box-shadow: 0 0 8px currentColor;
   }
 
   .vault-arrow.outgoing .vault-arrow-line::after {
-    left: -8px;
+    left: -6px;
     background: var(--accent);
-    animation: vault-packet-out 2s ease-in-out infinite;
+    box-shadow: 0 0 10px var(--accent), 0 0 20px var(--accent);
+    animation: data-out 2s ease-in-out infinite;
   }
 
   .vault-arrow.incoming .vault-arrow-line::after {
-    right: -8px;
+    right: -6px;
+    left: auto;
     background: var(--purple);
-    animation: vault-packet-in 2s ease-in-out infinite;
+    box-shadow: 0 0 10px var(--purple), 0 0 20px var(--purple);
+    animation: data-in 2s ease-in-out infinite;
     animation-delay: 1s;
   }
 
-  @keyframes vault-packet-out {
-    0%, 100% { left: -8px; opacity: 0; }
+  @keyframes data-out {
+    0%, 100% { left: -6px; opacity: 0; }
     10% { opacity: 1; }
-    90% { opacity: 1; }
-    95%, 100% { left: 100%; opacity: 0; }
+    40% { opacity: 1; left: calc(100% - 6px); }
+    50% { opacity: 0; left: calc(100% - 6px); }
   }
 
-  @keyframes vault-packet-in {
-    0%, 100% { right: -8px; opacity: 0; }
+  @keyframes data-in {
+    0%, 100% { right: -6px; opacity: 0; }
     10% { opacity: 1; }
-    90% { opacity: 1; }
-    95%, 100% { right: 100%; opacity: 0; }
+    40% { opacity: 1; right: calc(100% - 6px); }
+    50% { opacity: 0; right: calc(100% - 6px); }
   }
 
   .vault-arrow-label {
-    color: var(--text-dim);
+    font-weight: 600;
+    letter-spacing: 0.05em;
   }
 
   .vault-arrow.outgoing .vault-arrow-label {
@@ -791,19 +936,23 @@ const styles = `
   @media (max-width: 768px) {
     .vault-diagram {
       flex-direction: column;
+      gap: 0;
     }
     .vault-arrows {
       transform: rotate(90deg);
-      padding: 24px 0;
+      padding: 40px 0;
+      min-width: auto;
+      min-height: 140px;
     }
-    .vault-arrows::before {
-      top: auto;
-      bottom: auto;
-      left: -40px;
-      right: -40px;
-      width: auto;
-      height: 2px;
-      background: linear-gradient(90deg, transparent, var(--emerald), transparent);
+    .vault-barrier {
+      transform: rotate(-90deg);
+    }
+    .vault-energy-beam {
+      top: -40px;
+      bottom: -40px;
+    }
+    .vault-data-flow {
+      display: none;
     }
     .vault-benefits {
       flex-direction: column;
@@ -2355,15 +2504,20 @@ export default function Landing() {
                 </div>
 
                 <div className={`vault-arrows ${visibleSections.has('vault') ? 'visible' : ''}`}>
-                  <div className="vault-arrow outgoing">
-                    <span className="vault-arrow-label">sign this</span>
-                    <div className="vault-arrow-line"></div>
-                    <i className="fa-solid fa-chevron-right" style={{ color: 'var(--accent)' }}></i>
-                  </div>
-                  <div className="vault-arrow incoming">
-                    <i className="fa-solid fa-chevron-left" style={{ color: 'var(--purple)' }}></i>
-                    <div className="vault-arrow-line"></div>
-                    <span className="vault-arrow-label">signed</span>
+                  {/* Clean barrier design */}
+                  <div className="vault-barrier">
+                    <div className="vault-energy-beam"></div>
+                    <div className="vault-shield-icon">
+                      <i className="fa-solid fa-shield-halved"></i>
+                    </div>
+                    <div className="vault-data-flow left">
+                      <span>sign tx</span>
+                      <i className="fa-solid fa-arrow-right"></i>
+                    </div>
+                    <div className="vault-data-flow right">
+                      <i className="fa-solid fa-arrow-left"></i>
+                      <span>signature</span>
+                    </div>
                   </div>
                 </div>
 
@@ -2409,7 +2563,7 @@ export default function Landing() {
                 The <span>arsenal</span>
               </h1>
               <p className="narrative-text">
-                Every weapon below runs in your browser. No API keys. No cloud dependencies.
+                Every weapon runs in your browser. No API keys. No cloud dependencies.
                 This is sovereign technology. You own it the moment you load the page.
               </p>
             </div>
