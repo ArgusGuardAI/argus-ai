@@ -106,14 +106,12 @@ async function main(): Promise<void> {
 
     if (!event.baseMint) return;
 
-    const timestamp = new Date().toISOString().slice(11, 19);
-
+    // Only log graduations (high-value) — skip routine pool discoveries to reduce log volume
     if (event.type === 'graduation') {
       stats.graduations++;
+      const timestamp = new Date().toISOString().slice(11, 19);
       const bondingMin = event.bondingCurveTime ? Math.round(event.bondingCurveTime / 1000 / 60) : 0;
       console.log(`[${timestamp}] GRADUATION: ${event.baseMint} → ${event.dex} (${bondingMin}min on curve)`);
-    } else {
-      console.log(`[${timestamp}] [${event.dex}] ${event.baseMint}`);
     }
 
     // Write to local file for agents + send to Workers API
@@ -141,16 +139,12 @@ async function main(): Promise<void> {
     const monitorStats = poolMonitor.getStats();
     const rate = stats.poolsDetected / Math.max(uptime, 1);
 
-    console.log('');
-    console.log(`[Status] Uptime: ${uptime}m | Detected: ${stats.poolsDetected} pools | Sent: ${stats.eventsSent} events`);
-    console.log(`[Status] Rate: ${rate.toFixed(1)} pools/min | gRPC: ${monitorStats.connected ? 'connected' : 'disconnected'}`);
-    console.log(`[Status] Notifications: ${monitorStats.notifications} | Parsed: ${monitorStats.parsed} pools`);
-    console.log(`[Status] Graduations: ${stats.graduations} | Tracking: ${monitorStats.pumpFunTracked} pump.fun tokens`);
-    console.log(`[Status] RPC calls: 0 (Yellowstone gRPC only)`);
-    console.log('');
+    const memMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+    console.log(`[Status] Uptime: ${uptime}m | Pools: ${stats.poolsDetected} | Graduations: ${stats.graduations} | Mem: ${memMB}MB`);
+    console.log(`[Status] Rate: ${rate.toFixed(1)}/min | gRPC: ${monitorStats.connected ? 'connected' : 'disconnected'} | Seen: ${monitorStats.seenPools} | Pump.fun: ${monitorStats.pumpFunTracked}`);
 
-    // Clean up old tokens every hour
-    if (uptime > 0 && uptime % 60 === 0) {
+    // Clean up old tokens every 15 minutes
+    if (uptime > 0 && uptime % 15 === 0) {
       poolMonitor.cleanupOldTokens();
     }
   }, 60000);

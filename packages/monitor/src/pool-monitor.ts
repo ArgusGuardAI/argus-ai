@@ -43,7 +43,6 @@ export interface PoolEvent {
   quoteMint?: string;
   timestamp: number;
   slot: number;
-  rawData: Buffer;
   graduatedFrom?: 'PUMP_FUN';
   bondingCurveTime?: number;
 }
@@ -90,6 +89,12 @@ export class PoolMonitor {
   // Graduation tracking: mint → timestamp when first seen on pump.fun
   private pumpFunTokens: Map<string, number> = new Map();
   private graduationCount: number = 0;
+
+  // Memory management limits
+  private static readonly MAX_SEEN_ACCOUNTS = 50_000;
+  private static readonly MAX_PUMP_FUN_TOKENS = 10_000;
+  private static readonly MAX_EVENT_QUEUE = 500;
+  private static readonly PUMP_FUN_CLEANUP_AGE_MS = 2 * 60 * 60 * 1000; // 2 hours
 
   constructor(config: MonitorConfig) {
     this.config = config;
@@ -234,6 +239,18 @@ export class PoolMonitor {
     const poolKey = `${dex}:${poolData.baseMint || 'unknown'}:${poolData.quoteMint || 'unknown'}`;
 
     if (this.seenAccounts.has(poolKey)) return;
+
+    // Cap seenAccounts to prevent unbounded memory growth
+    if (this.seenAccounts.size >= PoolMonitor.MAX_SEEN_ACCOUNTS) {
+      // Clear oldest half (Set iteration order = insertion order)
+      const toRemove = Math.floor(PoolMonitor.MAX_SEEN_ACCOUNTS / 2);
+      let count = 0;
+      for (const key of this.seenAccounts) {
+        if (count++ >= toRemove) break;
+        this.seenAccounts.delete(key);
+      }
+    }
+
     this.seenAccounts.add(poolKey);
     this.parsedCount++;
 
@@ -244,8 +261,23 @@ export class PoolMonitor {
 
     // Track pump.fun tokens for graduation detection
     if (dex === 'PUMP_FUN' && poolData.baseMint) {
+      // Cap pump.fun tracking to prevent memory growth
+      if (this.pumpFunTokens.size >= PoolMonitor.MAX_PUMP_FUN_TOKENS) {
+        this.cleanupOldTokens();
+        // If still too large after cleanup, remove oldest entries
+        if (this.pumpFunTokens.size >= PoolMonitor.MAX_PUMP_FUN_TOKENS) {
+          const toRemove = Math.floor(PoolMonitor.MAX_PUMP_FUN_TOKENS / 2);
+          let count = 0;
+          for (const key of this.pumpFunTokens.keys()) {
+            if (count++ >= toRemove) break;
+            this.pumpFunTokens.delete(key);
+          }
+        }
+      }
       this.pumpFunTokens.set(poolData.baseMint, now);
-      console.log(`[PoolMonitor] PUMP.FUN: ${poolData.baseMint?.slice(0, 12)}... (tracking ${this.pumpFunTokens.size} tokens)`);
+      if (this.pumpFunTokens.size % 500 === 0) {
+        console.log(`[PoolMonitor] PUMP.FUN: tracking ${this.pumpFunTokens.size} tokens`);
+      }
     }
 
     // Check for graduation: Raydium pool with a token we saw on pump.fun
@@ -256,12 +288,9 @@ export class PoolMonitor {
         graduatedFrom = 'PUMP_FUN';
         bondingCurveTime = now - pumpFunTime;
         this.graduationCount++;
+        // Always log graduations — these are high-value events
         console.log(`[PoolMonitor] GRADUATION #${this.graduationCount}: ${poolData.baseMint?.slice(0, 12)}... (${Math.round(bondingCurveTime / 1000 / 60)}min on curve)`);
-      } else {
-        console.log(`[PoolMonitor] NEW POOL: ${poolData.baseMint?.slice(0, 12)}... on ${dex}`);
       }
-    } else if (dex !== 'PUMP_FUN') {
-      console.log(`[PoolMonitor] NEW POOL: ${poolData.baseMint?.slice(0, 12)}... on ${dex}`);
     }
 
     const event: PoolEvent = {
@@ -272,10 +301,14 @@ export class PoolMonitor {
       quoteMint: poolData.quoteMint,
       timestamp: now,
       slot,
-      rawData: data,
       graduatedFrom,
       bondingCurveTime,
     };
+
+    // Drop events if queue is too deep (backpressure)
+    if (this.eventQueue.length >= PoolMonitor.MAX_EVENT_QUEUE) {
+      return;
+    }
 
     this.eventQueue.push({ dex, event });
     this.processQueue();
@@ -531,7 +564,7 @@ export class PoolMonitor {
   }
 
   cleanupOldTokens(): void {
-    const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+    const cutoff = Date.now() - PoolMonitor.PUMP_FUN_CLEANUP_AGE_MS;
     let removed = 0;
     for (const [mint, timestamp] of this.pumpFunTokens) {
       if (timestamp < cutoff) {
@@ -539,8 +572,18 @@ export class PoolMonitor {
         removed++;
       }
     }
-    if (removed > 0) {
-      console.log(`[PoolMonitor] Cleaned up ${removed} old pump.fun tokens`);
+
+    // Also trim seenAccounts if large
+    const seenBefore = this.seenAccounts.size;
+    if (this.seenAccounts.size > PoolMonitor.MAX_SEEN_ACCOUNTS / 2) {
+      const toRemove = Math.floor(this.seenAccounts.size / 2);
+      let count = 0;
+      for (const key of this.seenAccounts) {
+        if (count++ >= toRemove) break;
+        this.seenAccounts.delete(key);
+      }
     }
+
+    console.log(`[PoolMonitor] Cleanup: pump.fun -${removed} (${this.pumpFunTokens.size} remaining), seen -${seenBefore - this.seenAccounts.size} (${this.seenAccounts.size} remaining)`);
   }
 }

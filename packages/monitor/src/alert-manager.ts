@@ -56,8 +56,11 @@ export class AlertManager {
   private config: AlertManagerConfig;
   private alertCount = 0;
   private lastApiCallTime = 0;
+  private lastRotationCheck = 0;
   private static readonly POOL_EVENTS_FILE = '/opt/argus-ai/data/pool-events.jsonl';
   private static readonly API_MIN_INTERVAL_MS = 2000; // Max 1 API call per 2 seconds for discoveries
+  private static readonly MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB before rotation
+  private static readonly ROTATION_CHECK_INTERVAL_MS = 60_000; // Check file size every minute
 
   constructor(config: AlertManagerConfig) {
     this.config = {
@@ -162,6 +165,32 @@ export class AlertManager {
   private async writePoolEventToFile(event: PoolEvent): Promise<void> {
     try {
       const fs = await import('fs').then(m => m.promises);
+
+      // Periodically check file size and rotate if needed
+      const now = Date.now();
+      if (now - this.lastRotationCheck > AlertManager.ROTATION_CHECK_INTERVAL_MS) {
+        this.lastRotationCheck = now;
+        try {
+          const stat = await fs.stat(AlertManager.POOL_EVENTS_FILE);
+          if (stat.size > AlertManager.MAX_FILE_SIZE_BYTES) {
+            const rotatedPath = `${AlertManager.POOL_EVENTS_FILE}.${new Date().toISOString().slice(0, 10)}`;
+            await fs.rename(AlertManager.POOL_EVENTS_FILE, rotatedPath).catch(() => {});
+            // Keep max 3 rotated files
+            const dataDir = '/opt/argus-ai/data';
+            const files = await fs.readdir(dataDir);
+            const rotatedFiles = files
+              .filter(f => f.startsWith('pool-events.jsonl.'))
+              .sort()
+              .reverse();
+            for (const old of rotatedFiles.slice(3)) {
+              await fs.unlink(`${dataDir}/${old}`).catch(() => {});
+            }
+            console.log(`[AlertManager] Rotated pool-events.jsonl (was ${Math.round(stat.size / 1024)}KB)`);
+          }
+        } catch {
+          // File doesn't exist yet, that's fine
+        }
+      }
 
       const entry = JSON.stringify({
         token: event.baseMint,
