@@ -55,7 +55,9 @@ export interface AlertManagerConfig {
 export class AlertManager {
   private config: AlertManagerConfig;
   private alertCount = 0;
+  private lastApiCallTime = 0;
   private static readonly POOL_EVENTS_FILE = '/opt/argus-ai/data/pool-events.jsonl';
+  private static readonly API_MIN_INTERVAL_MS = 2000; // Max 1 API call per 2 seconds for discoveries
 
   constructor(config: AlertManagerConfig) {
     this.config = {
@@ -114,8 +116,12 @@ export class AlertManager {
     // ALWAYS write to local file for agents (even if Workers API is not configured)
     await this.writePoolEventToFile(event);
 
-    // Send to Workers API if configured
+    // Send to Workers API if configured (rate-limited to avoid KV contention)
     if (!this.config.workersApiUrl) return;
+
+    const now = Date.now();
+    if (now - this.lastApiCallTime < AlertManager.API_MIN_INTERVAL_MS) return;
+    this.lastApiCallTime = now;
 
     try {
       const isPumpFun = event.dex === 'PUMP_FUN';
@@ -124,7 +130,8 @@ export class AlertManager {
         ? `New pump.fun token: ${event.baseMint?.slice(0, 8)}...`
         : `New ${event.dex} pool: ${event.baseMint?.slice(0, 8)}...`;
 
-      const response = await fetch(`${this.config.workersApiUrl}/agents/command`, {
+      // Fire and forget - don't await the response
+      fetch(`${this.config.workersApiUrl}/agents/command`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -141,11 +148,7 @@ export class AlertManager {
             },
           },
         }),
-      });
-
-      if (!response.ok) {
-        console.error(`[AlertManager] Pool discovery API error: ${response.status}`);
-      }
+      }).catch(() => {}); // Silently fail
     } catch (error) {
       // Silently fail - don't block monitoring for API errors
     }

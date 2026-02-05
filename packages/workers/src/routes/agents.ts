@@ -261,82 +261,81 @@ agentRoutes.post('/command', async (c) => {
       return c.json({ error: 'Missing command type' }, 400);
     }
 
-    // Handle monitor alerts - store as agent events
-    if (body.type === 'monitor_alert' && body.alert && c.env.SCAN_CACHE) {
+    // Handle monitor alerts - return immediately, store in background
+    // KV read-modify-write under high concurrency causes 500s, so use waitUntil()
+    if (body.type === 'monitor_alert' && body.alert) {
       const { alert } = body;
+      const eventId = `evt_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
 
-      // Handle graduation events specially - store in dedicated list
-      if (alert.type === 'graduation' && alert.data?.mint) {
-        const graduation = await storeGraduation(c.env.SCAN_CACHE, {
-          mint: alert.data.mint,
-          dex: alert.data.dex || 'RAYDIUM',
-          poolAddress: alert.data.poolAddress || '',
-          bondingCurveTime: alert.data.bondingCurveTime,
-          graduatedFrom: alert.data.graduatedFrom || 'PUMP_FUN',
-        });
+      // Do KV operations in the background (non-blocking)
+      if (c.env.SCAN_CACHE) {
+        c.executionCtx.waitUntil(
+          (async () => {
+            try {
+              if (alert.type === 'graduation' && alert.data?.mint) {
+                // Store graduation + event
+                await storeGraduation(c.env.SCAN_CACHE, {
+                  mint: alert.data.mint,
+                  dex: alert.data.dex || 'RAYDIUM',
+                  poolAddress: alert.data.poolAddress || '',
+                  bondingCurveTime: alert.data.bondingCurveTime,
+                  graduatedFrom: alert.data.graduatedFrom || 'PUMP_FUN',
+                });
+                await storeAgentEvent(c.env.SCAN_CACHE, {
+                  agent: alert.agent,
+                  type: 'graduation',
+                  message: alert.message,
+                  severity: alert.severity,
+                  data: {
+                    tokenAddress: alert.data.mint,
+                    dex: alert.data.dex,
+                    poolAddress: alert.data.poolAddress,
+                    graduatedFrom: alert.data.graduatedFrom,
+                    bondingCurveTime: alert.data.bondingCurveTime,
+                  },
+                });
+              } else {
+                // Store regular event
+                await storeAgentEvent(c.env.SCAN_CACHE, {
+                  agent: alert.agent,
+                  type: alert.type as AgentEvent['type'],
+                  message: alert.message,
+                  severity: alert.severity,
+                  data: {
+                    tokenAddress: alert.data?.mint,
+                    tokenSymbol: alert.data?.dex ? `${alert.data.dex}` : undefined,
+                    score: alert.data?.suspicionScore,
+                  },
+                });
+              }
 
-        // Also store as regular event for activity feed
-        await storeAgentEvent(c.env.SCAN_CACHE, {
-          agent: alert.agent,
-          type: 'graduation',
-          message: alert.message,
-          severity: alert.severity,
-          data: {
-            tokenAddress: alert.data.mint,
-            dex: alert.data.dex,
-            poolAddress: alert.data.poolAddress,
-            graduatedFrom: alert.data.graduatedFrom,
-            bondingCurveTime: alert.data.bondingCurveTime,
-          },
-        });
+              // Update stats
+              const statsUpdates: {
+                scan?: boolean;
+                alert?: boolean;
+                highRisk?: boolean;
+                bundleDetected?: boolean;
+                graduation?: boolean;
+              } = {};
 
-        return c.json({
-          success: true,
-          message: 'Graduation stored',
-          graduationId: graduation.id,
-        });
+              if (alert.agent === 'SCOUT') statsUpdates.scan = true;
+              if (alert.severity === 'warning' || alert.severity === 'critical') statsUpdates.alert = true;
+              if (alert.severity === 'critical') statsUpdates.highRisk = true;
+              if (alert.type === 'discovery' && alert.agent === 'HUNTER') statsUpdates.bundleDetected = true;
+              if (alert.type === 'graduation') statsUpdates.graduation = true;
+
+              await updateAgentStats(c.env.SCAN_CACHE, statsUpdates);
+            } catch (err) {
+              console.error('[Agents] Background KV error:', err);
+            }
+          })()
+        );
       }
-
-      // Store the event
-      const storedEvent = await storeAgentEvent(c.env.SCAN_CACHE, {
-        agent: alert.agent,
-        type: alert.type as AgentEvent['type'],
-        message: alert.message,
-        severity: alert.severity,
-        data: {
-          tokenAddress: alert.data?.mint,
-          tokenSymbol: alert.data?.dex ? `${alert.data.dex}` : undefined,
-          score: alert.data?.suspicionScore,
-        },
-      });
-
-      // Update stats based on alert type
-      const statsUpdates: {
-        scan?: boolean;
-        alert?: boolean;
-        highRisk?: boolean;
-        bundleDetected?: boolean;
-      } = {};
-
-      if (alert.agent === 'SCOUT') {
-        statsUpdates.scan = true;
-      }
-      if (alert.severity === 'warning' || alert.severity === 'critical') {
-        statsUpdates.alert = true;
-      }
-      if (alert.severity === 'critical') {
-        statsUpdates.highRisk = true;
-      }
-      if (alert.type === 'discovery' && alert.agent === 'HUNTER') {
-        statsUpdates.bundleDetected = true;
-      }
-
-      await updateAgentStats(c.env.SCAN_CACHE, statsUpdates);
 
       return c.json({
         success: true,
-        message: 'Monitor alert stored',
-        eventId: storedEvent.id,
+        message: alert.type === 'graduation' ? 'Graduation queued' : 'Monitor alert queued',
+        eventId,
       });
     }
 
