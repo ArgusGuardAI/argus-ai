@@ -181,6 +181,9 @@ export class HunterAgent extends BaseAgent {
       }
     }
 
+    // Persist scammer database to disk
+    await this.persistScammerDatabase();
+
     // Store in memory
     await this.memory.store({
       action: 'track_scammer',
@@ -242,7 +245,7 @@ export class HunterAgent extends BaseAgent {
   }
 
   /**
-   * Find wallet connections
+   * Find wallet connections using real on-chain transaction data
    */
   private async findConnections(params: { wallet: string }): Promise<{
     direct: string[];
@@ -251,15 +254,45 @@ export class HunterAgent extends BaseAgent {
   }> {
     const { wallet } = params;
 
-    // Get from network map
+    // Get from existing network map (populated by trackScammer)
     const connected = this.walletNetwork.get(wallet) || new Set();
 
-    // In production, query blockchain for funding sources, etc.
-    return {
-      direct: Array.from(connected),
-      coordinated: Array.from(connected).filter(() => Math.random() > 0.5),
-      networkSize: connected.size
-    };
+    // Try to discover more connections from recent transactions
+    try {
+      const transactions = await this.onChainTools.getTransactions(wallet, 50);
+
+      // Find wallets that appear in this wallet's transactions
+      const interactedWallets = new Set<string>();
+      for (const tx of transactions) {
+        if (tx.to !== 'unknown' && tx.to !== wallet) {
+          interactedWallets.add(tx.to);
+        }
+        if (tx.from !== 'unknown' && tx.from !== wallet) {
+          interactedWallets.add(tx.from);
+        }
+      }
+
+      // Cross-reference with known scammer wallets
+      const coordinated: string[] = [];
+      for (const interacted of interactedWallets) {
+        if (this.scammerProfiles.has(interacted) || connected.has(interacted)) {
+          coordinated.push(interacted);
+          this.addToNetwork(wallet, interacted);
+        }
+      }
+
+      return {
+        direct: Array.from(connected),
+        coordinated,
+        networkSize: connected.size + interactedWallets.size
+      };
+    } catch {
+      return {
+        direct: Array.from(connected),
+        coordinated: [],
+        networkSize: connected.size
+      };
+    }
   }
 
   /**
@@ -371,37 +404,45 @@ Return JSON with pattern, confidence (0-100), and evidence array.
   }
 
   /**
-   * Check wallet for new activity
+   * Check wallet for new activity using real on-chain data
    */
   private async checkWalletActivity(wallet: string): Promise<void> {
-    // In production, query for recent transactions
-    // Simulated: 1% chance of new token launch
-    if (Math.random() < 0.01) {
+    try {
+      // Get recent transactions for this wallet
+      const transactions = await this.onChainTools.getTransactions(wallet, 10);
+
+      if (transactions.length === 0) return;
+
+      // Check for transactions newer than 2 minutes ago (check interval is 60s)
+      const recentCutoff = Date.now() - 120000;
+      const recentTxns = transactions.filter(tx => tx.timestamp > recentCutoff);
+
+      if (recentTxns.length === 0) return;
+
       const profile = this.scammerProfiles.get(wallet);
+      if (!profile) return;
 
-      if (profile) {
-        const newToken = `NEW_TOKEN_${Date.now()}`;
+      // Known scammer has new on-chain activity
+      await this.think(
+        'observation',
+        `Known scammer ${wallet.slice(0, 8)}... has new activity (${recentTxns.length} recent txns)`
+      );
 
-        await this.think(
-          'observation',
-          `Known scammer ${wallet.slice(0, 8)}... launched new token!`
-        );
+      await this.broadcastScammerAlert({
+        wallet,
+        profile,
+        isRepeat: true
+      });
 
-        await this.broadcastScammerAlert({
-          wallet,
-          profile,
-          newToken,
-          isRepeat: true
-        });
-
-        // Send to analyst for immediate investigation
-        await this.sendMessage('analyst', 'investigate', {
-          token: newToken,
-          priority: 'critical',
-          context: 'Known scammer wallet',
-          scammerProfile: profile
-        });
-      }
+      // Send to analyst for investigation
+      await this.sendMessage('analyst', 'investigate', {
+        token: recentTxns[0].signature,
+        priority: 'critical',
+        context: 'Known scammer wallet activity detected',
+        scammerProfile: profile
+      });
+    } catch {
+      // Silently continue — don't spam logs for routine wallet checks
     }
   }
 
@@ -453,11 +494,50 @@ Return JSON with pattern, confidence (0-100), and evidence array.
   }
 
   /**
-   * Load known scammers from storage
+   * Load known scammers from local file for persistence across restarts
    */
   private async loadScammerDatabase(): Promise<void> {
-    // In production, load from D1/KV
-    // For now, start empty
+    try {
+      const fs = await import('fs').then(m => m.promises);
+      const data = await fs.readFile('/opt/argus-ai/data/scammers.json', 'utf-8');
+      const scammers = JSON.parse(data) as Array<{ wallet: string; profile: ScammerProfile }>;
+
+      for (const entry of scammers) {
+        this.scammerProfiles.set(entry.wallet, entry.profile);
+        this.watchlist.add(entry.wallet);
+
+        // Rebuild network from connections
+        for (const connected of entry.profile.connectedWallets) {
+          this.addToNetwork(entry.wallet, connected);
+        }
+      }
+
+      console.log(`[Hunter] Loaded ${scammers.length} scammer profiles from disk`);
+    } catch {
+      // File doesn't exist yet or parse error — start fresh
+      console.log('[Hunter] No existing scammer database found, starting fresh');
+    }
+  }
+
+  /**
+   * Persist scammer database to disk for survival across restarts
+   */
+  private async persistScammerDatabase(): Promise<void> {
+    try {
+      const fs = await import('fs').then(m => m.promises);
+      const entries = Array.from(this.scammerProfiles.entries()).map(([wallet, profile]) => ({
+        wallet,
+        profile
+      }));
+
+      await fs.mkdir('/opt/argus-ai/data', { recursive: true });
+      await fs.writeFile(
+        '/opt/argus-ai/data/scammers.json',
+        JSON.stringify(entries, null, 2)
+      );
+    } catch (error) {
+      console.error('[Hunter] Failed to persist scammer database:', error);
+    }
   }
 
   protected getConstraints(): Record<string, any> {

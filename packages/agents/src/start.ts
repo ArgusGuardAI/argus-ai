@@ -9,6 +9,9 @@
  * - TraderAgent(s): Trade execution (if enabled)
  */
 
+// Load .env file FIRST
+import 'dotenv/config';
+
 import { createArgusNetwork } from './index';
 
 // Load environment
