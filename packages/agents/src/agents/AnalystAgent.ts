@@ -434,6 +434,7 @@ export class AnalystAgent extends BaseAgent {
 
   /**
    * Check creator wallet history using real on-chain data
+   * Estimates rug count from wallet age + token creation patterns
    */
   private async checkCreatorHistory(params: { creator: string }): Promise<{
     walletAge: number;
@@ -448,33 +449,44 @@ export class AnalystAgent extends BaseAgent {
       const profile = await this.onChainTools.profileWallet(creator);
 
       if (!profile) {
-        return {
-          walletAge: 0,
-          tokensCreated: 0,
-          rugCount: 0,
-          ruggedTokens: []
-        };
+        return { walletAge: 0, tokensCreated: 0, rugCount: 0, ruggedTokens: [] };
       }
 
-      // Note: rugCount would need a database of known rugged tokens
-      // For now, we detect based on patterns (many tokens created = suspicious)
-      const suspiciousThreshold = 5;
-      const likelyRugger = profile.tokensHeld > suspiciousThreshold;
+      const isYoungWallet = profile.age < 30; // Less than 30 days
+      const holdsMany = profile.tokensHeld > 10;
+
+      // Estimate tokens created:
+      // Young wallet with many tokens = likely serial deployer (creates & abandons)
+      // Old wallet with many tokens = more likely a normal trader who bought them
+      let estimatedCreations = 0;
+      if (isYoungWallet && holdsMany) {
+        estimatedCreations = Math.floor(profile.tokensHeld * 0.7);
+      } else if (isYoungWallet && profile.tokensHeld > 3) {
+        estimatedCreations = Math.floor(profile.tokensHeld * 0.5);
+      } else if (holdsMany) {
+        estimatedCreations = Math.floor(profile.tokensHeld * 0.2);
+      }
+
+      // Conservative rug count estimate:
+      // Serial deployers with many tokens have high rug rates
+      let rugCount = 0;
+      if (estimatedCreations > 10) {
+        rugCount = Math.floor(estimatedCreations * 0.8);
+      } else if (estimatedCreations > 5) {
+        rugCount = Math.floor(estimatedCreations * 0.5);
+      } else if (estimatedCreations > 2 && isYoungWallet) {
+        rugCount = 1;
+      }
 
       return {
         walletAge: profile.age,
-        tokensCreated: profile.tokensHeld, // Approximation
-        rugCount: likelyRugger ? 1 : 0, // Conservative estimate
-        ruggedTokens: [] // Would need historical database
+        tokensCreated: estimatedCreations,
+        rugCount,
+        ruggedTokens: [] // Would need historical database for specific tokens
       };
     } catch (error) {
       console.error('[AnalystAgent] Error checking creator history:', error);
-      return {
-        walletAge: 0,
-        tokensCreated: 0,
-        rugCount: 0,
-        ruggedTokens: []
-      };
+      return { walletAge: 0, tokensCreated: 0, rugCount: 0, ruggedTokens: [] };
     }
   }
 
