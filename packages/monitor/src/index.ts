@@ -14,6 +14,7 @@
  *   ENABLED_DEXS          - Comma-separated DEX list (default: all)
  */
 
+import 'dotenv/config';
 import { PoolMonitor, DEX_PROGRAMS, PoolEvent } from './pool-monitor.js';
 import { AlertManager } from './alert-manager.js';
 
