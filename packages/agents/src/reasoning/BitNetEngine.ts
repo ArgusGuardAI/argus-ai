@@ -1,15 +1,19 @@
 /**
- * BitNetEngine - AI Reasoning Core for Agents
+ * BitNetEngine - 1-Bit Ternary AI Reasoning Core
  *
- * Integrates with our feature compression engine (17,000x compression)
- * to enable fast, efficient AI reasoning on compressed token data.
+ * Two modes:
+ *   1. Neural inference: Loads trained ternary weights ({-1, 0, +1}) from
+ *      bitnet-weights.json. Forward pass uses only addition/subtraction
+ *      (no floating-point multiply) — runs in <1ms on CPU.
+ *   2. Rule-based fallback: If no trained model exists, uses hand-tuned
+ *      rules for risk classification.
  *
- * Provides:
- * - Feature extraction from raw data
- * - Risk classification
- * - Pattern matching
- * - Natural language generation for explanations
+ * Integrates with feature compression engine (17,000x compression).
  */
+
+import { readFileSync, existsSync } from 'fs';
+import { resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
 
 // Feature constants from our compression engine
 const FEATURE_COUNT = 29;
@@ -57,10 +61,37 @@ export interface GenerateOptions {
   format?: 'text' | 'json';
 }
 
+// Ternary model weights loaded from JSON
+interface TernaryModelWeights {
+  version: number;
+  architecture: number[];
+  quantization: 'ternary';
+  weights: { [key: string]: number[] };
+  biases: { [key: string]: number[] };
+  classes: string[];
+  featureCount: number;
+  accuracy: number;
+  trainedOn: number;
+  trainedAt: string;
+}
+
+// Loaded layer for fast inference
+interface TernaryLayer {
+  weights: Int8Array;   // {-1, 0, +1}
+  biases: Float32Array;
+  rows: number;
+  cols: number;
+}
+
 export class BitNetEngine {
   private config: ModelConfig;
   private modelLoaded: boolean = false;
   private patternWeights: Map<string, number[]> = new Map();
+
+  // Ternary model (null if not loaded / not available)
+  private ternaryModel: TernaryModelWeights | null = null;
+  private ternaryLayers: TernaryLayer[] = [];
+  private useNeuralInference: boolean = false;
 
   constructor(modelPath: string = 'rule-based') {
     this.config = {
@@ -74,17 +105,87 @@ export class BitNetEngine {
   }
 
   /**
-   * Load the BitNet model
+   * Load the BitNet model — tries ternary weights first, falls back to rules
    */
   async loadModel(): Promise<void> {
     console.log(`[BitNetEngine] Loading model from ${this.config.modelPath}...`);
     console.log(`[BitNetEngine] Feature vector size: ${FEATURE_COUNT} floats (${FEATURE_COUNT * 4} bytes)`);
 
-    // TODO: Load actual WASM/ONNX model when trained
-    // For now, use rule-based inference
+    // Try to load trained ternary model
+    const weightsPath = this.resolveWeightsPath();
+    if (weightsPath && existsSync(weightsPath)) {
+      try {
+        const raw = readFileSync(weightsPath, 'utf-8');
+        this.ternaryModel = JSON.parse(raw) as TernaryModelWeights;
+
+        // Parse layers
+        this.ternaryLayers = [];
+        const arch = this.ternaryModel.architecture;
+        for (let l = 0; l < arch.length - 1; l++) {
+          const key = `layer${l + 1}`;
+          const wArr = this.ternaryModel.weights[key];
+          const bArr = this.ternaryModel.biases[key];
+          if (!wArr || !bArr) {
+            throw new Error(`Missing weights/biases for ${key}`);
+          }
+
+          this.ternaryLayers.push({
+            weights: new Int8Array(wArr),
+            biases: new Float32Array(bArr),
+            rows: arch[l + 1],
+            cols: arch[l],
+          });
+        }
+
+        this.useNeuralInference = true;
+        const totalWeights = this.ternaryLayers.reduce((s, l) => s + l.weights.length, 0);
+        console.log(`[BitNetEngine] Loaded ternary model: ${arch.join(' -> ')}`);
+        console.log(`[BitNetEngine] ${totalWeights} ternary weights, accuracy: ${(this.ternaryModel.accuracy * 100).toFixed(1)}%`);
+        console.log(`[BitNetEngine] Trained on ${this.ternaryModel.trainedOn} examples at ${this.ternaryModel.trainedAt}`);
+      } catch (err) {
+        console.warn(`[BitNetEngine] Failed to load ternary model: ${err instanceof Error ? err.message : err}`);
+        console.log('[BitNetEngine] Falling back to rule-based inference');
+        this.useNeuralInference = false;
+      }
+    } else {
+      console.log('[BitNetEngine] No trained model found, using rule-based inference');
+      this.useNeuralInference = false;
+    }
 
     this.modelLoaded = true;
     console.log('[BitNetEngine] Model loaded successfully');
+  }
+
+  /**
+   * Resolve the path to bitnet-weights.json
+   */
+  private resolveWeightsPath(): string | null {
+    // If explicit path provided and not 'rule-based'
+    if (this.config.modelPath !== 'rule-based') {
+      return this.config.modelPath;
+    }
+
+    // Try relative to this file
+    try {
+      const thisDir = dirname(fileURLToPath(import.meta.url));
+      const candidate = resolve(thisDir, 'bitnet-weights.json');
+      if (existsSync(candidate)) return candidate;
+    } catch {
+      // import.meta.url may not work in all contexts
+    }
+
+    // Try common locations
+    const candidates = [
+      resolve(process.cwd(), 'src/reasoning/bitnet-weights.json'),
+      resolve(process.cwd(), 'bitnet-weights.json'),
+      resolve(process.cwd(), '../agents/src/reasoning/bitnet-weights.json'),
+    ];
+
+    for (const p of candidates) {
+      if (existsSync(p)) return p;
+    }
+
+    return null;
   }
 
   /**
@@ -95,8 +196,201 @@ export class BitNetEngine {
       await this.loadModel();
     }
 
-    // Rule-based classification using compressed features
+    if (this.useNeuralInference) {
+      return this.neuralClassify(features);
+    }
+
     return this.ruleBasedClassify(features);
+  }
+
+  /**
+   * Neural network classification with ternary weights
+   *
+   * Forward pass: only addition and subtraction (no floating-point multiply).
+   * For each weight:
+   *   w = +1 → sum += activation
+   *   w = -1 → sum -= activation
+   *   w =  0 → skip
+   */
+  private neuralClassify(features: Float32Array): ClassifierOutput {
+    let activation: Float32Array = features;
+
+    // Forward through hidden layers (ReLU) and output layer
+    for (let l = 0; l < this.ternaryLayers.length; l++) {
+      const layer = this.ternaryLayers[l];
+      const next = new Float32Array(layer.rows);
+
+      for (let j = 0; j < layer.rows; j++) {
+        let sum = layer.biases[j];
+        const offset = j * layer.cols;
+        for (let i = 0; i < layer.cols; i++) {
+          const w = layer.weights[offset + i];
+          if (w === 1) sum += activation[i];
+          else if (w === -1) sum -= activation[i];
+          // w === 0: no operation
+        }
+
+        // ReLU for hidden layers, raw logit for output
+        next[j] = l < this.ternaryLayers.length - 1 ? Math.max(0, sum) : sum;
+      }
+
+      // Softmax on final layer
+      if (l === this.ternaryLayers.length - 1) {
+        const maxLogit = Math.max(...next);
+        let expSum = 0;
+        for (let i = 0; i < next.length; i++) {
+          next[i] = Math.exp(next[i] - maxLogit);
+          expSum += next[i];
+        }
+        for (let i = 0; i < next.length; i++) {
+          next[i] /= expSum;
+        }
+      }
+
+      activation = next;
+    }
+
+    // activation is now [P(SAFE), P(SUSPICIOUS), P(DANGEROUS), P(SCAM)]
+    const probs = activation;
+
+    // Predicted class
+    let maxIdx = 0;
+    for (let i = 1; i < probs.length; i++) {
+      if (probs[i] > probs[maxIdx]) maxIdx = i;
+    }
+
+    const classes: ClassifierOutput['riskLevel'][] = ['SAFE', 'SUSPICIOUS', 'DANGEROUS', 'SCAM'];
+    const riskLevel = classes[maxIdx];
+
+    // Risk score: weighted sum of class probabilities
+    const riskScore = Math.round(
+      probs[0] * 15 + probs[1] * 50 + probs[2] * 75 + probs[3] * 95
+    );
+
+    // Confidence from max probability
+    const confidence = Math.round(probs[maxIdx] * 100);
+
+    // Feature importance from first layer weights
+    const importance = this.computeFeatureImportance(features);
+
+    // Generate flags from classification + feature analysis
+    const flags = this.generateFlags(features, riskLevel, probs);
+
+    return {
+      riskScore: Math.min(100, Math.max(0, riskScore)),
+      riskLevel,
+      confidence,
+      featureImportance: importance,
+      flags,
+    };
+  }
+
+  /**
+   * Compute feature importance from first-layer ternary weights
+   */
+  private computeFeatureImportance(features: Float32Array): Record<string, number> {
+    const importance: Record<string, number> = {
+      market: 0,
+      holders: 0,
+      security: 0,
+      bundle: 0,
+      trading: 0,
+      time: 0,
+      creator: 0,
+    };
+
+    if (this.ternaryLayers.length === 0) return importance;
+
+    const layer = this.ternaryLayers[0];
+    // Sum absolute contribution of each feature across all neurons
+    const featureContrib = new Float32Array(Math.min(layer.cols, features.length));
+    for (let j = 0; j < layer.rows; j++) {
+      const offset = j * layer.cols;
+      for (let i = 0; i < featureContrib.length; i++) {
+        const w = layer.weights[offset + i];
+        if (w !== 0) {
+          featureContrib[i] += Math.abs(features[i]);
+        }
+      }
+    }
+
+    // Map feature indices to categories (based on 29-feature layout)
+    const catMap: [number, number, string][] = [
+      [0, 4, 'market'],
+      [5, 10, 'holders'],
+      [11, 14, 'security'],
+      [15, 19, 'bundle'],
+      [20, 23, 'trading'],
+      [24, 25, 'time'],
+      [26, 28, 'creator'],
+    ];
+
+    for (const [start, end, cat] of catMap) {
+      for (let i = start; i <= end && i < featureContrib.length; i++) {
+        importance[cat] += featureContrib[i];
+      }
+    }
+
+    // Normalize
+    const total = Object.values(importance).reduce((a, b) => a + b, 0) || 1;
+    for (const key of Object.keys(importance)) {
+      importance[key] = importance[key] / total;
+    }
+
+    return importance;
+  }
+
+  /**
+   * Generate risk flags from features and classification
+   */
+  private generateFlags(
+    features: Float32Array,
+    riskLevel: string,
+    probs: Float32Array
+  ): ClassifierOutput['flags'] {
+    const flags: ClassifierOutput['flags'] = [];
+
+    // Use the first 29 features (our standard layout)
+    const mintDisabled = features.length > 11 ? features[11] : 1;
+    const freezeDisabled = features.length > 12 ? features[12] : 1;
+    const bundleDetected = features.length > 15 ? features[15] : 0;
+    const bundleConfidence = features.length > 18 ? features[18] : 0;
+    const bundleQuality = features.length > 19 ? features[19] : 1;
+    const topWhalePercent = features.length > 10 ? features[10] : 0;
+    const creatorRugHistory = features.length > 27 ? features[27] : 0;
+    const volumeToLiquidity = features.length > 1 ? features[1] : 0;
+
+    if (mintDisabled === 0) {
+      flags.push({ type: 'MINT_ACTIVE', probability: 1, severity: 'HIGH' });
+    }
+    if (freezeDisabled === 0) {
+      flags.push({ type: 'FREEZE_ACTIVE', probability: 1, severity: 'CRITICAL' });
+    }
+    if (bundleDetected === 1) {
+      flags.push({
+        type: 'BUNDLE_DETECTED',
+        probability: bundleConfidence,
+        severity: bundleQuality < 0.25 ? 'CRITICAL' : 'HIGH',
+      });
+    }
+    if (topWhalePercent > 0.5) {
+      flags.push({ type: 'WHALE_DOMINANCE', probability: 1, severity: 'CRITICAL' });
+    } else if (topWhalePercent > 0.3) {
+      flags.push({ type: 'WHALE_CONCENTRATION', probability: 0.8, severity: 'HIGH' });
+    }
+    if (creatorRugHistory > 0) {
+      flags.push({ type: 'SERIAL_RUGGER', probability: 1, severity: 'CRITICAL' });
+    }
+    if (volumeToLiquidity > 0.8) {
+      flags.push({ type: 'SUSPICIOUS_VOLUME', probability: 0.7, severity: 'MEDIUM' });
+    }
+
+    // High scam probability flag
+    if (probs.length > 3 && probs[3] > 0.5) {
+      flags.push({ type: 'HIGH_SCAM_PROBABILITY', probability: probs[3], severity: 'CRITICAL' });
+    }
+
+    return flags;
   }
 
   /**
@@ -107,8 +401,6 @@ export class BitNetEngine {
       await this.loadModel();
     }
 
-    // TODO: Use actual model for generation
-    // For now, use template-based generation
     return this.templateGenerate(options);
   }
 
@@ -120,7 +412,6 @@ export class BitNetEngine {
       await this.loadModel();
     }
 
-    // Parse context to determine best action
     const thought = await this.generateThought(context);
     const action = await this.selectAction(context, availableTools);
 
@@ -157,7 +448,34 @@ export class BitNetEngine {
   }
 
   /**
-   * Rule-based classification (fallback until model is trained)
+   * Check if neural model is loaded
+   */
+  isNeuralModelLoaded(): boolean {
+    return this.useNeuralInference;
+  }
+
+  /**
+   * Get model info
+   */
+  getModelInfo(): {
+    mode: 'neural' | 'rule-based';
+    architecture?: number[];
+    accuracy?: number;
+    trainedOn?: number;
+  } {
+    if (this.useNeuralInference && this.ternaryModel) {
+      return {
+        mode: 'neural',
+        architecture: this.ternaryModel.architecture,
+        accuracy: this.ternaryModel.accuracy,
+        trainedOn: this.ternaryModel.trainedOn,
+      };
+    }
+    return { mode: 'rule-based' };
+  }
+
+  /**
+   * Rule-based classification (fallback when no trained model)
    */
   private ruleBasedClassify(features: Float32Array): ClassifierOutput {
     let score = 30; // Base score
@@ -308,7 +626,6 @@ export class BitNetEngine {
   private templateGenerate(options: GenerateOptions): string {
     const { prompt, format } = options;
 
-    // Simple template matching for common prompts
     if (prompt.includes('Should I exit')) {
       return JSON.stringify({
         shouldExit: false,
@@ -335,7 +652,6 @@ export class BitNetEngine {
       });
     }
 
-    // Default response
     if (format === 'json') {
       return JSON.stringify({ response: 'Analysis complete', confidence: 50 });
     }
@@ -347,7 +663,6 @@ export class BitNetEngine {
    * Generate reasoning thought
    */
   private async generateThought(context: string): Promise<string> {
-    // Extract key information from context
     const hasBundle = context.includes('bundle') || context.includes('coordinated');
     const hasRisk = context.includes('risk') || context.includes('suspicious');
     const hasNew = context.includes('new') || context.includes('launch');
@@ -374,7 +689,6 @@ export class BitNetEngine {
     context: string,
     availableTools: string[]
   ): Promise<ReasoningOutput['action'] | undefined> {
-    // Simple keyword-based action selection
     const contextLower = context.toLowerCase();
 
     if (contextLower.includes('new launch') && availableTools.includes('quick_scan')) {
@@ -416,9 +730,6 @@ export class BitNetEngine {
    * Initialize pattern weights for known scam types
    */
   private initializePatternWeights(): void {
-    // Bundle coordinator pattern
-    // High: bundleDetected, bundleCount, freshWalletRatio
-    // Low: bundleQuality, holderCountLog
     this.patternWeights.set('BUNDLE_COORDINATOR', new Array(FEATURE_COUNT).fill(0).map((_, i) => {
       if (i === 15) return 1.0;  // bundleDetected
       if (i === 16) return 0.8;  // bundleCountNorm
@@ -427,8 +738,6 @@ export class BitNetEngine {
       return 0;
     }));
 
-    // Rug puller pattern
-    // High: creatorRugHistory, top whale percent, mint/freeze active
     this.patternWeights.set('RUG_PULLER', new Array(FEATURE_COUNT).fill(0).map((_, i) => {
       if (i === 27) return 1.0;  // creatorRugHistory
       if (i === 10) return 0.8;  // topWhalePercent
@@ -437,8 +746,6 @@ export class BitNetEngine {
       return 0;
     }));
 
-    // Wash trader pattern
-    // High: volumeToLiquidity, low holder count, suspicious activity
     this.patternWeights.set('WASH_TRADER', new Array(FEATURE_COUNT).fill(0).map((_, i) => {
       if (i === 1) return 1.0;   // volumeToLiquidity
       if (i === 5) return -0.5;  // holderCountLog (inverse = low)
@@ -446,8 +753,6 @@ export class BitNetEngine {
       return 0;
     }));
 
-    // Legitimate VC pattern (positive)
-    // High: old wallets, high bundleQuality, no rug history
     this.patternWeights.set('LEGITIMATE_VC', new Array(FEATURE_COUNT).fill(0).map((_, i) => {
       if (i === 19) return 1.0;  // bundleQuality
       if (i === 24) return -0.5; // ageDecay (inverse = old)
@@ -472,7 +777,6 @@ export class BitNetEngine {
       }
     }
 
-    // Normalize to 0-1
     return maxScore > 0 ? (score + maxScore) / (2 * maxScore) : 0;
   }
 

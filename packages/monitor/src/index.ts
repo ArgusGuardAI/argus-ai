@@ -1,18 +1,14 @@
 /**
- * Argus Monitor - Free 24/7 Token Monitoring
+ * Argus Monitor - Yellowstone gRPC 24/7 Token Detection
  *
- * WebSocket-based monitoring for new Solana token pools.
- * Runs at $0/month using free public RPC WebSocket subscriptions.
- * Detection only - no RPC calls. Users analyze tokens in the dashboard.
- *
- * Usage:
- *   pnpm dev     # Development with hot reload
- *   pnpm start   # Production
+ * Chainstack Yellowstone gRPC streaming for new Solana token pools.
+ * Persistent gRPC connection — $49/mo flat, unlimited events.
+ * Detection only — no RPC calls for pool discovery.
  *
  * Environment Variables:
- *   RPC_ENDPOINT          - Solana RPC endpoint (required, for WebSocket)
- *   RPC_WS_ENDPOINT       - WebSocket endpoint (optional, derived from RPC)
- *   WORKERS_API_URL       - Argus Workers API URL (required for dashboard feed)
+ *   YELLOWSTONE_ENDPOINT  - Chainstack Yellowstone gRPC endpoint (required)
+ *   YELLOWSTONE_TOKEN     - Chainstack x-token for auth (required)
+ *   WORKERS_API_URL       - Argus Workers API URL (optional, for dashboard feed)
  *   TELEGRAM_BOT_TOKEN    - Telegram bot token (optional)
  *   TELEGRAM_CHANNEL_ID   - Telegram channel ID (optional)
  *   ENABLED_DEXS          - Comma-separated DEX list (default: all)
@@ -23,8 +19,8 @@ import { AlertManager } from './alert-manager.js';
 
 // Configuration from environment
 interface Config {
-  rpcEndpoint: string;
-  rpcWsEndpoint?: string;
+  yellowstoneEndpoint: string;
+  yellowstoneToken: string;
   workersApiUrl?: string;
   telegramBotToken?: string;
   telegramChannelId?: string;
@@ -33,12 +29,14 @@ interface Config {
 
 // Load configuration from environment
 function loadConfig(): Config {
-  const rpcEndpoint = process.env.RPC_ENDPOINT;
+  const yellowstoneEndpoint = process.env.YELLOWSTONE_ENDPOINT;
+  const yellowstoneToken = process.env.YELLOWSTONE_TOKEN;
 
-  if (!rpcEndpoint) {
-    console.error('ERROR: RPC_ENDPOINT environment variable is required');
-    console.log('\nExample (free public RPC):');
-    console.log('  RPC_ENDPOINT=https://api.mainnet-beta.solana.com pnpm dev');
+  if (!yellowstoneEndpoint || !yellowstoneToken) {
+    console.error('ERROR: YELLOWSTONE_ENDPOINT and YELLOWSTONE_TOKEN are required');
+    console.log('\nSet these from your Chainstack dashboard:');
+    console.log('  YELLOWSTONE_ENDPOINT=yellowstone-solana-mainnet.core.chainstack.com');
+    console.log('  YELLOWSTONE_TOKEN=your-x-token');
     process.exit(1);
   }
 
@@ -49,8 +47,8 @@ function loadConfig(): Config {
   }
 
   return {
-    rpcEndpoint,
-    rpcWsEndpoint: process.env.RPC_WS_ENDPOINT,
+    yellowstoneEndpoint,
+    yellowstoneToken,
     workersApiUrl: process.env.WORKERS_API_URL,
     telegramBotToken: process.env.TELEGRAM_BOT_TOKEN,
     telegramChannelId: process.env.TELEGRAM_CHANNEL_ID,
@@ -79,20 +77,20 @@ const stats: MonitorStats = {
 async function main(): Promise<void> {
   console.log('');
   console.log('╔══════════════════════════════════════════════════════════════╗');
-  console.log('║        ARGUS MONITOR - $0 24/7 Token Detection               ║');
-  console.log('║        WebSocket only • No RPC calls • Zero cost             ║');
+  console.log('║     ARGUS MONITOR - Yellowstone gRPC Token Detection        ║');
+  console.log('║     Chainstack Geyser • Persistent gRPC • $49/mo flat       ║');
   console.log('╚══════════════════════════════════════════════════════════════╝');
   console.log('');
 
   // Load configuration
   const config = loadConfig();
 
-  console.log('[Config] RPC Endpoint:', config.rpcEndpoint.replace(/api-key=\w+/, 'api-key=***'));
+  console.log('[Config] Yellowstone: ', config.yellowstoneEndpoint);
   console.log('[Config] Enabled DEXs:', config.enabledDexs.join(', '));
-  console.log('[Config] Workers API:', config.workersApiUrl || 'Not configured (local only)');
+  console.log('[Config] Workers API: ', config.workersApiUrl || 'Not configured (local only)');
   console.log('');
 
-  // Initialize alert manager (for sending to dashboard)
+  // Initialize alert manager (for sending to dashboard + local file)
   const alertManager = new AlertManager({
     workersApiUrl: config.workersApiUrl,
     telegramBotToken: config.telegramBotToken,
@@ -101,40 +99,36 @@ async function main(): Promise<void> {
     minSeverityForTelegram: 'warning',
   });
 
-  // Pool event handler - detection only, no analysis
+  // Pool event handler — detection only, no analysis
   async function handlePoolEvent(event: PoolEvent): Promise<void> {
     stats.poolsDetected++;
 
-    // Skip if no base mint (couldn't parse)
-    if (!event.baseMint) {
-      return;
-    }
+    if (!event.baseMint) return;
 
     const timestamp = new Date().toISOString().slice(11, 19);
 
-    // Log differently for graduations
     if (event.type === 'graduation') {
       stats.graduations++;
       const bondingMin = event.bondingCurveTime ? Math.round(event.bondingCurveTime / 1000 / 60) : 0;
-      console.log(`[${timestamp}] 🎓 GRADUATION: ${event.baseMint} → ${event.dex} (${bondingMin}min on curve)`);
+      console.log(`[${timestamp}] GRADUATION: ${event.baseMint} → ${event.dex} (${bondingMin}min on curve)`);
     } else {
       console.log(`[${timestamp}] [${event.dex}] ${event.baseMint}`);
     }
 
-    // Send to dashboard activity feed (no analysis, just detection)
+    // Write to local file for agents + send to Workers API
     await alertManager.alertPoolDiscovered(event, null);
     stats.eventsSent++;
   }
 
-  // Initialize pool monitor
+  // Initialize pool monitor with Yellowstone gRPC
   const poolMonitor = new PoolMonitor({
-    rpcEndpoint: config.rpcEndpoint,
-    rpcWsEndpoint: config.rpcWsEndpoint,
+    yellowstoneEndpoint: config.yellowstoneEndpoint,
+    yellowstoneToken: config.yellowstoneToken,
     enabledDexs: config.enabledDexs,
     onPoolEvent: handlePoolEvent,
-    onConnect: (dex) => console.log(`[WebSocket] Connected to ${dex}`),
-    onDisconnect: (dex) => console.log(`[WebSocket] Disconnected from ${dex}`),
-    onError: (error, dex) => console.error(`[WebSocket] ${dex} error:`, error.message),
+    onConnect: () => console.log('[Yellowstone] Connected to gRPC stream'),
+    onDisconnect: () => console.log('[Yellowstone] Disconnected from gRPC stream'),
+    onError: (error, ctx) => console.error(`[Yellowstone] ${ctx} error:`, error.message),
   });
 
   // Start monitoring
@@ -148,12 +142,13 @@ async function main(): Promise<void> {
 
     console.log('');
     console.log(`[Status] Uptime: ${uptime}m | Detected: ${stats.poolsDetected} pools | Sent: ${stats.eventsSent} events`);
-    console.log(`[Status] Rate: ${rate.toFixed(1)} pools/min | WebSocket: ${monitorStats.subscriptions} subscriptions`);
-    console.log(`[Status] 🎓 Graduations: ${stats.graduations} | Tracking: ${monitorStats.pumpFunTracked} pump.fun tokens`);
-    console.log(`[Status] RPC calls: 0 (detection only)`);
+    console.log(`[Status] Rate: ${rate.toFixed(1)} pools/min | gRPC: ${monitorStats.connected ? 'connected' : 'disconnected'}`);
+    console.log(`[Status] Notifications: ${monitorStats.notifications} | Parsed: ${monitorStats.parsed} pools`);
+    console.log(`[Status] Graduations: ${stats.graduations} | Tracking: ${monitorStats.pumpFunTracked} pump.fun tokens`);
+    console.log(`[Status] RPC calls: 0 (Yellowstone gRPC only)`);
     console.log('');
 
-    // Clean up old tokens every hour (when uptime is divisible by 60)
+    // Clean up old tokens every hour
     if (uptime > 0 && uptime % 60 === 0) {
       poolMonitor.cleanupOldTokens();
     }
@@ -164,7 +159,6 @@ async function main(): Promise<void> {
     console.log(`\n[${signal}] Shutting down...`);
     await poolMonitor.stop();
 
-    // Final stats
     const totalUptime = Math.floor((Date.now() - stats.startTime) / 1000 / 60);
     const rate = stats.poolsDetected / Math.max(totalUptime, 1);
 
@@ -177,7 +171,7 @@ async function main(): Promise<void> {
     console.log(`║  Graduations:     ${String(stats.graduations).padStart(6)}                                 ║`);
     console.log(`║  Events sent:     ${String(stats.eventsSent).padStart(6)}                                 ║`);
     console.log(`║  Detection rate:  ${rate.toFixed(1).padStart(6)} pools/min                       ║`);
-    console.log(`║  RPC calls:            0 (FREE!)                             ║`);
+    console.log(`║  Transport:       Yellowstone gRPC                           ║`);
     console.log('╚══════════════════════════════════════════════════════════════╝');
     console.log('');
 
@@ -188,7 +182,7 @@ async function main(): Promise<void> {
   process.on('SIGTERM', () => shutdown('SIGTERM'));
 
   console.log('');
-  console.log('Monitoring started. Press Ctrl+C to stop.');
+  console.log('Monitoring started via Yellowstone gRPC. Press Ctrl+C to stop.');
   console.log('New pools will appear in the dashboard activity feed.');
   console.log('');
 }
