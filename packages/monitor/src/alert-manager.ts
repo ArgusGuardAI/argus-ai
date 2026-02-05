@@ -55,6 +55,7 @@ export interface AlertManagerConfig {
 export class AlertManager {
   private config: AlertManagerConfig;
   private alertCount = 0;
+  private static readonly POOL_EVENTS_FILE = '/opt/argus-ai/data/pool-events.jsonl';
 
   constructor(config: AlertManagerConfig) {
     this.config = {
@@ -64,11 +65,27 @@ export class AlertManager {
     };
 
     console.log('[AlertManager] Initialized');
+    console.log(`[AlertManager] Pool events file: ${AlertManager.POOL_EVENTS_FILE}`);
     if (config.workersApiUrl) {
       console.log(`[AlertManager] Workers API: ${config.workersApiUrl}`);
     }
     if (config.telegramBotToken) {
       console.log('[AlertManager] Telegram: enabled');
+    }
+
+    // Ensure data directory exists on startup
+    this.ensureDataDir();
+  }
+
+  /**
+   * Ensure data directory exists for pool events file
+   */
+  private async ensureDataDir(): Promise<void> {
+    try {
+      const fs = await import('fs').then(m => m.promises);
+      await fs.mkdir('/opt/argus-ai/data', { recursive: true });
+    } catch {
+      // Non-fatal
     }
   }
 
@@ -80,21 +97,27 @@ export class AlertManager {
   }
 
   /**
-   * Send pool discovery event to Workers API (for ALL pools)
-   * This feeds the dashboard activity feed with live pool discoveries
+   * Send pool discovery event to Workers API + local file (for agents)
+   * This feeds the dashboard activity feed AND the Scout agent
    * Detection only - no analysis data
    */
   async alertPoolDiscovered(event: PoolEvent, _analysis: QuickAnalysis | null): Promise<void> {
-    // Only send to Workers API if configured
+    // Skip if no base mint
+    if (!event.baseMint) return;
+
+    // Check if this is a graduation event
+    if (event.type === 'graduation') {
+      await this.alertGraduation(event);
+      return;
+    }
+
+    // ALWAYS write to local file for agents (even if Workers API is not configured)
+    await this.writePoolEventToFile(event);
+
+    // Send to Workers API if configured
     if (!this.config.workersApiUrl) return;
 
     try {
-      // Check if this is a graduation event
-      if (event.type === 'graduation') {
-        await this.alertGraduation(event);
-        return;
-      }
-
       const isPumpFun = event.dex === 'PUMP_FUN';
 
       const message = isPumpFun
@@ -129,10 +152,36 @@ export class AlertManager {
   }
 
   /**
-   * Send graduation event to Workers API
+   * Write pool event to local JSONL file for Scout agent consumption
+   * This is how Monitor (Yellowstone/WebSocket) communicates with Agents (same server)
+   * Zero RPC calls — just a file append
+   */
+  private async writePoolEventToFile(event: PoolEvent): Promise<void> {
+    try {
+      const fs = await import('fs').then(m => m.promises);
+
+      const entry = JSON.stringify({
+        token: event.baseMint,
+        dex: event.dex,
+        poolAddress: event.poolAddress,
+        type: event.type || 'new_pool',
+        timestamp: Date.now(),
+      }) + '\n';
+
+      await fs.appendFile(AlertManager.POOL_EVENTS_FILE, entry);
+    } catch (err) {
+      console.error('[AlertManager] File write error:', err);
+    }
+  }
+
+  /**
+   * Send graduation event to Workers API + local file
    * Higher severity - these are tradeable tokens
    */
   async alertGraduation(event: PoolEvent): Promise<void> {
+    // ALWAYS write to local file for agents
+    await this.writePoolEventToFile(event);
+
     if (!this.config.workersApiUrl) return;
 
     try {
