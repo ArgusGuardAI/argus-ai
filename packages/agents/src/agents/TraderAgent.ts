@@ -15,6 +15,16 @@ import { TradingTools } from '../tools/TradingTools';
 import { OnChainTools } from '../tools/OnChainTools';
 import { Keypair, VersionedTransaction, Connection } from '@solana/web3.js';
 import bs58 from 'bs58';
+import type { PositionStore, Position as StoredPosition, CreatePositionInput } from '../services/PositionStore';
+
+// Price update from Yellowstone streaming (received from PoolMonitor)
+export interface PriceUpdateEvent {
+  poolAddress: string;
+  tokenAddress: string;
+  price: number;           // SOL per token
+  liquiditySol: number;    // Current liquidity in SOL
+  timestamp: number;
+}
 
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
 const LAMPORTS_PER_SOL = 1_000_000_000;
@@ -98,6 +108,13 @@ export class TraderAgent extends BaseAgent {
   private keypair: Keypair | null = null;
   private tradingEnabled: boolean = false;
 
+  // Position persistence (optional - enables position survival across restarts)
+  private positionStore: PositionStore | null = null;
+
+  // Callback for adding position to Yellowstone price tracking
+  private onPositionOpened?: (poolAddress: string, tokenAddress: string) => Promise<void>;
+  private onPositionClosed?: (poolAddress: string) => Promise<void>;
+
   constructor(messageBus: MessageBus, options: {
     name?: string;
     walletAddress?: string;
@@ -106,6 +123,10 @@ export class TraderAgent extends BaseAgent {
     maxPositionSize?: number;
     maxDailyTrades?: number;
     rpcEndpoint?: string;
+    positionStore?: PositionStore;
+    // Callbacks for Yellowstone price tracking integration
+    onPositionOpened?: (poolAddress: string, tokenAddress: string) => Promise<void>;
+    onPositionClosed?: (poolAddress: string) => Promise<void>;
   } = {}) {
     const config: AgentConfig = {
       name: options.name || 'trader-1',
@@ -154,6 +175,13 @@ export class TraderAgent extends BaseAgent {
     this.tradingTools = new TradingTools({ rpcEndpoint: this.rpcEndpoint });
     this.onChainTools = new OnChainTools({ rpcEndpoint: this.rpcEndpoint });
 
+    // Position persistence (enables survival across restarts)
+    this.positionStore = options.positionStore || null;
+
+    // Yellowstone price tracking callbacks
+    this.onPositionOpened = options.onPositionOpened;
+    this.onPositionClosed = options.onPositionClosed;
+
     // Load keypair from private key if provided
     const privateKey = options.privateKey || process.env.TRADING_WALLET_PRIVATE_KEY;
     if (privateKey) {
@@ -186,6 +214,39 @@ export class TraderAgent extends BaseAgent {
     if (this.tradingEnabled) {
       await this.think('observation', `Wallet: ${this.walletAddress.slice(0, 8)}...${this.walletAddress.slice(-4)}`);
     }
+
+    // Load active positions from database (survive restarts)
+    if (this.positionStore) {
+      try {
+        const activePositions = await this.positionStore.getActive();
+        for (const stored of activePositions) {
+          // Convert StoredPosition to in-memory Position format
+          const position: Position = {
+            id: stored.id,
+            token: stored.tokenAddress,
+            entryPrice: stored.entryPrice,
+            currentPrice: stored.currentPrice || stored.entryPrice,
+            amount: stored.tokenAmount,
+            solInvested: stored.entrySolAmount,
+            entryTime: stored.entryTime,
+            strategy: stored.strategy,
+            stopLoss: stored.stopLossPrice,
+            takeProfit: stored.takeProfitPrice,
+            pnl: 0,
+            pnlPercent: 0
+          };
+          this.positions.set(stored.tokenAddress, position);
+
+          // Subscribe to price updates for this position via Yellowstone
+          if (this.onPositionOpened) {
+            await this.onPositionOpened(stored.poolAddress, stored.tokenAddress);
+          }
+        }
+        await this.think('observation', `Loaded ${activePositions.length} active positions from database`);
+      } catch (err) {
+        console.error('[TraderAgent] Error loading positions:', (err as Error).message);
+      }
+    }
   }
 
   protected async run(): Promise<void> {
@@ -193,7 +254,8 @@ export class TraderAgent extends BaseAgent {
 
     while (this.running) {
       try {
-        // Monitor existing positions
+        // Monitor existing positions (fallback for non-streaming mode)
+        // When Yellowstone streaming is active, prices come via handlePriceUpdate()
         await this.monitorPositions();
 
         // Update balances
@@ -206,6 +268,75 @@ export class TraderAgent extends BaseAgent {
         await this.think('reflection', `Trading error: ${errorMsg}`);
       }
     }
+  }
+
+  /**
+   * Handle price update from Yellowstone gRPC streaming
+   * Called by PoolMonitor when pool account data changes
+   * Zero RPC calls - all data comes from the stream
+   */
+  async handlePriceUpdate(event: PriceUpdateEvent): Promise<void> {
+    const position = this.positions.get(event.tokenAddress);
+    if (!position) return;
+
+    // Update current price
+    position.currentPrice = event.price;
+    position.pnl = (position.currentPrice * position.amount) - position.solInvested;
+    position.pnlPercent = (position.pnl / position.solInvested) * 100;
+
+    // Update in database
+    if (this.positionStore) {
+      try {
+        // Find position by pool address
+        const stored = await this.positionStore.getByPool(event.poolAddress);
+        if (stored) {
+          await this.positionStore.updatePrice(stored.id, event.price);
+        }
+      } catch (err) {
+        console.error('[TraderAgent] Error updating position price:', (err as Error).message);
+      }
+    }
+
+    // Check stop-loss
+    if (position.currentPrice <= position.stopLoss) {
+      await this.think('action', `Stop-loss triggered for ${event.tokenAddress.slice(0, 8)}... at ${event.price}`);
+      await this.executeSellWithPool({ token: event.tokenAddress, reason: 'Stop-loss triggered', poolAddress: event.poolAddress });
+      return;
+    }
+
+    // Check take-profit
+    if (position.currentPrice >= position.takeProfit) {
+      await this.think('action', `Take-profit triggered for ${event.tokenAddress.slice(0, 8)}... at ${event.price}`);
+      await this.executeSellWithPool({ token: event.tokenAddress, reason: 'Take-profit triggered', poolAddress: event.poolAddress });
+      return;
+    }
+
+    // Check max hold time
+    const strategy = this.strategies.find(s => s.name === position.strategy);
+    const holdTimeHours = (Date.now() - position.entryTime) / 3600000;
+    if (strategy && holdTimeHours >= strategy.exitConditions.maxHoldTime) {
+      await this.think('action', `Max hold time reached for ${event.tokenAddress.slice(0, 8)}...`);
+      await this.executeSellWithPool({ token: event.tokenAddress, reason: 'Max hold time reached', poolAddress: event.poolAddress });
+      return;
+    }
+  }
+
+  /**
+   * Execute sell with pool address for Yellowstone cleanup
+   */
+  private async executeSellWithPool(params: {
+    token: string;
+    reason: string;
+    poolAddress: string;
+  }): Promise<TradeResult> {
+    const result = await this.executeSell({ token: params.token, reason: params.reason });
+
+    // Remove from Yellowstone price tracking
+    if (result.success && this.onPositionClosed) {
+      await this.onPositionClosed(params.poolAddress);
+    }
+
+    return result;
   }
 
   /**
@@ -348,19 +479,39 @@ export class TraderAgent extends BaseAgent {
       const matches = this.checkStrategyMatch(strategy, analysis);
 
       if (matches.matches) {
-        // Cap position size to configured max
-        const positionSize = Math.min(strategy.positionSize, this.maxPositionSize);
+        // Get risk score from analysis
+        const riskScore = analysis.riskScore ?? analysis.score ?? 50;
+
+        // TIERED POSITION SIZING based on risk score
+        // Lower score = safer = bigger position
+        let baseSize = Math.min(strategy.positionSize, this.maxPositionSize);
+        let adjustedSize = baseSize;
+        let tier = 'FULL';
+
+        if (riskScore >= 80) {
+          // High risk - skip entirely
+          continue;
+        } else if (riskScore >= 60) {
+          // Medium-high risk - quarter position
+          adjustedSize = baseSize * 0.25;
+          tier = 'QUARTER';
+        } else if (riskScore >= 40) {
+          // Medium risk - half position
+          adjustedSize = baseSize * 0.5;
+          tier = 'HALF';
+        }
+        // Score < 40: full position
 
         // Check if we have enough balance
-        if (this.walletBalance < positionSize) {
+        if (this.walletBalance < adjustedSize) {
           continue;
         }
 
         return {
           shouldBuy: true,
           strategy: strategy.name,
-          positionSize,
-          reasoning: matches.reasoning
+          positionSize: adjustedSize,
+          reasoning: `${matches.reasoning} [${tier} position @ score ${riskScore}]`
         };
       }
     }
@@ -515,6 +666,41 @@ export class TraderAgent extends BaseAgent {
       timestamp: Date.now()
     });
 
+    // Persist to database for survival across restarts
+    const poolAddress = analysis.poolAddress || `pool_${token.slice(0, 8)}`;
+    const tokenSymbol = analysis.symbol || analysis.name || 'UNKNOWN';
+
+    if (this.positionStore) {
+      try {
+        const positionInput: CreatePositionInput = {
+          tokenAddress: token,
+          tokenSymbol,
+          poolAddress,
+          entryPrice: price,
+          entrySolAmount: amount,
+          tokenAmount,
+          stopLossPrice: position.stopLoss,
+          takeProfitPrice: position.takeProfit,
+          txSignature: txSignature || '',
+          strategy,
+        };
+        await this.positionStore.create(positionInput);
+        await this.think('observation', `Position persisted to database`);
+      } catch (err) {
+        console.error('[TraderAgent] Error persisting position:', (err as Error).message);
+      }
+    }
+
+    // Register for Yellowstone price streaming
+    if (this.onPositionOpened) {
+      try {
+        await this.onPositionOpened(poolAddress, token);
+        await this.think('observation', `Registered for Yellowstone price streaming`);
+      } catch (err) {
+        console.error('[TraderAgent] Error registering for price updates:', (err as Error).message);
+      }
+    }
+
     // Store in memory for learning
     await this.memory.store({
       action: 'buy',
@@ -666,7 +852,29 @@ export class TraderAgent extends BaseAgent {
       reason
     });
 
-    // Remove position
+    // Close position in database
+    if (this.positionStore) {
+      try {
+        // Map reason string to exit reason enum
+        let exitReason: 'take_profit' | 'stop_loss' | 'trailing_stop' | 'manual' | 'emergency' = 'manual';
+        if (reason.includes('Stop-loss')) exitReason = 'stop_loss';
+        else if (reason.includes('Take-profit')) exitReason = 'take_profit';
+        else if (reason.includes('Emergency') || reason.includes('scammer')) exitReason = 'emergency';
+        else if (reason.includes('hold time')) exitReason = 'manual';
+
+        await this.positionStore.close(
+          position.id,
+          exitReason,
+          pnl,
+          txSignature || ''
+        );
+        await this.think('observation', `Position closed in database`);
+      } catch (err) {
+        console.error('[TraderAgent] Error closing position in database:', (err as Error).message);
+      }
+    }
+
+    // Remove position from memory
     this.positions.delete(token);
 
     await this.think(
@@ -773,8 +981,10 @@ export class TraderAgent extends BaseAgent {
   }
 
   protected setupMessageHandlers(): void {
+    const agentType = this.config.name.replace(/-\d+$/, '');
+
     // Handle opportunities from analysts
-    this.messageBus.subscribe(`agent.${this.config.name}.opportunity`, async (msg) => {
+    const handleOpportunity = async (msg: import('../core/MessageBus').Message) => {
       const { token, analysis } = msg.data;
 
       const evaluation = await this.evaluateOpportunity({ token, analysis });
@@ -787,7 +997,11 @@ export class TraderAgent extends BaseAgent {
           analysis
         });
       }
-    });
+    };
+    this.messageBus.subscribe(`agent.${this.config.name}.opportunity`, handleOpportunity);
+    if (agentType !== this.config.name) {
+      this.messageBus.subscribe(`agent.${agentType}.opportunity`, handleOpportunity);
+    }
 
     // Handle scammer alerts - emergency exit
     this.messageBus.subscribe('alert.scammer', async (msg) => {
@@ -800,9 +1014,13 @@ export class TraderAgent extends BaseAgent {
     });
 
     // Handle manual sell requests
-    this.messageBus.subscribe(`agent.${this.config.name}.sell`, async (msg) => {
+    const handleSell = async (msg: import('../core/MessageBus').Message) => {
       await this.executeSell({ token: msg.data.token, reason: 'Manual request' });
-    });
+    };
+    this.messageBus.subscribe(`agent.${this.config.name}.sell`, handleSell);
+    if (agentType !== this.config.name) {
+      this.messageBus.subscribe(`agent.${agentType}.sell`, handleSell);
+    }
   }
 
   /**

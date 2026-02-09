@@ -814,7 +814,27 @@ export function useAutoTrade(
     // Use ref for latest config
     const currentConfig = configRef.current;
 
-    log(`EXECUTING: ${tokenSymbol} (${currentConfig.buyAmountSol} SOL)...`, 'info');
+    // TIERED POSITION SIZING based on risk score
+    // Lower score = safer = bigger position
+    let adjustedBuyAmount = currentConfig.buyAmountSol;
+    let positionTier = 'FULL';
+
+    if (riskScore >= 80) {
+      // High risk - never buy
+      log(`BLOCKED: ${tokenSymbol} score ${riskScore}/100 too risky - skipping!`, 'warning');
+      return { success: false, error: `Risk score ${riskScore} too high (max 80)` };
+    } else if (riskScore >= 60) {
+      // Medium-high risk - quarter position
+      adjustedBuyAmount = currentConfig.buyAmountSol * 0.25;
+      positionTier = 'QUARTER';
+    } else if (riskScore >= 40) {
+      // Medium risk - half position
+      adjustedBuyAmount = currentConfig.buyAmountSol * 0.5;
+      positionTier = 'HALF';
+    }
+    // Score < 40: full position (no adjustment)
+
+    log(`EXECUTING: ${tokenSymbol} score=${riskScore} → ${positionTier} position (${adjustedBuyAmount.toFixed(3)} SOL)...`, 'info');
 
     if (!tradingWallet.isReady()) {
       log(`Wallet not ready for ${tokenSymbol}`, 'error');
@@ -835,8 +855,8 @@ export function useAutoTrade(
       return { success: false, error: 'Failed to get wallet balance' };
     }
 
-    if (balance < currentConfig.buyAmountSol + ESTIMATED_FEE_SOL) {
-      log(`Insufficient balance: ${balance.toFixed(4)} SOL`, 'error');
+    if (balance < adjustedBuyAmount + ESTIMATED_FEE_SOL) {
+      log(`Insufficient balance: ${balance.toFixed(4)} SOL (need ${adjustedBuyAmount.toFixed(3)} + fees)`, 'error');
       return { success: false, error: `Insufficient balance: ${balance.toFixed(4)} SOL` };
     }
 
@@ -908,9 +928,10 @@ export function useAutoTrade(
 
     try {
       // Execute the buy via Jupiter with trading wallet's instant signing
+      // Uses adjustedBuyAmount based on risk score tiering
       const result = await buyToken(
         tokenAddress,
-        currentConfig.buyAmountSol,
+        adjustedBuyAmount,
         publicKey,
         // This is the key difference - trading wallet signs INSTANTLY
         (tx: VersionedTransaction) => tradingWallet.signTransaction(tx),
@@ -951,12 +972,12 @@ export function useAutoTrade(
             log(`Getting balance for ${tokenSymbol}... (attempt ${retryCount + 1})`, 'info');
             const balanceInfo = await getTokenBalance(tokenAddress, publicKey.toString());
 
-            // Calculate actual SOL spent
+            // Calculate actual SOL spent (uses adjustedBuyAmount for tiered sizing)
             const balanceAfter = await tradingWallet.getBalance();
             const actualSolSpent = balanceBefore - balanceAfter;
-            const entrySol = actualSolSpent > 0 && actualSolSpent < currentConfig.buyAmountSol * 1.5
+            const entrySol = actualSolSpent > 0 && actualSolSpent < adjustedBuyAmount * 1.5
               ? actualSolSpent
-              : currentConfig.buyAmountSol;
+              : adjustedBuyAmount;
 
             if (balanceInfo && balanceInfo.balance > 0) {
               const newPosition: Position = {
@@ -1068,17 +1089,17 @@ export function useAutoTrade(
                   return;
                 }
 
-                // TX verified, create position with defaults
+                // TX verified, create position with defaults (uses adjustedBuyAmount)
                 log(`TX verified, creating position for ${tokenSymbol} with defaults`, 'warning');
                 const newPosition: Position = {
                   tokenAddress,
                   tokenSymbol,
                   entryTimestamp: Date.now(),
-                  entrySolAmount: currentConfig.buyAmountSol,
+                  entrySolAmount: adjustedBuyAmount,
                   tokenAmount: 0,
                   tokenDecimals: 6,
-                  currentValueSol: currentConfig.buyAmountSol,
-                  highestValueSol: currentConfig.buyAmountSol,
+                  currentValueSol: adjustedBuyAmount,
+                  highestValueSol: adjustedBuyAmount,
                   pnlPercent: 0,
                   txSignature: result.signature || '',
                   status: 'active',
@@ -1476,6 +1497,86 @@ export function useAutoTrade(
   }, [state.positions, state.soldPositions, log]);
 
   /**
+   * Buy from an agent discovery result
+   * Maps discovery data to trade parameters and calls executeTrade
+   */
+  const buyFromDiscovery = useCallback(async (
+    discovery: {
+      token: string;
+      tokenInfo: { symbol: string | null };
+      analysis: { score: number; verdict: string };
+    },
+    amountOverride?: number
+  ) => {
+    const currentConfig = configRef.current;
+    const safetyScore = Math.max(0, 100 - discovery.analysis.score);
+    const symbol = discovery.tokenInfo.symbol || discovery.token.slice(0, 8);
+    const amount = amountOverride ?? currentConfig.buyAmountSol;
+
+    // Don't buy SCAM verdicts
+    if (discovery.analysis.verdict === 'SCAM') {
+      log(`Skipping ${symbol}: verdict is SCAM`, 'warning');
+      return { success: false, error: 'SCAM verdict' };
+    }
+
+    log(`Buying from discovery: ${symbol} (safety: ${safetyScore})`, 'info');
+
+    // Temporarily override buy amount if different
+    const origAmount = currentConfig.buyAmountSol;
+    if (amount !== origAmount) {
+      configRef.current = { ...currentConfig, buyAmountSol: amount };
+    }
+
+    try {
+      return await executeTrade(discovery.token, symbol, safetyScore, true);
+    } finally {
+      if (amount !== origAmount) {
+        configRef.current = { ...configRef.current, buyAmountSol: origAmount };
+      }
+    }
+  }, [executeTrade, log]);
+
+  /**
+   * Process agent discoveries for auto-trading
+   * Called by the dashboard when new discoveries arrive and auto-trade is enabled
+   */
+  const processDiscoveries = useCallback(async (
+    discoveries: Array<{
+      token: string;
+      tokenInfo: { symbol: string | null };
+      analysis: { score: number; verdict: string };
+      market: { liquidity: number | null };
+      bundles: { detected: boolean; count: number };
+    }>
+  ) => {
+    const currentConfig = configRef.current;
+    if (!currentConfig.enabled) return;
+
+    for (const disc of discoveries) {
+      // Convert risk score to safety score
+      const safetyScore = Math.max(0, 100 - disc.analysis.score);
+
+      // Skip if below minimum score
+      if (safetyScore < currentConfig.minScore) continue;
+
+      // Skip SCAM/DANGEROUS verdicts
+      if (disc.analysis.verdict === 'SCAM' || disc.analysis.verdict === 'DANGEROUS') continue;
+
+      // Skip if below minimum market cap/liquidity
+      if (disc.market.liquidity !== null && disc.market.liquidity < currentConfig.minMarketCapUsd) continue;
+
+      // Skip if too many bundle wallets
+      if (disc.bundles.detected && disc.bundles.count > currentConfig.maxBundleWallets) continue;
+
+      // Skip if already traded
+      if (tradedTokensRef.current.has(disc.token)) continue;
+
+      const symbol = disc.tokenInfo.symbol || disc.token.slice(0, 8);
+      await handleApprovedToken(disc.token, symbol, safetyScore);
+    }
+  }, [handleApprovedToken]);
+
+  /**
    * Check if ready for automated trading
    */
   const isReady = wallet.isLoaded && wallet.balance >= config.buyAmountSol;
@@ -1513,6 +1614,10 @@ export function useAutoTrade(
 
     // Recovery
     recoverUntrackedPositions,
+
+    // Discovery-based trading
+    buyFromDiscovery,
+    processDiscoveries,
   };
 }
 
