@@ -61,11 +61,11 @@ export interface GenerateOptions {
   format?: 'text' | 'json';
 }
 
-// Ternary model weights loaded from JSON
-interface TernaryModelWeights {
+// Model weights loaded from JSON
+interface ModelWeights {
   version: number;
   architecture: number[];
-  quantization: 'ternary';
+  quantization: 'ternary' | 'float32';
   weights: { [key: string]: number[] };
   biases: { [key: string]: number[] };
   classes: string[];
@@ -83,15 +83,27 @@ interface TernaryLayer {
   cols: number;
 }
 
+interface Float32Layer {
+  weights: Float32Array;
+  biases: Float32Array;
+  rows: number;
+  cols: number;
+}
+
 export class BitNetEngine {
   private config: ModelConfig;
   private modelLoaded: boolean = false;
   private patternWeights: Map<string, number[]> = new Map();
 
-  // Ternary model (null if not loaded / not available)
-  private ternaryModel: TernaryModelWeights | null = null;
+  // Model (null if not loaded / not available)
+  private model: ModelWeights | null = null;
   private ternaryLayers: TernaryLayer[] = [];
+  private float32Layers: Float32Layer[] = [];
   private useNeuralInference: boolean = false;
+  private isFloat32Mode: boolean = false;
+
+  // Optional LLM service for real text generation
+  private llmService: { generate(prompt: string, format?: 'json' | 'text'): Promise<string | null> } | null = null;
 
   constructor(modelPath: string = 'rule-based') {
     this.config = {
@@ -111,39 +123,68 @@ export class BitNetEngine {
     console.log(`[BitNetEngine] Loading model from ${this.config.modelPath}...`);
     console.log(`[BitNetEngine] Feature vector size: ${FEATURE_COUNT} floats (${FEATURE_COUNT * 4} bytes)`);
 
-    // Try to load trained ternary model
+    // Try to load trained model
     const weightsPath = this.resolveWeightsPath();
     if (weightsPath && existsSync(weightsPath)) {
       try {
         const raw = readFileSync(weightsPath, 'utf-8');
-        this.ternaryModel = JSON.parse(raw) as TernaryModelWeights;
+        this.model = JSON.parse(raw) as ModelWeights;
 
-        // Parse layers
-        this.ternaryLayers = [];
-        const arch = this.ternaryModel.architecture;
-        for (let l = 0; l < arch.length - 1; l++) {
-          const key = `layer${l + 1}`;
-          const wArr = this.ternaryModel.weights[key];
-          const bArr = this.ternaryModel.biases[key];
-          if (!wArr || !bArr) {
-            throw new Error(`Missing weights/biases for ${key}`);
+        // Check quantization mode
+        this.isFloat32Mode = this.model.quantization === 'float32';
+        const arch = this.model.architecture;
+
+        // Parse layers based on quantization mode
+        if (this.isFloat32Mode) {
+          this.float32Layers = [];
+          for (let l = 0; l < arch.length - 1; l++) {
+            const key = `layer${l + 1}`;
+            const wArr = this.model.weights[key];
+            const bArr = this.model.biases[key];
+            if (!wArr || !bArr) {
+              throw new Error(`Missing weights/biases for ${key}`);
+            }
+            this.float32Layers.push({
+              weights: new Float32Array(wArr),
+              biases: new Float32Array(bArr),
+              rows: arch[l + 1],
+              cols: arch[l],
+            });
           }
+        } else {
+          this.ternaryLayers = [];
+          for (let l = 0; l < arch.length - 1; l++) {
+            const key = `layer${l + 1}`;
+            const wArr = this.model.weights[key];
+            const bArr = this.model.biases[key];
+            if (!wArr || !bArr) {
+              throw new Error(`Missing weights/biases for ${key}`);
+            }
+            this.ternaryLayers.push({
+              weights: new Int8Array(wArr),
+              biases: new Float32Array(bArr),
+              rows: arch[l + 1],
+              cols: arch[l],
+            });
+          }
+        }
 
-          this.ternaryLayers.push({
-            weights: new Int8Array(wArr),
-            biases: new Float32Array(bArr),
-            rows: arch[l + 1],
-            cols: arch[l],
-          });
+        // Validate feature dimensions match
+        if (this.model.featureCount !== FEATURE_COUNT) {
+          throw new Error(
+            `Model expects ${this.model.featureCount} features but runtime uses ${FEATURE_COUNT}. Retrain the model with matching features.`
+          );
         }
 
         this.useNeuralInference = true;
-        const totalWeights = this.ternaryLayers.reduce((s, l) => s + l.weights.length, 0);
-        console.log(`[BitNetEngine] Loaded ternary model: ${arch.join(' -> ')}`);
-        console.log(`[BitNetEngine] ${totalWeights} ternary weights, accuracy: ${(this.ternaryModel.accuracy * 100).toFixed(1)}%`);
-        console.log(`[BitNetEngine] Trained on ${this.ternaryModel.trainedOn} examples at ${this.ternaryModel.trainedAt}`);
+        const layers = this.isFloat32Mode ? this.float32Layers : this.ternaryLayers;
+        const totalWeights = layers.reduce((s, l) => s + l.weights.length, 0);
+        const mode = this.isFloat32Mode ? 'float32' : 'ternary';
+        console.log(`[BitNetEngine] Loaded ${mode} model: ${arch.join(' -> ')}`);
+        console.log(`[BitNetEngine] ${totalWeights} weights, accuracy: ${(this.model.accuracy * 100).toFixed(1)}%`);
+        console.log(`[BitNetEngine] Trained on ${this.model.trainedOn} examples at ${this.model.trainedAt}`);
       } catch (err) {
-        console.warn(`[BitNetEngine] Failed to load ternary model: ${err instanceof Error ? err.message : err}`);
+        console.warn(`[BitNetEngine] Failed to load model: ${err instanceof Error ? err.message : err}`);
         console.log('[BitNetEngine] Falling back to rule-based inference');
         this.useNeuralInference = false;
       }
@@ -158,14 +199,15 @@ export class BitNetEngine {
 
   /**
    * Resolve the path to bitnet-weights.json
+   * Tries explicit path first, then auto-searches common locations
    */
   private resolveWeightsPath(): string | null {
-    // If explicit path provided and not 'rule-based'
-    if (this.config.modelPath !== 'rule-based') {
+    // If explicit path provided, try it first
+    if (this.config.modelPath !== 'rule-based' && existsSync(this.config.modelPath)) {
       return this.config.modelPath;
     }
 
-    // Try relative to this file
+    // Auto-search: try relative to this file
     try {
       const thisDir = dirname(fileURLToPath(import.meta.url));
       const candidate = resolve(thisDir, 'bitnet-weights.json');
@@ -174,7 +216,7 @@ export class BitNetEngine {
       // import.meta.url may not work in all contexts
     }
 
-    // Try common locations
+    // Auto-search: try common locations relative to cwd
     const candidates = [
       resolve(process.cwd(), 'src/reasoning/bitnet-weights.json'),
       resolve(process.cwd(), 'bitnet-weights.json'),
@@ -204,38 +246,48 @@ export class BitNetEngine {
   }
 
   /**
-   * Neural network classification with ternary weights
+   * Neural network classification
    *
-   * Forward pass: only addition and subtraction (no floating-point multiply).
-   * For each weight:
-   *   w = +1 → sum += activation
-   *   w = -1 → sum -= activation
-   *   w =  0 → skip
+   * Supports both float32 and ternary modes:
+   * - Float32: standard matrix multiply
+   * - Ternary: only addition/subtraction (no multiply)
    */
   private neuralClassify(features: Float32Array): ClassifierOutput {
     let activation: Float32Array = features;
+    const layers = this.isFloat32Mode ? this.float32Layers : this.ternaryLayers;
+    const numLayers = layers.length;
 
     // Forward through hidden layers (ReLU) and output layer
-    for (let l = 0; l < this.ternaryLayers.length; l++) {
-      const layer = this.ternaryLayers[l];
+    for (let l = 0; l < numLayers; l++) {
+      const layer = layers[l];
       const next = new Float32Array(layer.rows);
 
       for (let j = 0; j < layer.rows; j++) {
         let sum = layer.biases[j];
         const offset = j * layer.cols;
-        for (let i = 0; i < layer.cols; i++) {
-          const w = layer.weights[offset + i];
-          if (w === 1) sum += activation[i];
-          else if (w === -1) sum -= activation[i];
-          // w === 0: no operation
+
+        if (this.isFloat32Mode) {
+          // Float32 mode: standard matrix multiply
+          const weights = (layer as Float32Layer).weights;
+          for (let i = 0; i < layer.cols; i++) {
+            sum += weights[offset + i] * activation[i];
+          }
+        } else {
+          // Ternary mode: addition/subtraction only
+          const weights = (layer as TernaryLayer).weights;
+          for (let i = 0; i < layer.cols; i++) {
+            const w = weights[offset + i];
+            if (w === 1) sum += activation[i];
+            else if (w === -1) sum -= activation[i];
+          }
         }
 
         // ReLU for hidden layers, raw logit for output
-        next[j] = l < this.ternaryLayers.length - 1 ? Math.max(0, sum) : sum;
+        next[j] = l < numLayers - 1 ? Math.max(0, sum) : sum;
       }
 
       // Softmax on final layer
-      if (l === this.ternaryLayers.length - 1) {
+      if (l === numLayers - 1) {
         const maxLogit = Math.max(...next);
         let expSum = 0;
         for (let i = 0; i < next.length; i++) {
@@ -286,7 +338,7 @@ export class BitNetEngine {
   }
 
   /**
-   * Compute feature importance from first-layer ternary weights
+   * Compute feature importance from first-layer weights
    */
   private computeFeatureImportance(features: Float32Array): Record<string, number> {
     const importance: Record<string, number> = {
@@ -299,17 +351,23 @@ export class BitNetEngine {
       creator: 0,
     };
 
-    if (this.ternaryLayers.length === 0) return importance;
+    const layers = this.isFloat32Mode ? this.float32Layers : this.ternaryLayers;
+    if (layers.length === 0) return importance;
 
-    const layer = this.ternaryLayers[0];
+    const layer = layers[0];
     // Sum absolute contribution of each feature across all neurons
     const featureContrib = new Float32Array(Math.min(layer.cols, features.length));
     for (let j = 0; j < layer.rows; j++) {
       const offset = j * layer.cols;
       for (let i = 0; i < featureContrib.length; i++) {
-        const w = layer.weights[offset + i];
-        if (w !== 0) {
-          featureContrib[i] += Math.abs(features[i]);
+        if (this.isFloat32Mode) {
+          const w = (layer as Float32Layer).weights[offset + i];
+          featureContrib[i] += Math.abs(w * features[i]);
+        } else {
+          const w = (layer as TernaryLayer).weights[offset + i];
+          if (w !== 0) {
+            featureContrib[i] += Math.abs(features[i]);
+          }
         }
       }
     }
@@ -395,10 +453,22 @@ export class BitNetEngine {
 
   /**
    * Generate reasoning/explanation from prompt
+   * Uses LLM service when available, falls back to templates
    */
   async generate(options: GenerateOptions): Promise<string> {
     if (!this.modelLoaded) {
       await this.loadModel();
+    }
+
+    // Try real LLM generation first
+    if (this.llmService) {
+      try {
+        const format = options.format === 'json' ? 'json' : 'text';
+        const result = await this.llmService.generate(options.prompt, format);
+        if (result) return result;
+      } catch {
+        // Fall through to template
+      }
     }
 
     return this.templateGenerate(options);
@@ -448,6 +518,14 @@ export class BitNetEngine {
   }
 
   /**
+   * Set LLM service for real text generation (replaces template generation)
+   */
+  setLLMService(llm: { generate(prompt: string, format?: 'json' | 'text'): Promise<string | null> }): void {
+    this.llmService = llm;
+    console.log('[BitNetEngine] LLM service connected — generate() will use real AI');
+  }
+
+  /**
    * Check if neural model is loaded
    */
   isNeuralModelLoaded(): boolean {
@@ -459,16 +537,18 @@ export class BitNetEngine {
    */
   getModelInfo(): {
     mode: 'neural' | 'rule-based';
+    quantization?: 'ternary' | 'float32';
     architecture?: number[];
     accuracy?: number;
     trainedOn?: number;
   } {
-    if (this.useNeuralInference && this.ternaryModel) {
+    if (this.useNeuralInference && this.model) {
       return {
         mode: 'neural',
-        architecture: this.ternaryModel.architecture,
-        accuracy: this.ternaryModel.accuracy,
-        trainedOn: this.ternaryModel.trainedOn,
+        quantization: this.isFloat32Mode ? 'float32' : 'ternary',
+        architecture: this.model.architecture,
+        accuracy: this.model.accuracy,
+        trainedOn: this.model.trainedOn,
       };
     }
     return { mode: 'rule-based' };

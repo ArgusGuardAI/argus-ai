@@ -308,10 +308,11 @@ async function train(options: {
   hiddenSizes: number[];
   splitRatio: number;
   seed?: number;
+  float32?: boolean;
 }) {
   console.log('');
   console.log('==========================================================');
-  console.log('  ARGUS AI - BitNet Ternary Model Training');
+  console.log(`  ARGUS AI - BitNet ${options.float32 ? 'Float32' : 'Ternary'} Model Training`);
   console.log('  Pure TypeScript • No external ML frameworks');
   console.log('==========================================================');
   console.log('');
@@ -472,59 +473,112 @@ async function train(options: {
   }
 
   // ============================================================
-  // Quantize to ternary
+  // Quantize to ternary (unless --float32 specified)
   // ============================================================
 
-  console.log('');
-  console.log('[Quantization] Converting to ternary weights {-1, 0, +1}...');
+  let ternaryLayers: Int8Array[] = [];
+  let finalAcc = bestTestAcc;
 
-  const ternaryLayers: Int8Array[] = [];
-  const layerStats: string[] = [];
+  if (options.float32) {
+    console.log('');
+    console.log('[Mode] Keeping float32 weights (no quantization)');
+    console.log(`  Float32 accuracy: ${(bestTestAcc * 100).toFixed(1)}%`);
+  } else {
+    console.log('');
+    console.log('[Quantization] Converting to ternary weights {-1, 0, +1}...');
 
-  for (let l = 0; l < network.layers.length; l++) {
-    const ternary = quantizeToTernary(network.layers[l].weights);
-    ternaryLayers.push(ternary);
+    const layerStats: string[] = [];
 
-    let zeros = 0, ones = 0, negOnes = 0;
-    for (let i = 0; i < ternary.length; i++) {
-      if (ternary[i] === 0) zeros++;
-      else if (ternary[i] === 1) ones++;
-      else negOnes++;
+    for (let l = 0; l < network.layers.length; l++) {
+      const ternary = quantizeToTernary(network.layers[l].weights);
+      ternaryLayers.push(ternary);
+
+      let zeros = 0, ones = 0, negOnes = 0;
+      for (let i = 0; i < ternary.length; i++) {
+        if (ternary[i] === 0) zeros++;
+        else if (ternary[i] === 1) ones++;
+        else negOnes++;
+      }
+
+      const total = ternary.length;
+      layerStats.push(
+        `  Layer ${l + 1}: ${total} weights → ` +
+        `+1: ${ones} (${(ones / total * 100).toFixed(0)}%), ` +
+        `0: ${zeros} (${(zeros / total * 100).toFixed(0)}%), ` +
+        `-1: ${negOnes} (${(negOnes / total * 100).toFixed(0)}%)`
+      );
     }
 
-    const total = ternary.length;
-    layerStats.push(
-      `  Layer ${l + 1}: ${total} weights → ` +
-      `+1: ${ones} (${(ones / total * 100).toFixed(0)}%), ` +
-      `0: ${zeros} (${(zeros / total * 100).toFixed(0)}%), ` +
-      `-1: ${negOnes} (${(negOnes / total * 100).toFixed(0)}%)`
-    );
+    for (const stat of layerStats) console.log(stat);
+
+    // Evaluate quantized model accuracy
+    console.log('');
+    console.log('[Quantization] Evaluating quantized model...');
+
+    let quantizedCorrect = 0;
+
+    for (const example of testSet) {
+      // Forward pass with ternary weights (simulated)
+      let activation = example.features;
+      for (let l = 0; l < network.layers.length; l++) {
+        const layer = network.layers[l];
+        const ternary = ternaryLayers[l];
+        const next = new Float32Array(layer.rows);
+
+        for (let j = 0; j < layer.rows; j++) {
+          let sum = layer.biases[j]; // Biases stay float
+          const offset = j * layer.cols;
+          for (let i = 0; i < layer.cols; i++) {
+            const w = ternary[offset + i];
+            if (w === 1) sum += activation[i];
+            else if (w === -1) sum -= activation[i];
+          }
+          next[j] = l < network.layers.length - 1 ? Math.max(0, sum) : sum;
+        }
+
+        if (l === network.layers.length - 1) {
+          activation = softmax(next);
+        } else {
+          activation = next;
+        }
+      }
+
+      let maxIdx = 0;
+      for (let i = 1; i < activation.length; i++) {
+        if (activation[i] > activation[maxIdx]) maxIdx = i;
+      }
+
+      if (maxIdx === example.targetClass) quantizedCorrect++;
+    }
+
+    const quantizedAcc = testSet.length > 0 ? quantizedCorrect / testSet.length : 0;
+    const accDrop = bestTestAcc - quantizedAcc;
+    finalAcc = quantizedAcc;
+
+    console.log(`  Float32 accuracy: ${(bestTestAcc * 100).toFixed(1)}%`);
+    console.log(`  Ternary accuracy: ${(quantizedAcc * 100).toFixed(1)}%`);
+    console.log(`  Accuracy drop:    ${(accDrop * 100).toFixed(1)}%`);
   }
 
-  for (const stat of layerStats) console.log(stat);
-
-  // Evaluate quantized model accuracy
-  console.log('');
-  console.log('[Quantization] Evaluating quantized model...');
-
-  let quantizedCorrect = 0;
+  // Print confusion matrix (for both modes)
   const confusionMatrix = Array.from({ length: 4 }, () => new Array(4).fill(0));
-
   for (const example of testSet) {
-    // Forward pass with ternary weights (simulated)
     let activation = example.features;
     for (let l = 0; l < network.layers.length; l++) {
       const layer = network.layers[l];
-      const ternary = ternaryLayers[l];
       const next = new Float32Array(layer.rows);
 
       for (let j = 0; j < layer.rows; j++) {
-        let sum = layer.biases[j]; // Biases stay float
+        let sum = layer.biases[j];
         const offset = j * layer.cols;
         for (let i = 0; i < layer.cols; i++) {
-          const w = ternary[offset + i];
-          if (w === 1) sum += activation[i];
-          else if (w === -1) sum -= activation[i];
+          if (options.float32) {
+            sum += layer.weights[offset + i] * activation[i];
+          } else {
+            const w = ternaryLayers[l][offset + i];
+            if (w === 1) sum += activation[i];
+            else if (w === -1) sum -= activation[i];
+          }
         }
         next[j] = l < network.layers.length - 1 ? Math.max(0, sum) : sum;
       }
@@ -535,24 +589,13 @@ async function train(options: {
         activation = next;
       }
     }
-
     let maxIdx = 0;
     for (let i = 1; i < activation.length; i++) {
       if (activation[i] > activation[maxIdx]) maxIdx = i;
     }
-
     confusionMatrix[example.targetClass][maxIdx]++;
-    if (maxIdx === example.targetClass) quantizedCorrect++;
   }
 
-  const quantizedAcc = testSet.length > 0 ? quantizedCorrect / testSet.length : 0;
-  const accDrop = bestTestAcc - quantizedAcc;
-
-  console.log(`  Float32 accuracy: ${(bestTestAcc * 100).toFixed(1)}%`);
-  console.log(`  Ternary accuracy: ${(quantizedAcc * 100).toFixed(1)}%`);
-  console.log(`  Accuracy drop:    ${(accDrop * 100).toFixed(1)}%`);
-
-  // Print confusion matrix
   const labels = ['SAFE', 'SUSP', 'DANG', 'SCAM'];
   console.log('');
   console.log('  Confusion Matrix:');
@@ -566,30 +609,43 @@ async function train(options: {
   // Export model
   // ============================================================
 
-  const model: TernaryModel = {
+  const model: any = {
     version: 1,
     architecture,
-    quantization: 'ternary',
+    quantization: options.float32 ? 'float32' : 'ternary',
     weights: {},
     biases: {},
     classes: ['SAFE', 'SUSPICIOUS', 'DANGEROUS', 'SCAM'],
     featureCount,
-    accuracy: quantizedAcc,
+    accuracy: finalAcc,
     trainedOn: allRecords.length,
     trainedAt: new Date().toISOString(),
     trainingEpochs: options.epochs,
     finalLoss: bestLoss,
   };
 
-  for (let l = 0; l < ternaryLayers.length; l++) {
-    model.weights[`layer${l + 1}`] = Array.from(ternaryLayers[l]);
-    model.biases[`layer${l + 1}`] = Array.from(network.layers[l].biases);
+  let exportedWeights = 0;
+  const totalBiases = network.layers.reduce((sum, l) => sum + l.biases.length, 0);
+
+  if (options.float32) {
+    // Export float32 weights
+    for (let l = 0; l < network.layers.length; l++) {
+      model.weights[`layer${l + 1}`] = Array.from(network.layers[l].weights);
+      model.biases[`layer${l + 1}`] = Array.from(network.layers[l].biases);
+      exportedWeights += network.layers[l].weights.length;
+    }
+  } else {
+    // Export ternary weights
+    for (let l = 0; l < ternaryLayers.length; l++) {
+      model.weights[`layer${l + 1}`] = Array.from(ternaryLayers[l]);
+      model.biases[`layer${l + 1}`] = Array.from(network.layers[l].biases);
+      exportedWeights += ternaryLayers[l].length;
+    }
   }
 
   // Calculate model size
-  const totalTernary = ternaryLayers.reduce((sum, l) => sum + l.length, 0);
-  const totalBiases = network.layers.reduce((sum, l) => sum + l.biases.length, 0);
-  const modelSizeBytes = totalTernary + totalBiases * 4; // 1 byte per ternary, 4 per float bias
+  const bytesPerWeight = options.float32 ? 4 : 1;
+  const modelSizeBytes = exportedWeights * bytesPerWeight + totalBiases * 4;
 
   mkdirSync(dirname(options.output), { recursive: true });
   writeFileSync(options.output, JSON.stringify(model, null, 2));
@@ -600,11 +656,12 @@ async function train(options: {
   console.log('==========================================================');
   console.log(`  Path:          ${options.output}`);
   console.log(`  Architecture:  ${architecture.join(' → ')}`);
-  console.log(`  Ternary weights: ${totalTernary}`);
-  console.log(`  Float biases:    ${totalBiases}`);
-  console.log(`  Model size:      ${modelSizeBytes} bytes (${(modelSizeBytes / 1024).toFixed(1)} KB)`);
-  console.log(`  Accuracy:        ${(quantizedAcc * 100).toFixed(1)}%`);
-  console.log(`  Trained on:      ${allRecords.length} examples`);
+  console.log(`  Mode:          ${options.float32 ? 'Float32' : 'Ternary'}`);
+  console.log(`  Total weights: ${exportedWeights}`);
+  console.log(`  Float biases:  ${totalBiases}`);
+  console.log(`  Model size:    ${modelSizeBytes} bytes (${(modelSizeBytes / 1024).toFixed(1)} KB)`);
+  console.log(`  Accuracy:      ${(finalAcc * 100).toFixed(1)}%`);
+  console.log(`  Trained on:    ${allRecords.length} examples`);
   console.log('==========================================================');
   console.log('');
 }
@@ -627,6 +684,7 @@ program
   .option('--hidden <sizes>', 'Hidden layer sizes (comma-separated)', '64,32')
   .option('--split <ratio>', 'Train/test split ratio', '0.8')
   .option('--seed <n>', 'Random seed for reproducibility')
+  .option('--float32', 'Keep float32 weights (no ternary quantization)')
   .action(async (options) => {
     await train({
       data: options.data,
@@ -638,6 +696,7 @@ program
       hiddenSizes: options.hidden.split(',').map(Number),
       splitRatio: parseFloat(options.split),
       seed: options.seed ? parseInt(options.seed) : undefined,
+      float32: options.float32 || false,
     });
   });
 
