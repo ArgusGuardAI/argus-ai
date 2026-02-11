@@ -16,6 +16,7 @@ import { OnChainTools } from '../tools/OnChainTools';
 import { Keypair, VersionedTransaction, Connection } from '@solana/web3.js';
 import bs58 from 'bs58';
 import type { PositionStore, Position as StoredPosition, CreatePositionInput } from '../services/PositionStore';
+import type { LLMService } from '../services/LLMService';
 
 // Price update from Yellowstone streaming (received from PoolMonitor)
 export interface PriceUpdateEvent {
@@ -111,6 +112,9 @@ export class TraderAgent extends BaseAgent {
   // Position persistence (optional - enables position survival across restarts)
   private positionStore: PositionStore | null = null;
 
+  // LLM service for AI dialogue generation
+  private llm: LLMService | null = null;
+
   // Callback for adding position to Yellowstone price tracking
   private onPositionOpened?: (poolAddress: string, tokenAddress: string) => Promise<void>;
   private onPositionClosed?: (poolAddress: string) => Promise<void>;
@@ -124,6 +128,7 @@ export class TraderAgent extends BaseAgent {
     maxDailyTrades?: number;
     rpcEndpoint?: string;
     positionStore?: PositionStore;
+    llm?: LLMService;
     // Callbacks for Yellowstone price tracking integration
     onPositionOpened?: (poolAddress: string, tokenAddress: string) => Promise<void>;
     onPositionClosed?: (poolAddress: string) => Promise<void>;
@@ -177,6 +182,9 @@ export class TraderAgent extends BaseAgent {
 
     // Position persistence (enables survival across restarts)
     this.positionStore = options.positionStore || null;
+
+    // LLM service for AI dialogue
+    this.llm = options.llm || null;
 
     // Yellowstone price tracking callbacks
     this.onPositionOpened = options.onPositionOpened;
@@ -414,7 +422,7 @@ export class TraderAgent extends BaseAgent {
         description: 'Quick scalps on volatile tokens',
         entryConditions: {
           maxScore: 60,
-          minLiquidity: 5000,
+          minLiquidity: 10000, // Minimum $10K liquidity filter
           bundlesAllowed: true,
           securityRequirements: []
         },
@@ -484,17 +492,14 @@ export class TraderAgent extends BaseAgent {
 
         // TIERED POSITION SIZING based on risk score
         // Lower score = safer = bigger position
+        // Skip 60+ entirely (too risky based on dry-run data)
         let baseSize = Math.min(strategy.positionSize, this.maxPositionSize);
         let adjustedSize = baseSize;
         let tier = 'FULL';
 
-        if (riskScore >= 80) {
-          // High risk - skip entirely
+        if (riskScore >= 60) {
+          // Medium-high to high risk - skip entirely
           continue;
-        } else if (riskScore >= 60) {
-          // Medium-high risk - quarter position
-          adjustedSize = baseSize * 0.25;
-          tier = 'QUARTER';
         } else if (riskScore >= 40) {
           // Medium risk - half position
           adjustedSize = baseSize * 0.5;
@@ -556,9 +561,38 @@ export class TraderAgent extends BaseAgent {
       }
     }
 
+    // MOMENTUM FILTER - Only buy if price is trending up
+    const priceChange5m = analysis.priceChange5m ?? analysis.priceChange?.m5 ?? 0;
+    const priceChange1h = analysis.priceChange1h ?? analysis.priceChange?.h1 ?? 0;
+    const buys5m = analysis.txns?.m5?.buys ?? analysis.buys5m ?? 0;
+    const sells5m = analysis.txns?.m5?.sells ?? analysis.sells5m ?? 0;
+
+    const hasMomentum = priceChange5m > 0 || (priceChange1h > 0 && buys5m > sells5m);
+    if (!hasMomentum) {
+      return { matches: false, reasoning: `No momentum: 5m ${priceChange5m.toFixed(1)}%, 1h ${priceChange1h.toFixed(1)}%` };
+    }
+
+    // Cap extreme momentum - skip if pumping too fast (likely dump incoming)
+    if (priceChange5m > 100) {
+      return { matches: false, reasoning: `Extreme pump: +${priceChange5m.toFixed(0)}% in 5min - likely dump` };
+    }
+
+    // Age filter - skip tokens < 6 min old (too risky)
+    const ageHours = analysis.ageHours ?? analysis.age ?? 0;
+    if (ageHours < 0.1) { // 6 minutes
+      return { matches: false, reasoning: `Too new: ${(ageHours * 60).toFixed(0)} min old (min 6)` };
+    }
+
+    // Volume filter - require decent trading activity relative to liquidity
+    const volume24h = analysis.volume24h ?? analysis.volume?.h24 ?? 0;
+    const liquidity = analysis.liquidity ?? 0;
+    if (liquidity > 0 && volume24h < liquidity * 0.25) {
+      return { matches: false, reasoning: `Low volume: $${volume24h.toLocaleString()} vs $${liquidity.toLocaleString()} liq` };
+    }
+
     return {
       matches: true,
-      reasoning: `Matches ${strategy.name} strategy conditions`
+      reasoning: `Matches ${strategy.name} strategy conditions (momentum ✓, volume ✓)`
     };
   }
 
@@ -718,6 +752,37 @@ export class TraderAgent extends BaseAgent {
       'action',
       `Position opened: ${token.slice(0, 8)}... @ ${price.toFixed(8)} (SL: ${position.stopLoss.toFixed(8)}, TP: ${position.takeProfit.toFixed(8)})`
     );
+
+    // Generate AI dialogue for activity feed
+    let dialogue: string | null = null;
+    if (this.llm) {
+      dialogue = await this.llm.generateDialogue({
+        agent: 'trader',
+        event: 'position_opened',
+        targetAgent: 'scout',
+        data: {
+          symbol: tokenSymbol,
+          solInvested: amount.toFixed(3),
+          strategy,
+          stopLossPercent: (100 - (position.stopLoss / price) * 100).toFixed(0),
+          takeProfitPercent: ((position.takeProfit / price - 1) * 100).toFixed(0),
+        },
+      });
+    }
+
+    // Publish position_opened for WorkersSync activity feed
+    await this.messageBus.publish(`agent.${this.config.name}.position_opened`, {
+      token,
+      symbol: tokenSymbol,
+      amount: tokenAmount,
+      solInvested: amount,
+      entryPrice: price,
+      strategy,
+      stopLoss: position.stopLoss,
+      takeProfit: position.takeProfit,
+      txSignature,
+      dialogue: dialogue || `Entered ${tokenSymbol} — ${amount.toFixed(3)} SOL @ ${strategy}`,
+    }, { from: this.config.name, priority: 'high' });
 
     return {
       success: true,
@@ -882,6 +947,37 @@ export class TraderAgent extends BaseAgent {
       `Position closed: ${token.slice(0, 8)}... | P&L: ${pnl.toFixed(4)} SOL (${pnlPercent.toFixed(1)}%)`
     );
 
+    // Generate AI dialogue for activity feed
+    let closeDialogue: string | null = null;
+    if (this.llm) {
+      closeDialogue = await this.llm.generateDialogue({
+        agent: 'trader',
+        event: 'position_closed',
+        targetAgent: 'analyst',
+        data: {
+          token: token.slice(0, 8),
+          pnl: (pnl >= 0 ? '+' : '') + pnl.toFixed(4),
+          pnlPercent: (pnlPercent >= 0 ? '+' : '') + pnlPercent.toFixed(1),
+          reason,
+          holdTimeHours: ((Date.now() - position.entryTime) / 3600000).toFixed(1),
+          win: pnl >= 0,
+        },
+      });
+    }
+
+    // Publish position_closed for WorkersSync activity feed
+    await this.messageBus.publish(`agent.${this.config.name}.position_closed`, {
+      token,
+      pnl,
+      pnlPercent,
+      solReceived,
+      reason,
+      strategy: position.strategy,
+      holdTimeHours: (Date.now() - position.entryTime) / 3600000,
+      txSignature,
+      dialogue: closeDialogue || `Closed position — ${pnl >= 0 ? '+' : ''}${pnl.toFixed(4)} SOL (${pnlPercent.toFixed(1)}%) | ${reason}`,
+    }, { from: this.config.name, priority: 'high' });
+
     return {
       success: true,
       txSignature,
@@ -1021,6 +1117,19 @@ export class TraderAgent extends BaseAgent {
     if (agentType !== this.config.name) {
       this.messageBus.subscribe(`agent.${agentType}.sell`, handleSell);
     }
+  }
+
+  /**
+   * Set Yellowstone callbacks for position price tracking
+   * Called from start.ts after PoolMonitor is initialized
+   */
+  setYellowstoneCallbacks(
+    onPositionOpened: (poolAddress: string, tokenAddress: string) => Promise<void>,
+    onPositionClosed: (poolAddress: string) => Promise<void>
+  ): void {
+    this.onPositionOpened = onPositionOpened;
+    this.onPositionClosed = onPositionClosed;
+    console.log(`[TraderAgent] Yellowstone price streaming callbacks configured`);
   }
 
   /**

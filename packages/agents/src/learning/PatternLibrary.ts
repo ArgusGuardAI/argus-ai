@@ -38,8 +38,11 @@ export interface PatternStats {
   topPatterns: Array<{ name: string; detections: number; rugRate: number }>;
 }
 
+import type { Database } from '../services/Database';
+
 export class PatternLibrary {
   private patterns: Map<string, ScamPattern> = new Map();
+  private database: Database | undefined;
   private readonly featureNames: string[] = [
     'liquidityLog', 'volumeToLiquidity', 'marketCapLog', 'priceVelocity', 'volumeLog',
     'holderCountLog', 'top10Concentration', 'giniCoefficient', 'freshWalletRatio', 'whaleCount',
@@ -52,6 +55,64 @@ export class PatternLibrary {
 
   constructor() {
     this.initializeKnownPatterns();
+  }
+
+  /**
+   * Set database for persistence
+   */
+  setDatabase(db: Database): void {
+    this.database = db;
+  }
+
+  /**
+   * Load pattern stats from database (merges with hardcoded patterns)
+   */
+  async loadFromDatabase(): Promise<boolean> {
+    if (!this.database?.isReady()) return false;
+
+    try {
+      const stats = await this.database.loadAllPatternStats();
+      let loaded = 0;
+
+      for (const s of stats) {
+        const pattern = this.patterns.get(s.pattern_id);
+        if (pattern) {
+          pattern.detectionCount = s.detection_count;
+          pattern.rugRate = s.rug_rate;
+          pattern.examples = s.examples || [];
+          loaded++;
+        }
+      }
+
+      if (loaded > 0) {
+        console.log(`[PatternLibrary] Loaded stats for ${loaded} patterns from database`);
+      }
+      return loaded > 0;
+    } catch (err) {
+      console.error('[PatternLibrary] Failed to load from database:', (err as Error).message);
+      return false;
+    }
+  }
+
+  /**
+   * Save all pattern stats to database
+   */
+  async saveToDatabase(): Promise<void> {
+    if (!this.database?.isReady()) return;
+
+    try {
+      for (const pattern of this.patterns.values()) {
+        await this.database.savePatternStats({
+          pattern_id: pattern.id,
+          detection_count: pattern.detectionCount,
+          rug_rate: pattern.rugRate,
+          examples: pattern.examples.slice(0, 100),
+          updated_at: new Date(),
+        });
+      }
+    } catch (err) {
+      console.error('[PatternLibrary] Failed to save to database:', (err as Error).message);
+    }
   }
 
   /**
@@ -356,6 +417,17 @@ export class PatternLibrary {
     // Add example
     if (tokenAddress && pattern.examples.length < 100) {
       pattern.examples.push(tokenAddress);
+    }
+
+    // Persist to database (fire and forget)
+    if (this.database?.isReady()) {
+      this.database.savePatternStats({
+        pattern_id: patternId,
+        detection_count: pattern.detectionCount,
+        rug_rate: pattern.rugRate,
+        examples: pattern.examples.slice(0, 100),
+        updated_at: new Date(),
+      }).catch(() => {});
     }
   }
 

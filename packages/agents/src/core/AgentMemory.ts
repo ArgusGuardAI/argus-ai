@@ -6,7 +6,13 @@
  * - Remember past observations
  * - Find similar patterns
  * - Learn from outcomes
+ *
+ * Supports optional PostgreSQL persistence via Database service.
+ * In-memory arrays remain the primary query engine (fast cosine similarity).
+ * DB is the persistence layer — survives restarts.
  */
+
+import type { Database } from '../services/Database';
 
 export interface MemoryEntry {
   id: string;
@@ -28,12 +34,62 @@ export class AgentMemory {
   private shortTerm: MemoryEntry[] = [];
   private longTerm: MemoryEntry[] = [];
   private vectorIndex: Map<string, Float32Array> = new Map();  // id -> vector
+  private database: Database | undefined;
 
   private readonly maxShortTerm: number = 100;
   private readonly maxLongTerm: number = 100000;  // 100K tokens * 116 bytes = ~11.6MB
 
   constructor(agentName: string) {
     this.agentName = agentName;
+  }
+
+  /**
+   * Enable database persistence
+   */
+  setDatabase(db: Database): void {
+    this.database = db;
+  }
+
+  /**
+   * Load token vectors from database into memory (call on startup)
+   */
+  async hydrateFromDatabase(limit: number = 10000): Promise<number> {
+    if (!this.database?.isReady()) return 0;
+
+    try {
+      const vectors = await this.database.loadRecentTokenVectors(limit);
+      let loaded = 0;
+
+      for (const v of vectors) {
+        const entry: MemoryEntry = {
+          id: `db-${v.token_address}`,
+          agent: this.agentName,
+          timestamp: v.scanned_at.getTime(),
+          type: 'token',
+          content: {
+            token: v.token_address,
+            score: v.score,
+            verdict: v.verdict,
+            creator: v.creator,
+            flags: v.flags,
+          },
+          vector: v.features,
+          tags: ['token', v.token_address.slice(0, 8)],
+        };
+
+        this.longTerm.push(entry);
+        this.vectorIndex.set(entry.id, v.features);
+        loaded++;
+      }
+
+      if (loaded > 0) {
+        console.log(`[${this.agentName}] Hydrated ${loaded} token vectors from database`);
+      }
+      return loaded;
+    } catch (err) {
+      console.error(`[${this.agentName}] Failed to hydrate from database:`, (err as Error).message);
+      return 0;
+    }
   }
 
   /**
@@ -76,7 +132,7 @@ export class AgentMemory {
     features: Float32Array,
     metadata: any
   ): Promise<string> {
-    return this.store({
+    const id = await this.store({
       token: tokenAddress,
       ...metadata
     }, {
@@ -84,6 +140,23 @@ export class AgentMemory {
       vector: features,
       tags: ['token', tokenAddress.slice(0, 8)]
     });
+
+    // Persist to database (fire and forget)
+    if (this.database?.isReady()) {
+      this.database.upsertTokenVector({
+        token_address: tokenAddress,
+        features,
+        score: metadata.score || 0,
+        verdict: metadata.verdict || 'UNKNOWN',
+        creator: metadata.creator || null,
+        flags: metadata.flags || [],
+        scanned_at: new Date(),
+      }).catch(err => {
+        console.error(`[${this.agentName}] DB persist error:`, (err as Error).message);
+      });
+    }
+
+    return id;
   }
 
   /**

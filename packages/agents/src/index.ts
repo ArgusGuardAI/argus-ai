@@ -40,9 +40,9 @@ export { TraderAgent } from './agents/TraderAgent';
 
 // Agents - Types
 export type { QuickScanResult, LaunchEvent } from './agents/ScoutAgent';
-export type { InvestigationRequest, InvestigationReport } from './agents/AnalystAgent';
+export type { InvestigationRequest, InvestigationReport, DiscoveryResult } from './agents/AnalystAgent';
 export type { ScammerProfile } from './agents/HunterAgent';
-export type { Position, TradingStrategy, TradeResult } from './agents/TraderAgent';
+export type { Position, TradingStrategy, TradeResult, PriceUpdateEvent } from './agents/TraderAgent';
 
 // Reasoning - Classes
 export { BitNetEngine } from './reasoning/BitNetEngine';
@@ -70,9 +70,16 @@ export type { ScamPattern, PatternMatch, PatternStats } from './learning/Pattern
 
 // Services - Classes
 export { WorkersSync } from './services/WorkersSync';
+export { Database } from './services/Database';
+export { LLMService } from './services/LLMService';
+export { MarketDataService } from './services/MarketDataService';
+export { PositionStore } from './services/PositionStore';
 
 // Services - Types
 export type { WorkersSyncConfig } from './services/WorkersSync';
+export type { StoredTokenVector, StoredScammerProfile, StoredPrediction } from './services/Database';
+export type { LLMConfig, TokenAnalysisContext, TokenVerdict, PatternClassification } from './services/LLMService';
+export type { Position as StoredPosition, CreatePositionInput, PositionStats } from './services/PositionStore';
 
 // Re-export convenience function to create and start the system
 export async function createArgusNetwork(config: {
@@ -84,6 +91,11 @@ export async function createArgusNetwork(config: {
   traders?: number;
   maxDailyTrades?: number;
   maxPositionSize?: number;
+  database?: import('./services/Database').Database;
+  llm?: import('./services/LLMService').LLMService;
+  workersUrl?: string;
+  workersApiSecret?: string;
+  enableWorkersSync?: boolean;
 }) {
   const coordinator = new Coordinator({
     rpcEndpoint: config.rpcEndpoint,
@@ -93,7 +105,12 @@ export async function createArgusNetwork(config: {
     hunters: config.hunters || 1,
     traders: config.traders || 1,
     maxDailyTrades: config.maxDailyTrades || 10,
-    maxPositionSize: config.maxPositionSize || 0.1
+    maxPositionSize: config.maxPositionSize || 0.1,
+    database: config.database,
+    llm: config.llm,
+    workersUrl: config.workersUrl,
+    workersApiSecret: config.workersApiSecret,
+    enableWorkersSync: config.enableWorkersSync,
   });
 
   await coordinator.initialize();

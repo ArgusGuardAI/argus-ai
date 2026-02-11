@@ -149,9 +149,14 @@ export class BitNetInferenceEngine {
   /**
    * Rule-based inference using compressed features
    * Uses the efficient feature representation for decision making
+   *
+   * UPDATED: Based on backtest analysis showing 23 missed rugs
+   * - Lowered SUSPICIOUS threshold to 55 (was 40)
+   * - Added aggressive rules for new tokens
+   * - More penalties for common rug patterns
    */
   private ruleBasedFallbackFromFeatures(features: CompressedFeatures, input: TokenAnalysisInput): ClassifierOutput {
-    let score = 30; // Base score
+    let score = 35; // Base score (increased from 30 - be more cautious by default)
     const flags: ClassifierOutput['flags'] = [];
     const importance = {
       bundle: 0,
@@ -162,27 +167,31 @@ export class BitNetInferenceEngine {
       washTrading: 0,
     };
 
-    // Security checks (using compressed features)
+    // ============================================
+    // SECURITY CHECKS (Critical red flags)
+    // ============================================
     if (features.security.mintDisabled === 0) {
-      score += 15;
+      score += 20; // Increased from 15
       importance.security += 0.3;
       flags.push({ type: 'MINT_ACTIVE', probability: 1, severity: 'HIGH' });
     }
     if (features.security.freezeDisabled === 0) {
-      score += 25;
+      score += 30; // Increased from 25
       importance.security += 0.5;
       flags.push({ type: 'FREEZE_ACTIVE', probability: 1, severity: 'CRITICAL' });
     }
 
-    // Bundle detection (using compressed features)
+    // ============================================
+    // BUNDLE DETECTION (Major rug indicator)
+    // ============================================
     if (features.bundle.detected === 1) {
-      // Use quality score to determine penalty
-      const bundlePenalty = features.bundle.qualityScore < 0.25 ? 35
-        : features.bundle.qualityScore < 0.5 ? 25
-        : features.bundle.qualityScore > 0.75 ? 5
-        : 15;
+      // Use quality score to determine penalty - more aggressive
+      const bundlePenalty = features.bundle.qualityScore < 0.25 ? 40  // Was 35
+        : features.bundle.qualityScore < 0.5 ? 30                     // Was 25
+        : features.bundle.qualityScore > 0.75 ? 10                    // Was 5
+        : 20;                                                          // Was 15
       score += bundlePenalty;
-      importance.bundle = bundlePenalty / 35;
+      importance.bundle = bundlePenalty / 40;
       flags.push({
         type: 'BUNDLE',
         probability: features.bundle.confidenceScore,
@@ -190,13 +199,15 @@ export class BitNetInferenceEngine {
       });
     }
 
-    // Wash trading (from original input since not in compressed)
+    // ============================================
+    // WASH TRADING
+    // ============================================
     if (input.washTrading?.detected && input.washTrading.percent > 30) {
-      const washPenalty = input.washTrading.percent >= 70 ? 30
-        : input.washTrading.percent >= 50 ? 20
-        : 10;
+      const washPenalty = input.washTrading.percent >= 70 ? 35  // Was 30
+        : input.washTrading.percent >= 50 ? 25                   // Was 20
+        : 15;                                                     // Was 10
       score += washPenalty;
-      importance.washTrading = washPenalty / 30;
+      importance.washTrading = washPenalty / 35;
       flags.push({
         type: 'WASH_TRADING',
         probability: Math.min(1, input.washTrading.percent / 100 + 0.3),
@@ -204,43 +215,98 @@ export class BitNetInferenceEngine {
       });
     }
 
-    // Creator history (using compressed features)
+    // ============================================
+    // CREATOR HISTORY (Serial ruggers)
+    // ============================================
     if (features.creator.rugHistory > 0) {
-      score += 40;
-      importance.creator = 0.8;
+      score += 45; // Increased from 40
+      importance.creator = 0.9;
       flags.push({ type: 'SERIAL_RUGGER', probability: 1, severity: 'CRITICAL' });
     }
 
-    // Whale concentration (using compressed features)
+    // ============================================
+    // HOLDER CONCENTRATION
+    // ============================================
     if (features.holders.topWhalePercent > 0.5) {
-      score += 25;
-      importance.holders = 0.5;
+      score += 30; // Increased from 25
+      importance.holders = 0.6;
       flags.push({ type: 'WHALE_DOMINANCE', probability: 1, severity: 'CRITICAL' });
     } else if (features.holders.topWhalePercent > 0.3) {
-      score += 15;
-      importance.holders = 0.3;
+      score += 20; // Increased from 15
+      importance.holders = 0.4;
       flags.push({ type: 'WHALE_CONCENTRATION', probability: 0.8, severity: 'HIGH' });
+    } else if (features.holders.topWhalePercent > 0.2) {
+      score += 10; // NEW: Catch more concentration issues
+      importance.holders = 0.2;
+      flags.push({ type: 'ELEVATED_CONCENTRATION', probability: 0.6, severity: 'MEDIUM' });
     }
 
-    // Age factor (using compressed time decay)
+    // Top 10 concentration (NEW)
+    if (features.holders.top10Concentration > 0.8) {
+      score += 15;
+      importance.holders += 0.2;
+      flags.push({ type: 'TOP10_CONTROL', probability: 0.9, severity: 'HIGH' });
+    }
+
+    // ============================================
+    // AGE-BASED RULES (Critical for new tokens)
+    // Most rugs happen in first 24 hours
+    // ============================================
+    // ageDecay > 0.9 means token is < 2 hours old
+    if (features.time.ageDecay > 0.9) {
+      score = Math.max(score, 60); // Very new = minimum 60 (was 45)
+      flags.push({ type: 'EXTREMELY_NEW', probability: 1, severity: 'HIGH' });
+    }
     // ageDecay > 0.75 means token is < 6 hours old
-    if (features.time.ageDecay > 0.75) {
-      score = Math.max(score, 45);
+    else if (features.time.ageDecay > 0.75) {
+      score = Math.max(score, 55); // Increased from 45
+    }
+    // ageDecay > 0.5 means token is < 24 hours old
+    else if (features.time.ageDecay > 0.5) {
+      score = Math.max(score, 50); // NEW: 24h tokens start at minimum 50
     }
 
-    // Liquidity factor (using compressed market features)
+    // ============================================
+    // LIQUIDITY RULES
+    // ============================================
+    // liquidityLog < 0.3 roughly means < $5k liquidity
+    if (features.market.liquidityLog < 0.3) {
+      score = Math.max(score, 55); // Increased from 40
+      flags.push({ type: 'MICRO_LIQUIDITY', probability: 1, severity: 'HIGH' });
+    }
     // liquidityLog < 0.5 roughly means < $10k liquidity
-    if (features.market.liquidityLog < 0.5) {
-      score = Math.max(score, 40);
+    else if (features.market.liquidityLog < 0.5) {
+      score = Math.max(score, 50); // Was 40
     }
 
-    // Cap and determine level
+    // ============================================
+    // LOW HOLDER COUNT (Rug indicator)
+    // ============================================
+    if (features.holders.holderCountLog < 0.3) { // < ~50 holders
+      score += 10;
+      flags.push({ type: 'LOW_HOLDERS', probability: 0.7, severity: 'MEDIUM' });
+    }
+
+    // ============================================
+    // COMBINATION RULES (Multiple red flags = exponential risk)
+    // ============================================
+    const redFlagCount = flags.filter(f => f.severity === 'CRITICAL' || f.severity === 'HIGH').length;
+    if (redFlagCount >= 3) {
+      score = Math.max(score, 75); // 3+ major red flags = minimum 75
+    } else if (redFlagCount >= 2) {
+      score = Math.max(score, 65); // 2 major red flags = minimum 65
+    }
+
+    // ============================================
+    // CAP AND DETERMINE LEVEL
+    // UPDATED THRESHOLDS (based on backtest)
+    // ============================================
     score = Math.min(100, score);
 
     let riskLevel: ClassifierOutput['riskLevel'] = 'SAFE';
     if (score >= 80) riskLevel = 'SCAM';
-    else if (score >= 60) riskLevel = 'DANGEROUS';
-    else if (score >= 40) riskLevel = 'SUSPICIOUS';
+    else if (score >= 65) riskLevel = 'DANGEROUS';  // Was 60
+    else if (score >= 55) riskLevel = 'SUSPICIOUS'; // Was 40 - KEY CHANGE
 
     // Normalize feature importance
     const totalImportance = Object.values(importance).reduce((a, b) => a + b, 0) || 1;

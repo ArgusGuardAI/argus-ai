@@ -26,6 +26,7 @@ interface Config {
   telegramBotToken?: string;
   telegramChannelId?: string;
   enabledDexs: Array<keyof typeof DEX_PROGRAMS>;
+  heliusApiKey?: string; // For fallback token name fetch
 }
 
 // Load configuration from environment
@@ -54,6 +55,7 @@ function loadConfig(): Config {
     telegramBotToken: process.env.TELEGRAM_BOT_TOKEN,
     telegramChannelId: process.env.TELEGRAM_CHANNEL_ID,
     enabledDexs,
+    heliusApiKey: process.env.HELIUS_API_KEY, // For fallback token name fetch
   };
 }
 
@@ -124,6 +126,7 @@ async function main(): Promise<void> {
     yellowstoneEndpoint: config.yellowstoneEndpoint,
     yellowstoneToken: config.yellowstoneToken,
     enabledDexs: config.enabledDexs,
+    heliusApiKey: config.heliusApiKey, // For fallback metadata fetch
     onPoolEvent: handlePoolEvent,
     onConnect: () => console.log('[Yellowstone] Connected to gRPC stream'),
     onDisconnect: () => console.log('[Yellowstone] Disconnected from gRPC stream'),
@@ -142,6 +145,8 @@ async function main(): Promise<void> {
     const memMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
     console.log(`[Status] Uptime: ${uptime}m | Pools: ${stats.poolsDetected} | Graduations: ${stats.graduations} | Mem: ${memMB}MB`);
     console.log(`[Status] Rate: ${rate.toFixed(1)}/min | gRPC: ${monitorStats.connected ? 'connected' : 'disconnected'} | Seen: ${monitorStats.seenPools} | Pump.fun: ${monitorStats.pumpFunTracked}`);
+    console.log(`[Status] Metadata: ${monitorStats.metadataCached} cached | Pending: ${monitorStats.metadataPending} | Hit rate: ${monitorStats.metadataHitRate}`);
+    console.log(`[Status] Sources: Metaplex: ${monitorStats.metaplexNotifications} | Token2022: ${monitorStats.token2022Notifications}`);
 
     // Clean up old tokens every 15 minutes
     if (uptime > 0 && uptime % 15 === 0) {
@@ -182,12 +187,22 @@ async function main(): Promise<void> {
   console.log('');
 }
 
-// Run
-main().catch((error) => {
-  console.error('Fatal error:', error);
-  process.exit(1);
-});
+// Export for use by other packages (BEFORE main() check)
+export { PoolMonitor, AlertManager, DEX_PROGRAMS };
+export type { PoolEvent, PriceUpdateEvent, MonitorConfig, PriceUpdateCallback, PoolEventCallback } from './pool-monitor.js';
 
-// Export for testing
-export { PoolMonitor, AlertManager };
-export type { PoolEvent, Config };
+// Only run main() when this file is executed directly, NOT when imported
+// This allows agents to import PoolMonitor without triggering Yellowstone check
+import { fileURLToPath } from 'url';
+import { resolve } from 'path';
+
+const currentFile = fileURLToPath(import.meta.url);
+const entryFile = resolve(process.argv[1]);
+
+// Check if this module is the entry point
+if (currentFile === entryFile || entryFile.endsWith('/monitor/dist/index.js')) {
+  main().catch((error) => {
+    console.error('Fatal error:', error);
+    process.exit(1);
+  });
+}

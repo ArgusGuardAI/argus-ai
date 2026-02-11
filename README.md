@@ -86,26 +86,31 @@ pnpm install
 
 ### Environment Setup
 
-Create `packages/sniper/.env`:
+Create `packages/workers/.dev.vars`:
 
 ```env
-HELIUS_API_KEY=your-helius-key      # Optional - for real-time pool detection
-TOGETHER_AI_API_KEY=your-key        # For AI analysis
-GROQ_API_KEY=your-groq-key          # Alternative FREE AI (recommended)
+SOLANA_RPC_URL=http://YOUR_NODE_IP:8899   # Your own Solana RPC node
+TOGETHER_AI_API_KEY=your-key              # For AI analysis
+HELIUS_API_KEY=your-helius-key            # Optional - for DAS API only
 ```
 
 ### Development
 
 ```bash
-# Terminal 1: Start Backend
-cd packages/sniper
+# Terminal 1: Start Workers API
+cd packages/workers
 pnpm dev
-# Runs at http://localhost:8788
+# Runs at http://localhost:8787
 
 # Terminal 2: Start Dashboard
 cd packages/argus
 pnpm dev
 # Runs at http://localhost:3000
+
+# Terminal 3: Start Vault (for trading)
+cd packages/vault
+pnpm dev
+# Runs at http://localhost:3001
 ```
 
 ---
@@ -313,17 +318,17 @@ Deterministic checks that enforce minimum risk scores regardless of AI output:
 
 ---
 
-## Data Sources (All FREE)
+## Data Sources
 
 | Data | Source | Cost |
 |------|--------|------|
+| RPC Calls | Your own Solana node | $0 (self-hosted) |
 | Price, Volume, Liquidity | DexScreener API | FREE |
 | Buy/Sell Counts | DexScreener API | FREE |
-| Top Holders, Mint/Freeze Authority | Helius RPC | Free tier |
-| Transaction History (bundles) | Helius RPC | Free tier |
+| Creator Detection | Helius DAS API | Optional |
 | AI Risk Analysis | Together AI | Paid |
 | Swap Execution | Jupiter API | FREE |
-| Real-time Pool Detection | Helius WebSocket | Free tier |
+| Real-time Streaming | Yellowstone/Geyser | $0 (self-hosted) |
 
 ---
 

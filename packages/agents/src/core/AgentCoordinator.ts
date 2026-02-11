@@ -16,6 +16,11 @@ import { HunterAgent } from '../agents/HunterAgent';
 import { TraderAgent } from '../agents/TraderAgent';
 import { BaseAgent } from './BaseAgent';
 import { WorkersSync, WorkersSyncConfig } from '../services/WorkersSync';
+import { OutcomeLearner } from '../learning/OutcomeLearner';
+import { PatternLibrary } from '../learning/PatternLibrary';
+import { PositionStore } from '../services/PositionStore';
+import type { Database } from '../services/Database';
+import type { LLMService } from '../services/LLMService';
 
 export interface CoordinatorConfig {
   rpcEndpoint: string;
@@ -30,6 +35,10 @@ export interface CoordinatorConfig {
   workersUrl?: string;
   workersApiSecret?: string;
   enableWorkersSync?: boolean;
+  // Database persistence
+  database?: Database;
+  // LLM service for real AI reasoning
+  llm?: LLMService;
 }
 
 export interface SystemStatus {
@@ -61,6 +70,12 @@ export class AgentCoordinator {
   private running: boolean = false;
   private startTime: number = 0;
   private workersSync: WorkersSync | null = null;
+  private database: Database | undefined;
+  private llm: LLMService | undefined;
+  private outcomeLearner: OutcomeLearner;
+  private patternLibrary: PatternLibrary;
+  private positionStore: PositionStore | null = null;
+  private outcomeCheckTimer: NodeJS.Timeout | null = null;
 
   // Agent pools
   private scouts: ScoutAgent[] = [];
@@ -91,6 +106,24 @@ export class AgentCoordinator {
     };
 
     this.messageBus = new MessageBus();
+    this.database = config.database;
+    this.llm = config.llm;
+    this.outcomeLearner = new OutcomeLearner();
+    this.patternLibrary = new PatternLibrary();
+
+    // Wire database to learning components
+    if (this.database) {
+      this.outcomeLearner.setDatabase(this.database);
+      this.patternLibrary.setDatabase(this.database);
+      // Initialize position store for trading persistence
+      this.positionStore = new PositionStore(this.database);
+    }
+
+    // Wire LLM to outcome learner for intelligent weight updates
+    if (this.llm) {
+      this.outcomeLearner.setLLM(this.llm);
+    }
+
     this.setupSystemHandlers();
 
     // Initialize Workers sync if configured
@@ -99,6 +132,7 @@ export class AgentCoordinator {
         workersUrl: this.config.workersUrl,
         apiSecret: this.config.workersApiSecret,
         enabled: true,
+        llm: this.llm, // Pass LLM for natural dialogue generation
       });
       console.log('[Coordinator] Workers sync configured');
     }
@@ -114,7 +148,8 @@ export class AgentCoordinator {
     for (let i = 0; i < this.config.scouts!; i++) {
       const scout = new ScoutAgent(this.messageBus, {
         name: `scout-${i + 1}`,
-        rpcEndpoint: this.config.rpcEndpoint
+        rpcEndpoint: this.config.rpcEndpoint,
+        database: this.database,
       });
       await scout.initialize();
       this.scouts.push(scout);
@@ -125,7 +160,9 @@ export class AgentCoordinator {
     for (let i = 0; i < this.config.analysts!; i++) {
       const analyst = new AnalystAgent(this.messageBus, {
         name: `analyst-${i + 1}`,
-        rpcEndpoint: this.config.rpcEndpoint
+        rpcEndpoint: this.config.rpcEndpoint,
+        database: this.database,
+        llm: this.llm,
       });
       await analyst.initialize();
       this.analysts.push(analyst);
@@ -136,7 +173,9 @@ export class AgentCoordinator {
     for (let i = 0; i < this.config.hunters!; i++) {
       const hunter = new HunterAgent(this.messageBus, {
         name: `hunter-${i + 1}`,
-        rpcEndpoint: this.config.rpcEndpoint
+        rpcEndpoint: this.config.rpcEndpoint,
+        database: this.database,
+        llm: this.llm,
       });
       await hunter.initialize();
       this.hunters.push(hunter);
@@ -150,20 +189,42 @@ export class AgentCoordinator {
           name: `trader-${i + 1}`,
           maxPositionSize: this.config.maxPositionSize!,
           maxDailyTrades: this.config.maxDailyTrades!,
-          rpcEndpoint: this.config.rpcEndpoint
+          rpcEndpoint: this.config.rpcEndpoint,
+          positionStore: this.positionStore || undefined,
+          // Yellowstone price tracking callbacks will be wired in start.ts
+          // when PoolMonitor is available
         });
         await trader.initialize();
         this.traders.push(trader);
       }
       console.log(`[Coordinator] ${this.traders.length} Trader agents ready`);
+      if (this.positionStore) {
+        const stats = await this.positionStore.getStats();
+        console.log(`[Coordinator] Loaded ${stats.activeCount} active positions from database`);
+      }
     } else {
       console.log('[Coordinator] Trading disabled');
+    }
+
+    // Load learning state from database
+    if (this.database?.isReady()) {
+      await this.outcomeLearner.loadFromDatabase();
+      await this.patternLibrary.loadFromDatabase();
     }
 
     // Connect Workers sync to message bus
     if (this.workersSync) {
       this.workersSync.connect(this.messageBus);
       console.log('[Coordinator] Workers sync connected');
+    }
+
+    // Configure BitNet metrics reporting for all agents
+    if (this.config.workersUrl) {
+      const metricsUrl = `${this.config.workersUrl}/agents/bitnet`;
+      for (const agent of this.getAllAgents()) {
+        agent.setMetricsUrl(metricsUrl);
+      }
+      console.log(`[Coordinator] BitNet metrics reporting → ${metricsUrl}`);
     }
 
     console.log('[Coordinator] All agents initialized');
@@ -199,6 +260,9 @@ export class AgentCoordinator {
 
     // Start health monitoring
     this.startHealthMonitoring();
+
+    // Start hourly outcome checking (for OutcomeLearner)
+    this.startOutcomeChecking();
 
     console.log('[Coordinator] Argus Agent Network is LIVE');
 
@@ -239,6 +303,19 @@ export class AgentCoordinator {
     }
 
     await Promise.all(stopPromises);
+
+    // Stop outcome checking
+    if (this.outcomeCheckTimer) {
+      clearTimeout(this.outcomeCheckTimer);
+      this.outcomeCheckTimer = null;
+    }
+
+    // Save learning state to database before shutdown
+    if (this.database?.isReady()) {
+      await this.outcomeLearner.saveToDatabase();
+      await this.patternLibrary.saveToDatabase();
+      console.log('[Coordinator] Learning state saved to database');
+    }
 
     // Stop Workers sync
     if (this.workersSync) {
@@ -411,6 +488,85 @@ export class AgentCoordinator {
   }
 
   /**
+   * Start hourly outcome checking for OutcomeLearner
+   * Checks DexScreener (free API) for token outcomes 24h+ after prediction
+   */
+  private startOutcomeChecking(): void {
+    if (!this.database?.isReady()) {
+      console.log('[Coordinator] No database — outcome checking disabled');
+      return;
+    }
+
+    const checkOutcomes = async () => {
+      if (!this.running) return;
+
+      try {
+        // Get predictions older than 24h that don't have outcomes yet
+        const pending = await this.database!.getPendingPredictions(24 * 60 * 60 * 1000, 5);
+
+        for (const prediction of pending) {
+          try {
+            // Check DexScreener (free, no rate limit)
+            const response = await fetch(
+              `https://api.dexscreener.com/latest/dex/tokens/${prediction.token}`,
+              { signal: AbortSignal.timeout(5000) }
+            );
+
+            if (!response.ok) continue;
+
+            const data = await response.json() as { pairs?: Array<{ liquidity?: { usd: number }; priceChange?: { h24: number } }> };
+            const pair = data.pairs?.[0];
+
+            let outcome: string;
+            if (!pair) {
+              outcome = 'RUG'; // No pair data = token dead
+            } else if ((pair.liquidity?.usd || 0) < 100) {
+              outcome = 'RUG'; // Liquidity drained
+            } else if ((pair.priceChange?.h24 || 0) < -80) {
+              outcome = 'DUMP'; // Massive price drop
+            } else if ((pair.priceChange?.h24 || 0) > 100) {
+              outcome = 'MOON'; // Price way up
+            } else {
+              outcome = 'STABLE'; // Still alive
+            }
+
+            // Record outcome
+            this.outcomeLearner.recordOutcome(prediction.id, {
+              token: prediction.token,
+              outcome: outcome as any,
+              priceChange: pair?.priceChange?.h24 || -100,
+              liquidityChange: 0,
+              timeToOutcome: Date.now() - prediction.predicted_at.getTime(),
+              details: `DexScreener check: liq=$${pair?.liquidity?.usd || 0}`,
+            });
+
+            // Update in database
+            await this.database!.updatePredictionOutcome(prediction.id, outcome);
+
+            console.log(`[OutcomeLearner] ${prediction.token.slice(0, 8)}... → ${outcome}`);
+          } catch {
+            // Skip this token, try next
+          }
+        }
+
+        // Save updated weights periodically
+        if (pending.length > 0) {
+          await this.outcomeLearner.saveToDatabase();
+        }
+      } catch (err) {
+        console.error('[Coordinator] Outcome check error:', (err as Error).message);
+      }
+
+      // Schedule next check (every hour)
+      this.outcomeCheckTimer = setTimeout(checkOutcomes, 60 * 60 * 1000);
+    };
+
+    // First check after 5 minutes (let system stabilize)
+    this.outcomeCheckTimer = setTimeout(checkOutcomes, 5 * 60 * 1000);
+    console.log('[Coordinator] Outcome checking enabled (hourly)');
+  }
+
+  /**
    * Get message bus for external subscriptions
    */
   getMessageBus(): MessageBus {
@@ -462,5 +618,40 @@ export class AgentCoordinator {
       name: trader.getStatus().name,
       stats: trader.getStats()
     }));
+  }
+
+  /**
+   * Get trader agents (for Yellowstone price update wiring)
+   */
+  getTraders(): TraderAgent[] {
+    return this.traders;
+  }
+
+  /**
+   * Get aggregate BitNet inference stats across all agents
+   */
+  getBitNetStats(): {
+    totalInferences: number;
+    avgMs: number;
+    lastMs: number;
+    agentBreakdown: Array<{ name: string; stats: { lastMs: number; avgMs: number; totalInferences: number } }>;
+  } {
+    const allAgents = this.getAllAgents();
+    const breakdown = allAgents.map(agent => ({
+      name: agent.getStatus().name,
+      stats: agent.getBitNetStats(),
+    }));
+
+    const totalInferences = breakdown.reduce((sum, a) => sum + a.stats.totalInferences, 0);
+    const totalMs = breakdown.reduce((sum, a) => sum + (a.stats.avgMs * a.stats.totalInferences), 0);
+    const avgMs = totalInferences > 0 ? totalMs / totalInferences : 0;
+    const lastMs = Math.max(...breakdown.map(a => a.stats.lastMs), 0);
+
+    return {
+      totalInferences,
+      avgMs,
+      lastMs,
+      agentBreakdown: breakdown,
+    };
   }
 }

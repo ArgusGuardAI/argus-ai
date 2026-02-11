@@ -6,11 +6,8 @@
  * No external dependencies - pure fetch-based implementation.
  */
 
-// Public RPC endpoints (rate limited but free)
-export const PUBLIC_RPC_ENDPOINTS = [
-  'https://api.mainnet-beta.solana.com',
-  'https://solana-mainnet.g.alchemy.com/v2/demo',
-];
+// YOUR OWN NODE - NO THIRD PARTY APIS
+// Set SOLANA_RPC_URL in environment variables
 
 // Known program IDs
 export const PROGRAMS = {
@@ -49,7 +46,10 @@ export class SolanaRpcClient {
   private requestId = 0;
 
   constructor(endpoint?: string) {
-    this.endpoint = endpoint || PUBLIC_RPC_ENDPOINTS[0];
+    if (!endpoint) {
+      throw new Error('SOLANA_RPC_URL must be provided. No third-party fallbacks allowed.');
+    }
+    this.endpoint = endpoint;
   }
 
   /**
@@ -426,8 +426,7 @@ export class SolanaRpcClient {
   }
 }
 
-// Default instance using public RPC
-export const defaultRpc = new SolanaRpcClient();
+// NOTE: No default instance - must provide SOLANA_RPC_URL
 
 import { createMultiRpcClient, type MultiRpcClient } from './multi-rpc';
 
@@ -459,13 +458,11 @@ export class MultiRpcSolanaClient extends SolanaRpcClient {
 }
 
 /**
- * Create a SolanaRpcClient with multi-RPC fallback support
+ * Create a SolanaRpcClient with multi-RPC support
+ *
+ * YOUR OWN NODE ONLY - NO THIRD PARTY APIS
  */
 export function createSolanaRpcClientFromEnv(env: {
-  HELIUS_API_KEY?: string;
-  QUICKNODE_RPC_URL?: string;
-  ALCHEMY_RPC_URL?: string;
-  TRITON_RPC_URL?: string;
   SOLANA_RPC_URL?: string;
 }): MultiRpcSolanaClient {
   const multiRpc = createMultiRpcClient(env);

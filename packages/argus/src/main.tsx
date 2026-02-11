@@ -8,10 +8,15 @@ import { WalletContextProvider } from './contexts/AuthContext';
 import './index.css';
 
 // Code-split: lazy load pages so each subdomain only downloads what it needs
+const AgentDashboard = React.lazy(() => import('./AgentDashboard')); // New agent-only mode
 const TerminalApp = React.lazy(() => import('./TerminalApp'));
 const App = React.lazy(() => import('./App')); // Legacy dashboard
 const Landing = React.lazy(() => import('./pages/Landing'));
 const NotFound = React.lazy(() => import('./pages/NotFound'));
+const Maintenance = React.lazy(() => import('./pages/Maintenance'));
+
+// MAINTENANCE MODE - set to true to show maintenance page on app subdomain
+const MAINTENANCE_MODE = false;
 
 // Minimal loading spinner matching the dark theme
 const Loading = () => (
@@ -30,23 +35,26 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <BrowserRouter>
       <Suspense fallback={<Loading />}>
         <Routes>
-          {isAppSubdomain ? (
-            // app.argusguard.io -> original dashboard in production
+          {MAINTENANCE_MODE && !isLocalhost ? (
+            // ALL production sites -> maintenance page when enabled
+            <Route path="*" element={<Maintenance />} />
+          ) : isAppSubdomain ? (
+            // app.argusguard.io -> agent-only dashboard in production
             <Route path="*" element={
               <WalletContextProvider>
-                <App />
+                <AgentDashboard />
               </WalletContextProvider>
             } />
           ) : isLocalhost ? (
-            // localhost -> new terminal dashboard for development/testing
+            // localhost -> agent dashboard for development/testing
             <>
               <Route path="/" element={
                 <WalletContextProvider>
-                  <TerminalApp />
+                  <AgentDashboard />
                 </WalletContextProvider>
               } />
               <Route path="/landing" element={<Landing />} />
-              <Route path="/dashboard" element={
+              <Route path="/terminal" element={
                 <WalletContextProvider>
                   <TerminalApp />
                 </WalletContextProvider>

@@ -141,7 +141,7 @@ pnpm dev                  # Start workers at localhost:8787
 # Monitor (WebSocket Pool Detection) - $0/month
 cd packages/monitor
 pnpm install
-RPC_ENDPOINT=wss://mainnet.helius-rpc.com/?api-key=YOUR_KEY pnpm dev
+RPC_ENDPOINT=ws://144.XX.XX.XXX:8900 pnpm dev
 ```
 
 ---
@@ -429,49 +429,52 @@ const similar = await memory.findSimilar(features, 5, 0.85);
 
 ---
 
-## Multi-RPC Strategy
+## Infrastructure
 
-Smart routing across multiple Solana RPC endpoints to minimize costs and maximize reliability.
+### Hetzner Servers
 
-### RPC Providers
+| Server | IP | Specs | Purpose |
+|--------|-----|-------|---------|
+| **RPC Node** | 144.XX.XX.XXX:8899 | Dedicated | Solana RPC - all API calls |
+| **agents-n-database** | 46.XXX.X.XXX | CPX32, 160 GB | Agents + PostgreSQL |
+| **yellowstone-streaming-node** | 46.XXX.XXX.XXX | CPX22, 80 GB | Geyser/Yellowstone streaming |
 
-| Provider | Tier | Free Limit | Priority | Use Case |
-|----------|------|------------|----------|----------|
-| QuickNode | Free | 10M req/month | 1 | Light/medium calls |
-| Alchemy | Free | 300M CU/month | 2 | Light/medium calls |
-| Triton | Free | Unlimited | 3 | Community fallback |
-| **Helius** | Premium | Paid credits | 3 | Heavy calls only |
-| Solana Public | Free | Rate limited | 10 | Last resort |
+All servers in Nuremberg, eu-central.
+
+### RPC Configuration
+
+**YOUR OWN NODE ONLY** - No third-party RPC providers.
+
+```bash
+# Workers API
+wrangler secret put SOLANA_RPC_URL  # http://144.XX.XX.XXX:8899
+
+# Agents (.env on agents-n-database server)
+RPC_ENDPOINT=http://144.XX.XX.XXX:8899
+RPC_WS_ENDPOINT=ws://144.XX.XX.XXX:8900
+```
+
+### External APIs Still Used
+
+| API | Purpose | Required |
+|-----|---------|----------|
+| Helius DAS | Token creator detection, metadata | Optional |
+| DexScreener | Price, volume, market data | Yes |
+| Together AI | AI risk analysis | Yes |
+| Jupiter | Swap execution | Yes |
 
 ### Method Classification
 
 ```typescript
-// Light methods → Use free endpoints
+// Light methods
 LIGHT: getSlot, getBalance, getLatestBlockhash, getBlockTime
 
-// Medium methods → Prefer free, fallback to premium
+// Medium methods
 MEDIUM: getAccountInfo, getMultipleAccounts, getTokenSupply, getTokenLargestAccounts
 
-// Heavy methods → Use Helius (premium) when available
+// Heavy methods
 HEAVY: getProgramAccounts, getSignaturesForAddress, getTokenAccountsByOwner
 ```
-
-### Configuration
-
-```bash
-# Set via wrangler secrets (priority order)
-wrangler secret put QUICKNODE_RPC_URL     # Priority 1
-wrangler secret put ALCHEMY_RPC_URL       # Priority 2
-wrangler secret put HELIUS_API_KEY        # Premium (heavy calls)
-wrangler secret put SOLANA_RPC_URL        # Custom endpoint
-```
-
-### Auto-Failover
-
-- Tracks latency per endpoint (exponential moving average)
-- Auto-cooldown after 3 consecutive errors (30s)
-- Load balances across similar-performing endpoints
-- Falls back gracefully when endpoints fail
 
 ---
 
@@ -482,10 +485,8 @@ Strategy for 24/7 autonomous monitoring at $0/month using WebSocket subscription
 ### Why WebSockets Are Free
 
 - WebSocket = persistent connection, not per-call billing
-- Helius WSS: `wss://mainnet.helius-rpc.com/?api-key=YOUR_KEY`
-- Public WSS: `wss://api.mainnet-beta.solana.com`
-
-**Helius webhooks cost 1 credit per push - DON'T use them for monitoring.**
+- Your node WSS: `ws://144.XX.XX.XXX:8900`
+- Yellowstone streaming: `46.XXX.XXX.XXX` (Geyser plugin)
 
 ### Monitoring Strategy
 
@@ -679,15 +680,10 @@ Set via `wrangler secret put <KEY>`:
 ```bash
 # Required
 TOGETHER_AI_API_KEY      # AI risk analysis
-
-# RPC Providers (configure multiple for failover)
-HELIUS_API_KEY           # Premium - reserved for heavy calls
-QUICKNODE_RPC_URL        # Free: 10M req/month (priority 1)
-ALCHEMY_RPC_URL          # Free: 300M CU/month (priority 2)
-TRITON_RPC_URL           # Community RPC (unlimited)
-SOLANA_RPC_URL           # Custom endpoint
+SOLANA_RPC_URL           # Your Hetzner node (http://144.XX.XX.XXX:8899)
 
 # Optional
+HELIUS_API_KEY           # DAS API only (for creator detection)
 JUPITER_API_KEY          # Jupiter swap API
 TWITTER_API_KEY          # Auto-tweet high-risk tokens
 TWITTER_API_SECRET
@@ -702,9 +698,8 @@ ADMIN_SECRET             # Training data API access
 
 ```env
 TOGETHER_AI_API_KEY=your-together-ai-api-key
-HELIUS_API_KEY=your-helius-api-key
-QUICKNODE_RPC_URL=https://your-quicknode-endpoint
-# ... other secrets as needed
+SOLANA_RPC_URL=http://144.XX.XX.XXX:8899
+HELIUS_API_KEY=your-helius-api-key  # Optional, for DAS API only
 ```
 
 ### Argus Dashboard (.env)
@@ -822,7 +817,7 @@ CREATE TABLE token_outcomes (
 - Check `c.executionCtx.waitUntil()` is being called in sentinel.ts
 - Events are only generated from real user scans, not simulated
 
-### Multi-RPC failover issues
-- Check `wrangler secret list` to verify RPC secrets are set
-- Use `GET /debug/rpc-status` (if enabled) to check endpoint health
-- Helius is premium tier - only used for heavy calls like getProgramAccounts
+### RPC connection issues
+- Verify SOLANA_RPC_URL secret is set: `wrangler secret list`
+- Check your Hetzner node is running: `curl http://144.XX.XX.XXX:8899 -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","id":1,"method":"getHealth"}'`
+- WebSocket endpoint is port 8900: `ws://144.XX.XX.XXX:8900`

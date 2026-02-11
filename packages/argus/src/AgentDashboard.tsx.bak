@@ -1,0 +1,1564 @@
+/**
+ * AgentDashboard - Autonomous Trading Command Center
+ *
+ * Premium dashboard with animated background, glassmorphism,
+ * live charts, and real agent data.
+ */
+
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { useAutoTrade, type Position } from './hooks/useAutoTrade';
+import { useAgentStatus, type ActivityEvent, type AgentState } from './hooks/useAgentStatus';
+
+// Font configuration
+const FONT = {
+  mono: "'JetBrains Mono', monospace",
+  display: "'Orbitron', sans-serif",
+  body: "'Exo 2', sans-serif",
+};
+
+// Theme colors - Argus red/black
+const THEME = {
+  primary: '#DC2626',
+  primaryGlow: 'rgba(220, 38, 38, 0.3)',
+  success: '#22C55E',
+  warning: '#F59E0B',
+  danger: '#EF4444',
+  text: '#e0ecff',
+  textMuted: '#6a7a8a',
+  textDark: '#2a3a48',
+  bg: '#000000',
+  bgCard: 'rgba(10, 10, 10, 0.82)',
+  border: 'rgba(220, 38, 38, 0.08)',
+};
+
+// Agent configuration
+const AGENTS = [
+  { id: 'SCOUT', role: 'Detection', color: '#22C55E', icon: '🔍' },
+  { id: 'ANALYST', role: 'Intelligence', color: '#3B82F6', icon: '🧠' },
+  { id: 'HUNTER', role: 'Threat Tracking', color: '#DC2626', icon: '🎯' },
+  { id: 'TRADER', role: 'Execution', color: '#F59E0B', icon: '⚡' },
+];
+
+// Utility functions
+const formatTime = (ts: number): string => {
+  const s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 3) return 'now';
+  if (s < 60) return `${s}s`;
+  if (s < 3600) return `${Math.floor(s / 60)}m`;
+  return `${Math.floor(s / 3600)}h`;
+};
+
+const formatUSD = (sol: number, price = 150): string => {
+  const usd = sol * price;
+  if (Math.abs(usd) >= 1000) return `$${(usd / 1000).toFixed(1)}K`;
+  return `$${usd.toFixed(0)}`;
+};
+
+const truncateAddress = (addr: string): string =>
+  addr ? `${addr.slice(0, 4)}...${addr.slice(-4)}` : '';
+
+// Holographic Background Canvas
+function HoloBG() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let animationId: number;
+    let t = 0;
+
+    const resize = () => {
+      canvas.width = canvas.offsetWidth * 0.4;
+      canvas.height = canvas.offsetHeight * 0.4;
+    };
+    resize();
+    window.addEventListener('resize', resize);
+
+    // Create nodes for network effect
+    const nodes: Array<{ x: number; y: number; vx: number; vy: number; pulse: number }> = [];
+    for (let i = 0; i < 20; i++) {
+      nodes.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        vx: (Math.random() - 0.5) * 0.12,
+        vy: (Math.random() - 0.5) * 0.12,
+        pulse: Math.random() * Math.PI * 2,
+      });
+    }
+
+    const draw = () => {
+      t += 0.003;
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.06)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Hexagonal grid
+      ctx.strokeStyle = 'rgba(220, 38, 38, 0.015)';
+      const size = 40;
+      for (let row = -1; row < canvas.height / (size * 0.866) + 1; row++) {
+        for (let col = -1; col < canvas.width / size + 1; col++) {
+          const x = col * size + (row % 2 ? size / 2 : 0);
+          const y = row * size * 0.866;
+          ctx.beginPath();
+          for (let j = 0; j < 6; j++) {
+            const angle = (Math.PI / 3) * j - Math.PI / 6;
+            const px = x + 12 * Math.cos(angle);
+            const py = y + 12 * Math.sin(angle);
+            j === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+          }
+          ctx.closePath();
+          ctx.stroke();
+        }
+      }
+
+      // Scan line effect
+      const scanY = (t * 35) % (canvas.height + 12) - 6;
+      const scanGradient = ctx.createLinearGradient(0, scanY - 6, 0, scanY + 6);
+      scanGradient.addColorStop(0, 'rgba(220, 38, 38, 0)');
+      scanGradient.addColorStop(0.5, 'rgba(220, 38, 38, 0.025)');
+      scanGradient.addColorStop(1, 'rgba(220, 38, 38, 0)');
+      ctx.fillStyle = scanGradient;
+      ctx.fillRect(0, scanY - 6, canvas.width, 12);
+
+      // Animated nodes
+      for (const node of nodes) {
+        node.x += node.vx;
+        node.y += node.vy;
+        node.pulse += 0.008;
+        if (node.x < 0 || node.x > canvas.width) node.vx *= -1;
+        if (node.y < 0 || node.y > canvas.height) node.vy *= -1;
+
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, 1, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(220, 38, 38, ${0.08 + Math.sin(node.pulse) * 0.04})`;
+        ctx.fill();
+      }
+
+      // Node connections
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          const dist = Math.hypot(nodes[i].x - nodes[j].x, nodes[i].y - nodes[j].y);
+          if (dist < 80) {
+            ctx.beginPath();
+            ctx.moveTo(nodes[i].x, nodes[i].y);
+            ctx.lineTo(nodes[j].x, nodes[j].y);
+            ctx.strokeStyle = `rgba(220, 38, 38, ${0.03 * (1 - dist / 80)})`;
+            ctx.lineWidth = 0.3;
+            ctx.stroke();
+          }
+        }
+      }
+
+      animationId = requestAnimationFrame(draw);
+    };
+
+    draw();
+
+    return () => {
+      cancelAnimationFrame(animationId);
+      window.removeEventListener('resize', resize);
+    };
+  }, []);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        width: '100%',
+        height: '100%',
+        pointerEvents: 'none',
+        zIndex: 0,
+      }}
+    />
+  );
+}
+
+// Glassmorphism container
+function Glass({ children, style, glow }: { children: React.ReactNode; style?: React.CSSProperties; glow?: string }) {
+  return (
+    <div
+      style={{
+        background: THEME.bgCard,
+        backdropFilter: 'blur(16px)',
+        border: `1px solid ${glow ? glow + '18' : THEME.border}`,
+        borderRadius: 10,
+        boxShadow: glow ? `0 0 20px ${glow}12` : 'none',
+        ...style,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+// Badge component
+function Badge({ children, color = THEME.primary }: { children: React.ReactNode; color?: string }) {
+  return (
+    <span
+      style={{
+        background: color + '15',
+        color: color,
+        border: `1px solid ${color}25`,
+        padding: '2px 8px',
+        borderRadius: 4,
+        fontSize: 8,
+        fontWeight: 700,
+        letterSpacing: 0.8,
+        textTransform: 'uppercase',
+        fontFamily: FONT.mono,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
+// Sparkline chart
+function Sparkline({ data, width = 48, height = 16, color = THEME.success }: { data: number[]; width?: number; height?: number; color?: string }) {
+  if (!data || data.length < 2) return null;
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = max - min || 1;
+  const points = data
+    .map((v, i) => `${(i / (data.length - 1)) * width},${height - ((v - min) / range) * (height - 2) - 1}`)
+    .join(' ');
+
+  return (
+    <svg width={width} height={height} style={{ display: 'block', flexShrink: 0 }}>
+      <polyline points={points} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+// Ring score indicator
+function RingScore({ score, size = 24 }: { score: number; size?: number }) {
+  const color = score > 70 ? THEME.success : score > 40 ? THEME.warning : THEME.danger;
+  const circumference = 2 * Math.PI * 9;
+  const offset = circumference - (score / 100) * circumference;
+
+  return (
+    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
+      <svg width={size} height={size} viewBox="0 0 24 24" style={{ transform: 'rotate(-90deg)' }}>
+        <circle cx="12" cy="12" r="9" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="2" />
+        <circle
+          cx="12"
+          cy="12"
+          r="9"
+          fill="none"
+          stroke={color}
+          strokeWidth="2"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          strokeLinecap="round"
+        />
+      </svg>
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontFamily: FONT.mono,
+          fontSize: 6,
+          fontWeight: 700,
+          color: color,
+        }}
+      >
+        {score}
+      </div>
+    </div>
+  );
+}
+
+// Stat card
+function StatCard({ label, value, sub, trend, icon }: { label: string; value: string; sub?: string; trend?: number; icon: string }) {
+  return (
+    <Glass style={{ padding: '14px 16px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+        <span style={{ color: THEME.textDark, fontSize: 8, fontWeight: 700, letterSpacing: 1.6, textTransform: 'uppercase', fontFamily: FONT.mono }}>
+          {label}
+        </span>
+        <span style={{ fontSize: 14, opacity: 0.3 }}>{icon}</span>
+      </div>
+      <div style={{ fontSize: 22, fontWeight: 700, color: THEME.text, fontFamily: FONT.display, letterSpacing: 0.5 }}>{value}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
+        {trend !== undefined && (
+          <span style={{ color: trend >= 0 ? THEME.success : THEME.danger, fontSize: 10, fontWeight: 600, fontFamily: FONT.mono }}>
+            {trend >= 0 ? '▲' : '▼'}{Math.abs(trend).toFixed(1)}%
+          </span>
+        )}
+        {sub && <span style={{ color: THEME.textDark, fontSize: 9, fontFamily: FONT.mono }}>{sub}</span>}
+      </div>
+    </Glass>
+  );
+}
+
+// Agent card
+function AgentCard({ agent, status, lastAction, stats }: { agent: typeof AGENTS[0]; status: AgentState['status']; lastAction: string; stats?: Record<string, string | number> }) {
+  const isActive = status === 'active' || status === 'busy';
+
+  return (
+    <Glass glow={isActive ? agent.color : undefined} style={{ padding: '12px 14px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <div
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: 6,
+            background: `linear-gradient(135deg, ${agent.color}30, ${agent.color}10)`,
+            border: `1px solid ${agent.color}40`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 12,
+          }}
+        >
+          {agent.icon}
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontFamily: FONT.display, fontSize: 10, fontWeight: 700, color: agent.color, letterSpacing: 2 }}>
+              {agent.id}
+            </span>
+            <span style={{ fontSize: 8, color: THEME.textDark, fontFamily: FONT.mono }}>{agent.role}</span>
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: '50%',
+              background: isActive ? agent.color : '#333',
+              boxShadow: isActive ? `0 0 8px ${agent.color}` : 'none',
+            }}
+          />
+          <span style={{ fontSize: 8, fontFamily: FONT.mono, color: isActive ? agent.color : '#444', fontWeight: 700 }}>
+            {status.toUpperCase()}
+          </span>
+        </div>
+      </div>
+
+      {stats && (
+        <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
+          {Object.entries(stats).map(([key, val]) => (
+            <div key={key} style={{ flex: 1, background: 'rgba(0,0,0,0.4)', borderRadius: 4, padding: '3px 5px', textAlign: 'center' }}>
+              <div style={{ fontSize: 7, color: THEME.textDark, fontFamily: FONT.mono, fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase' }}>
+                {key}
+              </div>
+              <div style={{ fontSize: 10, color: THEME.textMuted, fontFamily: FONT.mono, fontWeight: 600 }}>{val}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div
+        style={{
+          fontSize: 9,
+          color: THEME.textMuted,
+          fontFamily: FONT.mono,
+          padding: '5px 8px',
+          background: 'rgba(0,0,0,0.3)',
+          borderRadius: 4,
+          lineHeight: 1.4,
+          borderLeft: `2px solid ${agent.color}30`,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {lastAction || 'Standby...'}
+      </div>
+    </Glass>
+  );
+}
+
+// Activity feed item
+function FeedItem({ event }: { event: ActivityEvent }) {
+  const colors = {
+    critical: { border: THEME.danger, bg: 'rgba(239, 68, 68, 0.06)', text: THEME.danger },
+    warning: { border: THEME.warning, bg: 'rgba(245, 158, 11, 0.06)', text: THEME.warning },
+    info: { border: THEME.success, bg: 'rgba(34, 197, 94, 0.06)', text: THEME.success },
+  };
+  const config = colors[event.severity];
+  const agentConfig = AGENTS.find(a => a.id === event.agent) || AGENTS[0];
+
+  return (
+    <div
+      style={{
+        padding: '6px 8px',
+        borderRadius: 4,
+        background: config.bg,
+        borderLeft: `2px solid ${agentConfig.color}40`,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+        <span style={{ fontFamily: FONT.display, fontSize: 8, fontWeight: 700, color: agentConfig.color, letterSpacing: 1.2, minWidth: 50 }}>
+          [{event.agent}]
+        </span>
+        <span
+          style={{
+            flex: 1,
+            fontSize: 9,
+            color: event.severity === 'critical' ? config.text : THEME.textMuted,
+            fontFamily: FONT.mono,
+            lineHeight: 1.4,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {event.message}
+        </span>
+        <span style={{ fontSize: 7, color: THEME.textDark, fontFamily: FONT.mono, flexShrink: 0 }}>{formatTime(event.timestamp)}</span>
+      </div>
+    </div>
+  );
+}
+
+// Position row
+function PositionRow({ position, onSell }: { position: Position; onSell: () => void }) {
+  const pnl = position.pnlPercent || 0;
+  const color = pnl >= 0 ? THEME.success : THEME.danger;
+
+  // Generate sparkline data from position value history (or fake it)
+  const sparkData = Array.from({ length: 10 }, (_, i) => {
+    const base = position.entrySolAmount || 0.1;
+    const variation = (Math.sin(i * 0.8 + Math.random()) * 0.2 + (pnl / 100)) * base;
+    return base + variation;
+  });
+
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '90px 48px 60px 50px 28px 1fr',
+        alignItems: 'center',
+        padding: '8px 10px',
+        borderRadius: 5,
+        gap: 6,
+        background: pnl > 15 ? 'rgba(34, 197, 94, 0.04)' : pnl < -10 ? 'rgba(239, 68, 68, 0.04)' : 'rgba(0,0,0,0.2)',
+        border: `1px solid ${pnl > 15 ? 'rgba(34, 197, 94, 0.08)' : pnl < -10 ? 'rgba(239, 68, 68, 0.08)' : 'rgba(255,255,255,0.02)'}`,
+      }}
+    >
+      <span style={{ fontFamily: FONT.mono, fontSize: 10, fontWeight: 600, color: THEME.textMuted }}>
+        {position.tokenSymbol || truncateAddress(position.tokenAddress)}
+      </span>
+      <Sparkline data={sparkData} width={40} height={14} color={color} />
+      <span style={{ fontFamily: FONT.mono, fontSize: 10, color: THEME.textMuted }}>
+        {(position.entrySolAmount || 0).toFixed(3)}
+      </span>
+      <span style={{ fontFamily: FONT.mono, fontSize: 10, fontWeight: 700, color }}>
+        {pnl >= 0 ? '+' : ''}{pnl.toFixed(1)}%
+      </span>
+      <RingScore score={Math.max(0, 100 - Math.abs(pnl))} size={24} />
+      <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
+        <button
+          onClick={onSell}
+          style={{
+            background: 'rgba(239, 68, 68, 0.1)',
+            border: '1px solid rgba(239, 68, 68, 0.2)',
+            borderRadius: 4,
+            padding: '4px 10px',
+            cursor: 'pointer',
+            color: THEME.danger,
+            fontSize: 8,
+            fontWeight: 700,
+            fontFamily: FONT.display,
+            letterSpacing: 1,
+          }}
+        >
+          SELL
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Main Dashboard
+export default function AgentDashboard() {
+  const log = useCallback((msg: string, type = 'info') => console.log(`[${type}] ${msg}`), []);
+
+  // Real hooks
+  const autoTrade = useAutoTrade({}, undefined, log);
+  const agentStatus = useAgentStatus({ enabled: true });
+
+  // UI State
+  const [time, setTime] = useState(new Date());
+  const [showSettings, setShowSettings] = useState(false);
+  const [showBackupModal, setShowBackupModal] = useState(false);
+  const [newWalletKey, setNewWalletKey] = useState('');
+  const [backupConfirmed, setBackupConfirmed] = useState(false);
+  const [showKey, setShowKey] = useState(false);
+  const [keyCopied, setKeyCopied] = useState(false);
+  const [walletName, setWalletName] = useState('Trading Wallet');
+  const [settingsTab, setSettingsTab] = useState<'wallet' | 'risk'>('wallet');
+  const [showExportKey, setShowExportKey] = useState(false);
+  const [exportedKey, setExportedKey] = useState('');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const prevWalletLoadedRef = useRef(false);
+  const feedRef = useRef<HTMLDivElement>(null);
+
+  // Risk settings
+  const [maxPositionSize, setMaxPositionSize] = useState(autoTrade.config.buyAmountSol);
+  const [stopLossPercent, setStopLossPercent] = useState(autoTrade.config.stopLossPercent);
+  const [takeProfitPercent, setTakeProfitPercent] = useState(autoTrade.config.takeProfitPercent);
+  const [trailingStopPercent, setTrailingStopPercent] = useState(autoTrade.config.trailingStopPercent);
+  const [reserveBalanceSol, setReserveBalanceSol] = useState(autoTrade.config.reserveBalanceSol);
+
+  // P&L chart data (simulated history for now)
+  const [pnlData] = useState(() =>
+    Array.from({ length: 24 }, (_, i) => ({
+      t: `${String(i).padStart(2, '0')}:00`,
+      pnl: parseFloat((0.2 + Math.sin(i * 0.25) * 0.8 + i * 0.05 + (Math.random() - 0.4) * 0.3).toFixed(3)),
+    }))
+  );
+
+  // Sync settings from config
+  useEffect(() => {
+    setMaxPositionSize(autoTrade.config.buyAmountSol);
+    setStopLossPercent(autoTrade.config.stopLossPercent);
+    setTakeProfitPercent(autoTrade.config.takeProfitPercent);
+    setTrailingStopPercent(autoTrade.config.trailingStopPercent);
+    setReserveBalanceSol(autoTrade.config.reserveBalanceSol);
+  }, [autoTrade.config]);
+
+  // Clock update
+  useEffect(() => {
+    const interval = setInterval(() => setTime(new Date()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Load saved state
+  useEffect(() => {
+    const confirmed = localStorage.getItem('argus_wallet_backup_confirmed');
+    if (confirmed === 'true') setBackupConfirmed(true);
+    const savedName = localStorage.getItem('argus_trading_wallet_name');
+    if (savedName) setWalletName(savedName);
+  }, []);
+
+  // Detect new wallet creation
+  useEffect(() => {
+    const wasLoaded = prevWalletLoadedRef.current;
+    const isNowLoaded = autoTrade.wallet.isLoaded && autoTrade.wallet.address;
+    if (!wasLoaded && isNowLoaded && !backupConfirmed) {
+      const alreadyBackedUp = localStorage.getItem('argus_wallet_backup_confirmed') === 'true';
+      if (!alreadyBackedUp) {
+        setShowBackupModal(true);
+        autoTrade.exportPrivateKey().then(key => {
+          if (key) setNewWalletKey(key);
+        });
+      }
+    }
+    prevWalletLoadedRef.current = !!isNowLoaded;
+  }, [autoTrade.wallet.isLoaded, autoTrade.wallet.address, backupConfirmed, autoTrade.exportPrivateKey]);
+
+  // Scroll feed to top on new items
+  useEffect(() => {
+    if (feedRef.current) feedRef.current.scrollTop = 0;
+  }, [agentStatus.activity.length]);
+
+  // Handlers
+  const handleBackupConfirm = () => {
+    if (!keyCopied) return;
+    setBackupConfirmed(true);
+    localStorage.setItem('argus_wallet_backup_confirmed', 'true');
+    setShowBackupModal(false);
+    setNewWalletKey('');
+  };
+
+  const handleCopyKey = async () => {
+    if (newWalletKey) {
+      await navigator.clipboard.writeText(newWalletKey);
+      setKeyCopied(true);
+    }
+  };
+
+  const handleCreateWallet = async () => {
+    await autoTrade.generateWallet();
+  };
+
+  const handleExportKey = async () => {
+    const key = await autoTrade.exportPrivateKey();
+    if (key) {
+      setExportedKey(key);
+      setShowExportKey(true);
+    }
+  };
+
+  const handleDeleteWallet = async () => {
+    await autoTrade.deleteWallet();
+    setShowDeleteConfirm(false);
+    setShowSettings(false);
+    localStorage.removeItem('argus_wallet_backup_confirmed');
+    setBackupConfirmed(false);
+  };
+
+  const handleSaveWalletName = (name: string) => {
+    setWalletName(name);
+    localStorage.setItem('argus_trading_wallet_name', name);
+    autoTrade.setWalletName(name);
+  };
+
+  // Calculate stats
+  const totalPnL = autoTrade.state.totalProfitSol;
+  const unrealizedPnL = autoTrade.state.positions.reduce((sum, p) => {
+    const entry = p.entrySolAmount || 0;
+    const current = p.currentValueSol || entry;
+    return sum + (current - entry);
+  }, 0);
+  const totalPosValue = autoTrade.state.positions.reduce((sum, p) => sum + (p.currentValueSol || p.entrySolAmount || 0), 0);
+  const winRate = autoTrade.state.totalSold > 0
+    ? (autoTrade.state.soldPositions.filter(p => (p.pnlPercent || 0) > 0).length / autoTrade.state.totalSold * 100)
+    : 0;
+
+  // Get agent stats from status
+  const getAgentStats = (agentId: string): Record<string, string | number> => {
+    const stats = agentStatus.stats;
+    if (!stats) return {};
+
+    switch (agentId) {
+      case 'SCOUT':
+        return { scanned: stats.scans?.today || 0, flagged: stats.alerts?.highRisk || 0, 'grad': stats.graduations?.today || 0 };
+      case 'ANALYST':
+        return { analyzed: stats.scans?.today || 0, buy: Math.floor((stats.scans?.today || 0) * 0.15), avoid: Math.floor((stats.scans?.today || 0) * 0.85) };
+      case 'HUNTER':
+        return { tracked: stats.hunters?.walletsTracked || 0, blocked: stats.alerts?.scamsDetected || 0, networks: Math.floor((stats.hunters?.walletsTracked || 0) / 10) };
+      case 'TRADER':
+        return { trades: autoTrade.state.totalTraded, 'win%': `${winRate.toFixed(0)}%`, pnl: `${totalPnL >= 0 ? '+' : ''}${totalPnL.toFixed(2)}` };
+      default:
+        return {};
+    }
+  };
+
+  const getAgentLastAction = (agentId: string): string => {
+    const events = agentStatus.activity.filter(e => e.agent === agentId);
+    return events[0]?.message || 'Standby...';
+  };
+
+  const getAgentStatus = (agentId: string): AgentState['status'] => {
+    const agent = agentStatus.status?.agents.find(a => a.name === agentId);
+    return agent?.status || 'idle';
+  };
+
+  const onlineAgents = agentStatus.status?.agents.filter(a => a.status === 'active' || a.status === 'busy').length || 0;
+
+  return (
+    <div style={{ minHeight: '100vh', background: THEME.bg, color: THEME.text, fontFamily: FONT.body }}>
+      {/* Google Fonts */}
+      <link
+        href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Exo+2:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+        rel="stylesheet"
+      />
+      <style>{`
+        @keyframes ping{75%,100%{transform:scale(2);opacity:0}}
+        @keyframes glow{0%,100%{box-shadow:0 0 8px rgba(220,38,38,0.15)}50%{box-shadow:0 0 20px rgba(220,38,38,0.3)}}
+        ::-webkit-scrollbar{width:4px}
+        ::-webkit-scrollbar-track{background:rgba(0,0,0,0.2)}
+        ::-webkit-scrollbar-thumb{background:rgba(220,38,38,0.15);border-radius:2px}
+      `}</style>
+
+      <HoloBG />
+
+      {/* Header */}
+      <header
+        style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 50,
+          padding: '8px 20px',
+          background: 'rgba(0, 0, 0, 0.92)',
+          backdropFilter: 'blur(20px)',
+          borderBottom: '1px solid rgba(220, 38, 38, 0.08)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 7,
+              background: 'linear-gradient(135deg, #DC2626, #991B1B)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontFamily: FONT.display,
+              fontWeight: 900,
+              fontSize: 13,
+              color: '#fff',
+              boxShadow: '0 0 16px rgba(220, 38, 38, 0.4)',
+              animation: 'glow 4s ease infinite',
+            }}
+          >
+            A
+          </div>
+          <div>
+            <div style={{ fontFamily: FONT.display, fontWeight: 700, fontSize: 14, color: THEME.text, letterSpacing: 4 }}>
+              ARGUS<span style={{ color: THEME.primary, textShadow: '0 0 10px rgba(220,38,38,0.4)' }}>AI</span>
+            </div>
+            <div style={{ fontSize: 7, color: THEME.textDark, letterSpacing: 2.5, fontFamily: FONT.mono }}>AUTONOMOUS COMMAND CENTER</div>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {/* gRPC Status */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(0,0,0,0.4)', borderRadius: 5, padding: '4px 10px' }}>
+            <span style={{ width: 5, height: 5, borderRadius: '50%', background: agentStatus.isConnected ? THEME.success : '#444' }} />
+            <span style={{ fontFamily: FONT.mono, fontSize: 8, color: THEME.textMuted }}>YELLOWSTONE gRPC</span>
+          </div>
+
+          {/* Autopilot Status */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              background: autoTrade.config.enabled ? 'rgba(34, 197, 94, 0.08)' : 'rgba(245, 158, 11, 0.08)',
+              border: `1px solid ${autoTrade.config.enabled ? 'rgba(34, 197, 94, 0.2)' : 'rgba(245, 158, 11, 0.2)'}`,
+              borderRadius: 14,
+              padding: '4px 12px',
+              cursor: 'pointer',
+            }}
+            onClick={() => autoTrade.wallet.isLoaded && autoTrade.toggleEnabled()}
+          >
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: autoTrade.config.enabled ? THEME.success : THEME.warning }} />
+            <span
+              style={{
+                fontFamily: FONT.display,
+                fontSize: 9,
+                fontWeight: 700,
+                color: autoTrade.config.enabled ? THEME.success : THEME.warning,
+                letterSpacing: 2,
+              }}
+            >
+              {autoTrade.config.enabled ? 'AUTOPILOT' : 'PAUSED'}
+            </span>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {/* Wallet Balance */}
+          {autoTrade.wallet.isLoaded && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(0,0,0,0.4)', borderRadius: 5, padding: '4px 10px' }}>
+              <span style={{ fontFamily: FONT.mono, fontSize: 12, color: THEME.text, fontWeight: 600 }}>
+                {autoTrade.wallet.balance.toFixed(3)}
+              </span>
+              <span style={{ fontFamily: FONT.mono, fontSize: 8, color: THEME.textDark }}>SOL</span>
+            </div>
+          )}
+
+          {/* Clock */}
+          <span style={{ fontFamily: FONT.mono, fontSize: 10, color: THEME.textDark, letterSpacing: 1.2 }}>
+            {time.toLocaleTimeString('en-US', { hour12: false })}
+          </span>
+
+          {/* Settings */}
+          <button
+            onClick={() => setShowSettings(true)}
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 6,
+              background: 'rgba(0,0,0,0.4)',
+              border: '1px solid rgba(220,38,38,0.1)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: THEME.textMuted,
+            }}
+          >
+            ⚙️
+          </button>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main style={{ position: 'relative', zIndex: 5, padding: '14px 20px', maxWidth: 1800, margin: '0 auto' }}>
+        {!autoTrade.wallet.isLoaded ? (
+          /* No Wallet State */
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '70vh' }}>
+            <div
+              style={{
+                width: 80,
+                height: 80,
+                borderRadius: '50%',
+                background: 'rgba(220, 38, 38, 0.1)',
+                border: '2px solid rgba(220, 38, 38, 0.2)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: 24,
+                fontSize: 32,
+              }}
+            >
+              🔐
+            </div>
+            <h2 style={{ fontFamily: FONT.display, fontSize: 22, fontWeight: 700, color: THEME.text, marginBottom: 8, letterSpacing: 3 }}>
+              INITIALIZE WALLET
+            </h2>
+            <p style={{ color: THEME.textMuted, fontSize: 12, marginBottom: 24, textAlign: 'center', maxWidth: 400, fontFamily: FONT.body }}>
+              Create a dedicated trading wallet for the agents. Your funds stay safe - only deposit what you want to trade.
+            </p>
+            <button
+              onClick={handleCreateWallet}
+              style={{
+                padding: '14px 40px',
+                background: 'linear-gradient(135deg, #DC2626, #991B1B)',
+                border: 'none',
+                borderRadius: 8,
+                cursor: 'pointer',
+                fontFamily: FONT.display,
+                fontSize: 12,
+                fontWeight: 700,
+                color: '#fff',
+                letterSpacing: 3,
+                boxShadow: '0 4px 20px rgba(220, 38, 38, 0.4)',
+              }}
+            >
+              CREATE WALLET
+            </button>
+          </div>
+        ) : (
+          <>
+            {/* Stats Row */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10, marginBottom: 14 }}>
+              <StatCard label="Total P&L" value={`${totalPnL >= 0 ? '+' : ''}${totalPnL.toFixed(3)}`} sub="SOL" trend={totalPnL > 0 ? 12.3 : -5.2} icon="💰" />
+              <StatCard label="Unrealized" value={`${unrealizedPnL >= 0 ? '+' : ''}${unrealizedPnL.toFixed(3)}`} sub="SOL" icon="📈" />
+              <StatCard label="Win Rate" value={`${winRate.toFixed(1)}%`} trend={winRate > 50 ? 2.4 : -1.8} icon="🎯" />
+              <StatCard label="Trades" value={String(autoTrade.state.totalTraded)} sub="total" icon="⚡" />
+              <StatCard label="Scanned" value={String(agentStatus.stats?.scans?.today || 0)} sub="today" icon="🔍" />
+              <StatCard label="Rugs Blocked" value={String(agentStatus.stats?.alerts?.scamsDetected || 0)} sub="saved" icon="🛡️" />
+            </div>
+
+            {/* Main Grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: '240px 1fr 300px', gap: 14 }}>
+              {/* Left Column - Agents */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 2px', marginBottom: 4 }}>
+                  <span style={{ fontFamily: FONT.display, fontSize: 10, fontWeight: 600, color: THEME.textMuted, letterSpacing: 2 }}>AGENTS</span>
+                  <Badge color={onlineAgents === 4 ? THEME.success : THEME.warning}>{onlineAgents}/4 ONLINE</Badge>
+                </div>
+                {AGENTS.map(agent => (
+                  <AgentCard
+                    key={agent.id}
+                    agent={agent}
+                    status={getAgentStatus(agent.id)}
+                    lastAction={getAgentLastAction(agent.id)}
+                    stats={getAgentStats(agent.id)}
+                  />
+                ))}
+
+                {/* BitNet Engine Card */}
+                <Glass style={{ padding: '10px 12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                    <span style={{ fontFamily: FONT.display, fontSize: 8, fontWeight: 700, color: '#8B5CF6', letterSpacing: 1.5 }}>BITNET ENGINE</span>
+                    <span style={{ fontSize: 7, color: THEME.textDark, fontFamily: FONT.mono }}>1-bit quantized</span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+                    {[
+                      { l: 'Inference', v: '13ms' },
+                      { l: 'Features', v: '29-dim' },
+                      { l: 'Compress', v: '17Kx' },
+                      { l: 'Patterns', v: '8 known' },
+                    ].map(s => (
+                      <div key={s.l} style={{ background: 'rgba(0,0,0,0.4)', borderRadius: 4, padding: '4px 6px' }}>
+                        <div style={{ fontSize: 6, color: THEME.textDark, fontFamily: FONT.mono, fontWeight: 700, letterSpacing: 0.8 }}>{s.l}</div>
+                        <div style={{ fontSize: 10, color: '#8B5CF6', fontFamily: FONT.mono, fontWeight: 600 }}>{s.v}</div>
+                      </div>
+                    ))}
+                  </div>
+                </Glass>
+              </div>
+
+              {/* Center Column - Charts & Positions */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                {/* P&L Chart */}
+                <Glass style={{ padding: '16px 18px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                    <div>
+                      <span style={{ fontFamily: FONT.display, fontSize: 10, fontWeight: 600, color: THEME.textMuted, letterSpacing: 2 }}>PORTFOLIO P&L</span>
+                      <div style={{ fontSize: 8, color: THEME.textDark, fontFamily: FONT.mono }}>cumulative today</div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontFamily: FONT.display, fontSize: 18, fontWeight: 700, color: totalPnL >= 0 ? THEME.success : THEME.danger }}>
+                        {totalPnL >= 0 ? '+' : ''}{totalPnL.toFixed(3)} SOL
+                      </div>
+                      <div style={{ fontFamily: FONT.mono, fontSize: 9, color: THEME.textDark }}>{formatUSD(totalPnL)}</div>
+                    </div>
+                  </div>
+                  <ResponsiveContainer width="100%" height={130}>
+                    <AreaChart data={pnlData}>
+                      <defs>
+                        <linearGradient id="pnlGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor={THEME.primary} stopOpacity={0.15} />
+                          <stop offset="100%" stopColor={THEME.primary} stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <XAxis dataKey="t" tick={{ fill: THEME.textDark, fontSize: 8, fontFamily: FONT.mono }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fill: THEME.textDark, fontSize: 8, fontFamily: FONT.mono }} axisLine={false} tickLine={false} width={30} />
+                      <Tooltip
+                        contentStyle={{
+                          background: 'rgba(0,0,0,0.9)',
+                          border: `1px solid ${THEME.border}`,
+                          borderRadius: 5,
+                          fontFamily: FONT.mono,
+                          fontSize: 10,
+                        }}
+                      />
+                      <Area type="monotone" dataKey="pnl" stroke={THEME.primary} strokeWidth={2} fill="url(#pnlGradient)" dot={false} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </Glass>
+
+                {/* Positions */}
+                <Glass style={{ padding: '14px 16px', flex: 1, display: 'flex', flexDirection: 'column', maxHeight: 340, overflow: 'hidden' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                    <div>
+                      <span style={{ fontFamily: FONT.display, fontSize: 10, fontWeight: 600, color: THEME.textMuted, letterSpacing: 2 }}>POSITIONS</span>
+                      <span style={{ fontSize: 8, color: THEME.textDark, fontFamily: FONT.mono, marginLeft: 8 }}>
+                        {autoTrade.state.positions.length} active | {totalPosValue.toFixed(2)} SOL
+                      </span>
+                    </div>
+                    <Badge color={THEME.warning}>AUTO-MANAGED</Badge>
+                  </div>
+
+                  {/* Header */}
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '90px 48px 60px 50px 28px 1fr',
+                      padding: '0 10px 6px',
+                      fontSize: 7,
+                      fontWeight: 700,
+                      color: THEME.textDark,
+                      letterSpacing: 1.4,
+                      fontFamily: FONT.mono,
+                      borderBottom: '1px solid rgba(255,255,255,0.03)',
+                      gap: 6,
+                    }}
+                  >
+                    <span>TOKEN</span>
+                    <span>CHART</span>
+                    <span>SIZE</span>
+                    <span>P&L</span>
+                    <span>RISK</span>
+                    <span style={{ textAlign: 'right' }}>ACTION</span>
+                  </div>
+
+                  <div style={{ flex: 1, overflowY: 'auto', paddingTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {autoTrade.state.positions.length === 0 ? (
+                      <div style={{ textAlign: 'center', padding: 40, color: THEME.textDark }}>
+                        <div style={{ fontSize: 28, marginBottom: 10 }}>📊</div>
+                        <div style={{ fontFamily: FONT.mono, fontSize: 10 }}>No active positions</div>
+                        <div style={{ fontFamily: FONT.mono, fontSize: 8, marginTop: 4 }}>Agents are scanning for opportunities...</div>
+                      </div>
+                    ) : (
+                      autoTrade.state.positions
+                        .sort((a, b) => (b.pnlPercent || 0) - (a.pnlPercent || 0))
+                        .map(pos => (
+                          <PositionRow key={pos.tokenAddress} position={pos} onSell={() => autoTrade.manualSell(pos.tokenAddress)} />
+                        ))
+                    )}
+                  </div>
+                </Glass>
+              </div>
+
+              {/* Right Column - Activity Feed */}
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 2px', marginBottom: 8 }}>
+                  <span style={{ fontFamily: FONT.display, fontSize: 10, fontWeight: 600, color: THEME.textMuted, letterSpacing: 2 }}>ACTIVITY FEED</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span
+                      style={{
+                        width: 5,
+                        height: 5,
+                        borderRadius: '50%',
+                        background: THEME.primary,
+                        boxShadow: `0 0 8px ${THEME.primaryGlow}`,
+                        animation: 'ping 1.5s infinite',
+                      }}
+                    />
+                    <span style={{ fontSize: 8, fontFamily: FONT.mono, color: THEME.primary, fontWeight: 700, letterSpacing: 1.2 }}>LIVE</span>
+                  </div>
+                </div>
+                <Glass style={{ padding: 10, flex: 1, maxHeight: 'calc(100vh - 240px)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                  <div ref={feedRef} style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {agentStatus.activity.length === 0 ? (
+                      <div style={{ textAlign: 'center', padding: 40, color: THEME.textDark }}>
+                        <div style={{ fontSize: 24, marginBottom: 8 }}>📡</div>
+                        <div style={{ fontFamily: FONT.mono, fontSize: 9 }}>Monitoring for activity...</div>
+                      </div>
+                    ) : (
+                      agentStatus.activity.slice(0, 50).map(event => <FeedItem key={event.id} event={event} />)
+                    )}
+                  </div>
+                </Glass>
+              </div>
+            </div>
+
+            {/* Controls Bar */}
+            <div
+              style={{
+                marginTop: 14,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 10,
+                padding: '10px 16px',
+                background: 'rgba(0,0,0,0.3)',
+                borderRadius: 8,
+                border: '1px solid rgba(255,255,255,0.02)',
+              }}
+            >
+              <span style={{ fontSize: 8, color: THEME.textDark, fontFamily: FONT.mono, letterSpacing: 2 }}>CONTROLS</span>
+              <span style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.05)' }} />
+
+              <button
+                onClick={() => autoTrade.toggleEnabled()}
+                style={{
+                  background: autoTrade.config.enabled ? 'rgba(245, 158, 11, 0.08)' : 'rgba(34, 197, 94, 0.08)',
+                  border: `1px solid ${autoTrade.config.enabled ? 'rgba(245, 158, 11, 0.2)' : 'rgba(34, 197, 94, 0.2)'}`,
+                  borderRadius: 5,
+                  padding: '6px 16px',
+                  cursor: 'pointer',
+                  color: autoTrade.config.enabled ? THEME.warning : THEME.success,
+                  fontSize: 9,
+                  fontWeight: 700,
+                  fontFamily: FONT.display,
+                  letterSpacing: 1.5,
+                }}
+              >
+                {autoTrade.config.enabled ? 'PAUSE' : 'RESUME'}
+              </button>
+
+              <button
+                onClick={() => autoTrade.sellAllPositions()}
+                style={{
+                  background: 'rgba(239, 68, 68, 0.08)',
+                  border: '1px solid rgba(239, 68, 68, 0.2)',
+                  borderRadius: 5,
+                  padding: '6px 16px',
+                  cursor: 'pointer',
+                  color: THEME.danger,
+                  fontSize: 9,
+                  fontWeight: 700,
+                  fontFamily: FONT.display,
+                  letterSpacing: 1.5,
+                }}
+              >
+                CLOSE ALL
+              </button>
+
+              <button
+                onClick={() => {
+                  if (autoTrade.wallet.address) navigator.clipboard.writeText(autoTrade.wallet.address);
+                }}
+                style={{
+                  background: 'rgba(220, 38, 38, 0.08)',
+                  border: '1px solid rgba(220, 38, 38, 0.2)',
+                  borderRadius: 5,
+                  padding: '6px 16px',
+                  cursor: 'pointer',
+                  color: THEME.primary,
+                  fontSize: 9,
+                  fontWeight: 700,
+                  fontFamily: FONT.display,
+                  letterSpacing: 1.5,
+                }}
+              >
+                DEPOSIT
+              </button>
+
+              <button
+                onClick={() => setShowSettings(true)}
+                style={{
+                  background: 'rgba(139, 92, 246, 0.08)',
+                  border: '1px solid rgba(139, 92, 246, 0.2)',
+                  borderRadius: 5,
+                  padding: '6px 16px',
+                  cursor: 'pointer',
+                  color: '#8B5CF6',
+                  fontSize: 9,
+                  fontWeight: 700,
+                  fontFamily: FONT.display,
+                  letterSpacing: 1.5,
+                }}
+              >
+                SETTINGS
+              </button>
+            </div>
+          </>
+        )}
+      </main>
+
+      {/* Footer */}
+      <footer
+        style={{
+          position: 'relative',
+          zIndex: 5,
+          textAlign: 'center',
+          padding: '12px 20px',
+          borderTop: '1px solid rgba(220, 38, 38, 0.05)',
+          color: THEME.textDark,
+          fontFamily: FONT.mono,
+          fontSize: 8,
+          letterSpacing: 2.5,
+        }}
+      >
+        ARGUS AI 2025 — app.argusguard.io — YELLOWSTONE gRPC | JUPITER V6 | BITNET ENGINE
+      </footer>
+
+      {/* Backup Modal */}
+      {showBackupModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 20 }}>
+          <Glass style={{ maxWidth: 420, width: '100%', padding: 24 }}>
+            <h2 style={{ fontFamily: FONT.display, fontSize: 18, fontWeight: 700, color: THEME.danger, marginBottom: 16, letterSpacing: 2 }}>
+              BACKUP YOUR WALLET
+            </h2>
+            <p style={{ color: THEME.textMuted, fontSize: 12, marginBottom: 16, fontFamily: FONT.body }}>
+              Save this private key securely. If you lose it, you lose access to any funds.
+            </p>
+
+            <div style={{ background: 'rgba(0,0,0,0.5)', border: `1px solid ${THEME.border}`, borderRadius: 6, padding: 12, marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <span style={{ fontSize: 9, color: THEME.textDark, fontFamily: FONT.mono, letterSpacing: 1 }}>PRIVATE KEY</span>
+                <button onClick={() => setShowKey(!showKey)} style={{ background: 'none', border: 'none', color: THEME.primary, fontSize: 10, cursor: 'pointer', fontFamily: FONT.mono }}>
+                  {showKey ? 'HIDE' : 'REVEAL'}
+                </button>
+              </div>
+              <code style={{ fontSize: 10, color: THEME.text, fontFamily: FONT.mono, wordBreak: 'break-all', display: 'block' }}>
+                {showKey ? newWalletKey : '•'.repeat(64)}
+              </code>
+            </div>
+
+            <button
+              onClick={handleCopyKey}
+              style={{
+                width: '100%',
+                padding: 12,
+                marginBottom: 12,
+                background: keyCopied ? 'rgba(34, 197, 94, 0.15)' : 'rgba(255,255,255,0.05)',
+                border: `1px solid ${keyCopied ? 'rgba(34, 197, 94, 0.3)' : 'rgba(255,255,255,0.1)'}`,
+                borderRadius: 6,
+                cursor: 'pointer',
+                color: keyCopied ? THEME.success : THEME.text,
+                fontFamily: FONT.display,
+                fontSize: 11,
+                fontWeight: 700,
+                letterSpacing: 2,
+              }}
+            >
+              {keyCopied ? '✓ COPIED' : 'COPY PRIVATE KEY'}
+            </button>
+
+            <button
+              onClick={handleBackupConfirm}
+              disabled={!keyCopied}
+              style={{
+                width: '100%',
+                padding: 14,
+                background: keyCopied ? 'linear-gradient(135deg, #DC2626, #991B1B)' : 'rgba(255,255,255,0.05)',
+                border: 'none',
+                borderRadius: 6,
+                cursor: keyCopied ? 'pointer' : 'not-allowed',
+                color: keyCopied ? '#fff' : THEME.textDark,
+                fontFamily: FONT.display,
+                fontSize: 12,
+                fontWeight: 700,
+                letterSpacing: 2,
+              }}
+            >
+              I HAVE SAVED MY KEY
+            </button>
+          </Glass>
+        </div>
+      )}
+
+      {/* Settings Modal */}
+      {showSettings && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 20 }}>
+          <Glass style={{ maxWidth: 500, width: '100%', overflow: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: `1px solid ${THEME.border}` }}>
+              <h2 style={{ fontFamily: FONT.display, fontSize: 14, fontWeight: 700, color: THEME.text, letterSpacing: 2 }}>SETTINGS</h2>
+              <button
+                onClick={() => { setShowSettings(false); setShowExportKey(false); setShowDeleteConfirm(false); }}
+                style={{ background: 'none', border: 'none', color: THEME.textMuted, fontSize: 18, cursor: 'pointer' }}
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Tabs */}
+            <div style={{ display: 'flex', borderBottom: `1px solid ${THEME.border}` }}>
+              <button
+                onClick={() => setSettingsTab('wallet')}
+                style={{
+                  flex: 1,
+                  padding: 12,
+                  background: 'none',
+                  border: 'none',
+                  borderBottom: settingsTab === 'wallet' ? `2px solid ${THEME.primary}` : '2px solid transparent',
+                  color: settingsTab === 'wallet' ? THEME.primary : THEME.textMuted,
+                  fontFamily: FONT.display,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  letterSpacing: 2,
+                  cursor: 'pointer',
+                }}
+              >
+                WALLET
+              </button>
+              <button
+                onClick={() => setSettingsTab('risk')}
+                style={{
+                  flex: 1,
+                  padding: 12,
+                  background: 'none',
+                  border: 'none',
+                  borderBottom: settingsTab === 'risk' ? `2px solid ${THEME.primary}` : '2px solid transparent',
+                  color: settingsTab === 'risk' ? THEME.primary : THEME.textMuted,
+                  fontFamily: FONT.display,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  letterSpacing: 2,
+                  cursor: 'pointer',
+                }}
+              >
+                RISK
+              </button>
+            </div>
+
+            <div style={{ padding: 18 }}>
+              {settingsTab === 'wallet' ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <div>
+                    <label style={{ fontSize: 9, color: THEME.textDark, fontFamily: FONT.mono, letterSpacing: 1 }}>WALLET NAME</label>
+                    <input
+                      type="text"
+                      value={walletName}
+                      onChange={e => handleSaveWalletName(e.target.value)}
+                      style={{
+                        width: '100%',
+                        marginTop: 6,
+                        padding: '10px 12px',
+                        background: 'rgba(0,0,0,0.4)',
+                        border: `1px solid ${THEME.border}`,
+                        borderRadius: 6,
+                        color: THEME.text,
+                        fontFamily: FONT.mono,
+                        fontSize: 12,
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: 9, color: THEME.textDark, fontFamily: FONT.mono, letterSpacing: 1 }}>ADDRESS</label>
+                    <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                      <code
+                        style={{
+                          flex: 1,
+                          padding: '10px 12px',
+                          background: 'rgba(0,0,0,0.4)',
+                          border: `1px solid ${THEME.border}`,
+                          borderRadius: 6,
+                          color: THEME.textMuted,
+                          fontFamily: FONT.mono,
+                          fontSize: 10,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                      >
+                        {autoTrade.wallet.address}
+                      </code>
+                      <button
+                        onClick={() => navigator.clipboard.writeText(autoTrade.wallet.address || '')}
+                        style={{
+                          padding: '10px 14px',
+                          background: 'rgba(0,0,0,0.4)',
+                          border: `1px solid ${THEME.border}`,
+                          borderRadius: 6,
+                          color: THEME.textMuted,
+                          cursor: 'pointer',
+                          fontSize: 12,
+                        }}
+                      >
+                        📋
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: 9, color: THEME.textDark, fontFamily: FONT.mono, letterSpacing: 1 }}>BALANCE</label>
+                    <div
+                      style={{
+                        marginTop: 6,
+                        padding: '10px 12px',
+                        background: 'rgba(0,0,0,0.4)',
+                        border: `1px solid ${THEME.border}`,
+                        borderRadius: 6,
+                        color: THEME.success,
+                        fontFamily: FONT.mono,
+                        fontSize: 14,
+                        fontWeight: 700,
+                      }}
+                    >
+                      {autoTrade.wallet.balance.toFixed(4)} SOL
+                    </div>
+                  </div>
+
+                  {showExportKey ? (
+                    <div style={{ background: 'rgba(220, 38, 38, 0.05)', border: `1px solid ${THEME.primary}30`, borderRadius: 6, padding: 12 }}>
+                      <label style={{ fontSize: 9, color: THEME.danger, fontFamily: FONT.mono, letterSpacing: 1 }}>PRIVATE KEY</label>
+                      <code style={{ display: 'block', marginTop: 8, padding: 10, background: 'rgba(0,0,0,0.4)', borderRadius: 4, fontSize: 9, color: THEME.text, fontFamily: FONT.mono, wordBreak: 'break-all' }}>
+                        {exportedKey}
+                      </code>
+                      <button
+                        onClick={() => navigator.clipboard.writeText(exportedKey)}
+                        style={{
+                          marginTop: 10,
+                          width: '100%',
+                          padding: 10,
+                          background: THEME.primary,
+                          border: 'none',
+                          borderRadius: 5,
+                          color: '#fff',
+                          fontFamily: FONT.display,
+                          fontSize: 10,
+                          fontWeight: 700,
+                          letterSpacing: 1.5,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        COPY KEY
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={handleExportKey}
+                      style={{
+                        padding: 12,
+                        background: 'rgba(255,255,255,0.03)',
+                        border: `1px solid ${THEME.border}`,
+                        borderRadius: 6,
+                        color: THEME.textMuted,
+                        fontFamily: FONT.display,
+                        fontSize: 10,
+                        fontWeight: 700,
+                        letterSpacing: 1.5,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      EXPORT PRIVATE KEY
+                    </button>
+                  )}
+
+                  {showDeleteConfirm ? (
+                    <div style={{ background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: 6, padding: 12 }}>
+                      <p style={{ color: THEME.danger, fontSize: 11, marginBottom: 12, fontFamily: FONT.body }}>This will permanently delete your wallet!</p>
+                      <div style={{ display: 'flex', gap: 10 }}>
+                        <button
+                          onClick={() => setShowDeleteConfirm(false)}
+                          style={{ flex: 1, padding: 10, background: 'rgba(255,255,255,0.05)', border: 'none', borderRadius: 5, color: THEME.textMuted, cursor: 'pointer', fontFamily: FONT.display, fontSize: 10, fontWeight: 700 }}
+                        >
+                          CANCEL
+                        </button>
+                        <button
+                          onClick={handleDeleteWallet}
+                          style={{ flex: 1, padding: 10, background: THEME.danger, border: 'none', borderRadius: 5, color: '#fff', cursor: 'pointer', fontFamily: FONT.display, fontSize: 10, fontWeight: 700 }}
+                        >
+                          DELETE
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setShowDeleteConfirm(true)}
+                      style={{
+                        padding: 12,
+                        background: 'transparent',
+                        border: '1px solid rgba(239, 68, 68, 0.3)',
+                        borderRadius: 6,
+                        color: THEME.danger,
+                        fontFamily: FONT.display,
+                        fontSize: 10,
+                        fontWeight: 700,
+                        letterSpacing: 1.5,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      DELETE WALLET
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div>
+                      <label style={{ fontSize: 9, color: THEME.textDark, fontFamily: FONT.mono, letterSpacing: 1 }}>POSITION SIZE (SOL)</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0.01"
+                        value={maxPositionSize}
+                        onChange={e => setMaxPositionSize(parseFloat(e.target.value) || 0.1)}
+                        style={{
+                          width: '100%',
+                          marginTop: 6,
+                          padding: '10px 12px',
+                          background: 'rgba(0,0,0,0.4)',
+                          border: `1px solid ${THEME.border}`,
+                          borderRadius: 6,
+                          color: THEME.text,
+                          fontFamily: FONT.mono,
+                          fontSize: 12,
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 9, color: THEME.textDark, fontFamily: FONT.mono, letterSpacing: 1 }}>RESERVE (SOL)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        value={reserveBalanceSol}
+                        onChange={e => setReserveBalanceSol(parseFloat(e.target.value) || 0.05)}
+                        style={{
+                          width: '100%',
+                          marginTop: 6,
+                          padding: '10px 12px',
+                          background: 'rgba(0,0,0,0.4)',
+                          border: `1px solid ${THEME.border}`,
+                          borderRadius: 6,
+                          color: THEME.text,
+                          fontFamily: FONT.mono,
+                          fontSize: 12,
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ borderTop: `1px solid ${THEME.border}`, paddingTop: 14 }}>
+                    <div style={{ fontSize: 10, color: THEME.primary, fontFamily: FONT.display, fontWeight: 700, letterSpacing: 1.5, marginBottom: 12 }}>
+                      AUTO-SELL RULES
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+                      <div>
+                        <label style={{ fontSize: 9, color: THEME.textDark, fontFamily: FONT.mono, letterSpacing: 1 }}>STOP LOSS</label>
+                        <div style={{ display: 'flex', marginTop: 6 }}>
+                          <input
+                            type="number"
+                            value={stopLossPercent}
+                            onChange={e => setStopLossPercent(parseInt(e.target.value) || 30)}
+                            style={{
+                              flex: 1,
+                              padding: '10px 12px',
+                              background: 'rgba(0,0,0,0.4)',
+                              border: `1px solid ${THEME.border}`,
+                              borderRadius: '6px 0 0 6px',
+                              color: THEME.text,
+                              fontFamily: FONT.mono,
+                              fontSize: 12,
+                            }}
+                          />
+                          <span style={{ padding: '10px 12px', background: 'rgba(0,0,0,0.6)', border: `1px solid ${THEME.border}`, borderLeft: 'none', borderRadius: '0 6px 6px 0', color: THEME.textMuted, fontFamily: FONT.mono, fontSize: 12 }}>%</span>
+                        </div>
+                        <div style={{ fontSize: 8, color: THEME.danger, marginTop: 4, fontFamily: FONT.mono }}>Sell if down</div>
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 9, color: THEME.textDark, fontFamily: FONT.mono, letterSpacing: 1 }}>TAKE PROFIT</label>
+                        <div style={{ display: 'flex', marginTop: 6 }}>
+                          <input
+                            type="number"
+                            value={takeProfitPercent}
+                            onChange={e => setTakeProfitPercent(parseInt(e.target.value) || 100)}
+                            style={{
+                              flex: 1,
+                              padding: '10px 12px',
+                              background: 'rgba(0,0,0,0.4)',
+                              border: `1px solid ${THEME.border}`,
+                              borderRadius: '6px 0 0 6px',
+                              color: THEME.text,
+                              fontFamily: FONT.mono,
+                              fontSize: 12,
+                            }}
+                          />
+                          <span style={{ padding: '10px 12px', background: 'rgba(0,0,0,0.6)', border: `1px solid ${THEME.border}`, borderLeft: 'none', borderRadius: '0 6px 6px 0', color: THEME.textMuted, fontFamily: FONT.mono, fontSize: 12 }}>%</span>
+                        </div>
+                        <div style={{ fontSize: 8, color: THEME.success, marginTop: 4, fontFamily: FONT.mono }}>Sell if up</div>
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 9, color: THEME.textDark, fontFamily: FONT.mono, letterSpacing: 1 }}>TRAILING</label>
+                        <div style={{ display: 'flex', marginTop: 6 }}>
+                          <input
+                            type="number"
+                            value={trailingStopPercent}
+                            onChange={e => setTrailingStopPercent(parseInt(e.target.value) || 0)}
+                            style={{
+                              flex: 1,
+                              padding: '10px 12px',
+                              background: 'rgba(0,0,0,0.4)',
+                              border: `1px solid ${THEME.border}`,
+                              borderRadius: '6px 0 0 6px',
+                              color: THEME.text,
+                              fontFamily: FONT.mono,
+                              fontSize: 12,
+                            }}
+                          />
+                          <span style={{ padding: '10px 12px', background: 'rgba(0,0,0,0.6)', border: `1px solid ${THEME.border}`, borderLeft: 'none', borderRadius: '0 6px 6px 0', color: THEME.textMuted, fontFamily: FONT.mono, fontSize: 12 }}>%</span>
+                        </div>
+                        <div style={{ fontSize: 8, color: THEME.warning, marginTop: 4, fontFamily: FONT.mono }}>From peak</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ background: 'rgba(0,0,0,0.3)', border: `1px solid ${THEME.border}`, borderRadius: 6, padding: 12, fontSize: 10, color: THEME.textMuted, fontFamily: FONT.body }}>
+                    <strong style={{ color: THEME.text }}>How trailing stop works:</strong> If position hits +50% and trailing is 20%, it will sell if price drops to +30% from entry.
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      autoTrade.updateConfig({
+                        buyAmountSol: maxPositionSize,
+                        reserveBalanceSol,
+                        stopLossPercent,
+                        takeProfitPercent,
+                        trailingStopPercent,
+                      });
+                      setShowSettings(false);
+                    }}
+                    style={{
+                      padding: 14,
+                      background: 'linear-gradient(135deg, #DC2626, #991B1B)',
+                      border: 'none',
+                      borderRadius: 6,
+                      color: '#fff',
+                      fontFamily: FONT.display,
+                      fontSize: 11,
+                      fontWeight: 700,
+                      letterSpacing: 2,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    SAVE SETTINGS
+                  </button>
+                </div>
+              )}
+            </div>
+          </Glass>
+        </div>
+      )}
+    </div>
+  );
+}

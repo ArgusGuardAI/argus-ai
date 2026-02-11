@@ -29,9 +29,9 @@ interface DexPair {
   baseToken: { address: string; name: string; symbol: string };
   priceUsd: string;
   liquidity?: { usd: number };
-  volume?: { h24: number };
-  priceChange?: { h24: number };
-  txns?: { h24: { buys: number; sells: number } };
+  volume?: { h24: number; m5?: number };
+  priceChange?: { h24: number; h1?: number; m5?: number };
+  txns?: { h24: { buys: number; sells: number }; h1?: { buys: number; sells: number }; m5?: { buys: number; sells: number } };
   pairCreatedAt?: number;
   fdv?: number;
 }
@@ -52,6 +52,20 @@ interface Prediction {
     volume24h: number;
     priceUsd: number;
     ageHours: number;
+    priceChange5m?: number;
+    priceChange1h?: number;
+    buys5m?: number;
+    sells5m?: number;
+  };
+  // NEW: Creator and holder tracking
+  creatorData?: {
+    creatorAddress?: string;
+    creatorHoldsPercent?: number;
+    top10Concentration?: number;
+    holderCount?: number;
+    mintAuthorityDisabled?: boolean;
+    freezeAuthorityDisabled?: boolean;
+    lpLocked?: boolean;
   };
   outcomeChecked: boolean;
   outcome?: {
@@ -284,6 +298,64 @@ async function fetchToken(address: string): Promise<DexPair | null> {
   }
 }
 
+// Fetch creator and holder data from RugCheck
+interface RugCheckData {
+  creatorAddress?: string;
+  creatorHoldsPercent?: number;
+  top10Concentration?: number;
+  holderCount?: number;
+  mintAuthorityDisabled?: boolean;
+  freezeAuthorityDisabled?: boolean;
+  lpLocked?: boolean;
+}
+
+async function fetchRugCheckData(address: string): Promise<RugCheckData | null> {
+  try {
+    // Use full /report endpoint (not /report/summary which doesn't have creator data)
+    const response = await fetch(`https://api.rugcheck.xyz/v1/tokens/${address}/report`);
+    if (!response.ok) return null;
+    const data = await response.json() as {
+      creator?: string;
+      creatorBalance?: number;
+      token?: { supply?: number; decimals?: number };
+      topHolders?: Array<{ pct: number }>;
+      totalHolders?: number;
+      markets?: Array<{ lp?: { lpLocked?: number } }>;
+      risks?: Array<{ name: string }>;
+      mintAuthority?: string;
+      freezeAuthority?: string;
+    };
+
+    // Calculate creator holdings percentage
+    let creatorHoldsPercent = 0;
+    if (data.creatorBalance && data.token?.supply && data.token.supply > 0) {
+      // RugCheck returns balance in raw units, supply in raw units
+      creatorHoldsPercent = (data.creatorBalance / data.token.supply) * 100;
+    }
+
+    // Calculate top 10 concentration
+    let top10Concentration = 0;
+    if (data.topHolders && data.topHolders.length > 0) {
+      top10Concentration = data.topHolders.slice(0, 10).reduce((sum, h) => sum + (h.pct || 0), 0);
+    }
+
+    // Check LP lock
+    const lpLocked = data.markets?.some(m => m.lp?.lpLocked && m.lp.lpLocked > 0) || false;
+
+    return {
+      creatorAddress: data.creator,
+      creatorHoldsPercent,
+      top10Concentration,
+      holderCount: data.totalHolders || data.topHolders?.length || 0,
+      mintAuthorityDisabled: !data.mintAuthority || data.mintAuthority === '11111111111111111111111111111111',
+      freezeAuthorityDisabled: !data.freezeAuthority || data.freezeAuthority === '11111111111111111111111111111111',
+      lpLocked,
+    };
+  } catch {
+    return null;
+  }
+}
+
 // Fetch latest tokens
 async function fetchLatestTokens(): Promise<DexPair[]> {
   const pairs: DexPair[] = [];
@@ -415,6 +487,34 @@ function showStats(): void {
       console.log(`    ${status} ${p.symbol.padEnd(12)} ${p.prediction.score}/100 ${p.prediction.level.padEnd(10)} → ${outcome} (${age}h ago)`);
     }
   }
+
+  // Show creator analysis (for tokens with creator data)
+  const withCreatorData = predictions.filter(p => p.creatorData?.creatorAddress && p.outcomeChecked && p.outcome);
+  if (withCreatorData.length > 0) {
+    // Group by creator
+    const creatorStats = new Map<string, { total: number; rugs: number }>();
+    for (const p of withCreatorData) {
+      const creator = p.creatorData!.creatorAddress!;
+      const existing = creatorStats.get(creator) || { total: 0, rugs: 0 };
+      existing.total++;
+      if (p.outcome?.isRug) existing.rugs++;
+      creatorStats.set(creator, existing);
+    }
+
+    // Find repeat offenders (creators with multiple rugs)
+    const repeatOffenders = Array.from(creatorStats.entries())
+      .filter(([_, s]) => s.rugs >= 2)
+      .sort((a, b) => b[1].rugs - a[1].rugs);
+
+    if (repeatOffenders.length > 0) {
+      console.log('');
+      console.log('  Repeat Rug Creators (2+ rugs):');
+      console.log('  ─────────────────────────────────────');
+      for (const [creator, stats] of repeatOffenders.slice(0, 5)) {
+        console.log(`    ${creator.slice(0, 8)}... ${stats.rugs}/${stats.total} rugged (${((stats.rugs / stats.total) * 100).toFixed(0)}%)`);
+      }
+    }
+  }
   console.log('');
 }
 
@@ -461,6 +561,17 @@ async function monitor(): Promise<void> {
 
       const { score, level } = predict(token);
 
+      // Fetch creator and holder data from RugCheck (async, but don't block)
+      let creatorData: RugCheckData | undefined;
+      try {
+        const rugData = await fetchRugCheckData(token.baseToken.address);
+        if (rugData) {
+          creatorData = rugData;
+        }
+      } catch {
+        // RugCheck fetch failed, continue without creator data
+      }
+
       const prediction: Prediction = {
         id: `${token.baseToken.address}-${Date.now()}`,
         tokenAddress: token.baseToken.address,
@@ -476,15 +587,24 @@ async function monitor(): Promise<void> {
           liquidity: token.liquidity?.usd || 0,
           volume24h: token.volume?.h24 || 0,
           priceUsd: parseFloat(token.priceUsd) || 0,
-          ageHours
+          ageHours,
+          priceChange5m: token.priceChange?.m5 || 0,
+          priceChange1h: token.priceChange?.h1 || 0,
+          buys5m: token.txns?.m5?.buys || 0,
+          sells5m: token.txns?.m5?.sells || 0
         },
+        creatorData, // NEW: creator and holder tracking
         outcomeChecked: false
       };
 
       savePrediction(prediction);
 
       const riskIcon = score >= 80 ? '🔴' : score >= 60 ? '🟠' : score >= 40 ? '🟡' : '🟢';
-      console.log(`  ${riskIcon} ${token.baseToken.symbol.padEnd(12)} ${score}/100 ${level.padEnd(10)} liq:$${(token.liquidity?.usd || 0).toFixed(0)} age:${ageHours.toFixed(1)}h`);
+      const creatorInfo = creatorData?.creatorAddress ? ` creator:${creatorData.creatorAddress.slice(0, 6)}` : '';
+      console.log(`  ${riskIcon} ${token.baseToken.symbol.padEnd(12)} ${score}/100 ${level.padEnd(10)} liq:$${(token.liquidity?.usd || 0).toFixed(0)} age:${ageHours.toFixed(1)}h${creatorInfo}`);
+
+      // Small delay to respect RugCheck rate limits
+      await new Promise(r => setTimeout(r, 150));
     }
 
     // Check outcomes every 5 cycles

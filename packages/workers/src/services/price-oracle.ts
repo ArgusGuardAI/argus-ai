@@ -39,7 +39,11 @@ export async function getSolPrice(rpcEndpoint?: string): Promise<number> {
     return solPriceCache.price;
   }
 
-  const endpoint = rpcEndpoint || 'https://api.mainnet-beta.solana.com';
+  if (!rpcEndpoint) {
+    console.warn('[PriceOracle] No RPC endpoint provided, using cached price');
+    return solPriceCache?.price || 200;
+  }
+  const endpoint = rpcEndpoint;
 
   try {
     // Fetch both vault balances in parallel

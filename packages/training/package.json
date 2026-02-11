@@ -8,10 +8,19 @@
     "export": "npx tsx scripts/export-data.ts",
     "evaluate": "npx tsx scripts/evaluate.ts",
     "train": "npx tsx scripts/train.ts",
-    "collect-outcomes": "npx tsx scripts/collect-outcomes.ts"
+    "collect-outcomes": "npx tsx scripts/collect-outcomes.ts",
+    "collect": "npx tsx scripts/mass-collect.ts",
+    "collect:fetch": "npx tsx scripts/mass-collect.ts --mode=fetch",
+    "collect:outcomes": "npx tsx scripts/mass-collect.ts --mode=outcomes",
+    "collect:loop": "npx tsx scripts/mass-collect.ts --mode=loop",
+    "collect:stats": "npx tsx scripts/mass-collect.ts --mode=stats",
+    "find-rugs": "npx tsx scripts/find-rugs.ts",
+    "backfill-historical": "npx tsx scripts/backfill-historical.ts",
+    "weekly-retrain": "./scripts/weekly-retrain.sh"
   },
   "dependencies": {
-    "commander": "^12.0.0"
+    "commander": "^12.0.0",
+    "dotenv": "^16.4.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

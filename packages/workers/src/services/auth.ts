@@ -10,11 +10,8 @@ import bs58 from 'bs58';
 
 // ArgusGuard token configuration
 const REQUIRED_BALANCE = 1000; // Minimum tokens required for premium features
-const SOLANA_RPC_URL = 'https://api.mainnet-beta.solana.com';
 
-function getHeliusRpcUrl(apiKey: string): string {
-  return `https://mainnet.helius-rpc.com/?api-key=${apiKey}`;
-}
+// YOUR OWN NODE - pass SOLANA_RPC_URL to functions that need it
 
 /**
  * Verify a wallet signature to prove ownership
@@ -79,10 +76,13 @@ export async function checkTokenBalance(
   walletAddress: string,
   mintAddress: string,
   requiredBalance: number = REQUIRED_BALANCE,
-  heliusApiKey?: string
+  rpcUrl?: string
 ): Promise<{ hasBalance: boolean; balance: number }> {
+  if (!rpcUrl) {
+    console.warn('[Auth] No RPC URL provided for token balance check');
+    return { hasBalance: false, balance: 0 };
+  }
   try {
-    const rpcUrl = heliusApiKey ? getHeliusRpcUrl(heliusApiKey) : SOLANA_RPC_URL;
 
     // Get token accounts for the wallet
     const response = await fetch(rpcUrl, {
@@ -165,14 +165,14 @@ export async function authenticateUser(
     requireTokens?: boolean;
     mintAddress?: string;
     requiredBalance?: number;
-    heliusApiKey?: string;
+    rpcUrl?: string;
   } = {}
 ): Promise<AuthResult> {
   const {
     requireTokens = true,
     mintAddress,
     requiredBalance = REQUIRED_BALANCE,
-    heliusApiKey,
+    rpcUrl,
   } = options;
 
   // Step 1: Verify signature
@@ -204,7 +204,7 @@ export async function authenticateUser(
       walletAddress,
       mintAddress,
       requiredBalance,
-      heliusApiKey
+      rpcUrl
     );
 
     if (!hasBalance) {

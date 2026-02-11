@@ -10,10 +10,8 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { useAutoTrade } from './hooks/useAutoTrade';
 import { TerminalDashboard } from './components/terminal';
 
-// API configuration
-const API_URL = window.location.hostname === 'localhost'
-  ? 'http://localhost:8787'
-  : 'https://argusguard-api.hermosillo-jessie.workers.dev';
+// API configuration - always use production for now
+const API_URL = 'https://argusguard-api.hermosillo-jessie.workers.dev';
 
 // Store last analysis for buy/sell
 let lastAnalysis: TerminalAnalysisResult | null = null;

@@ -47,6 +47,7 @@ export interface AlertManagerConfig {
   telegramChannelId?: string;
   minSeverityForTelegram?: 'info' | 'warning' | 'critical';
   enableConsoleAlerts?: boolean;
+  ollamaEndpoint?: string; // e.g., http://144.XX.XX.XXX:11434
 }
 
 /**
@@ -102,6 +103,75 @@ export class AlertManager {
   }
 
   /**
+   * Generate natural dialogue via LLM (Ollama)
+   * Falls back to simple message if LLM unavailable
+   */
+  private async generateLLMDialogue(
+    agent: string,
+    event: string,
+    data: Record<string, unknown>
+  ): Promise<string> {
+    const ollamaUrl = this.config.ollamaEndpoint || process.env.OLLAMA_ENDPOINT || 'http://144.XX.XX.XXX:8899';
+
+    // Fallback message in case LLM fails
+    const symbol = data.symbol || data.token || 'token';
+    const dex = String(data.dex || 'DEX').replace('_', ' ');
+    const liq = data.liquidity ? ` ${Number(data.liquidity).toFixed(1)} SOL liq.` : '';
+    const fallback = `Detected ${symbol} on ${dex}.${liq}`;
+
+    try {
+      const prompt = `You are SCOUT, an AI agent monitoring Solana for new token launches. Generate a BRIEF status update (10-15 words max) about detecting a new token.
+
+DATA:
+- Token: ${data.symbol || data.token || 'unknown'}
+- DEX: ${data.dex}
+- Liquidity: ${data.liquidity ? data.liquidity + ' SOL' : 'unknown'}
+- Event type: ${event}
+
+Rules:
+- Natural, conversational tone
+- Reference specific data (symbol, DEX, liquidity)
+- No emojis
+- Examples of good responses:
+  - "Spotted PEPE on Raydium. 45 SOL liquidity. Running scan."
+  - "New pump.fun launch: DOGE. Checking curve status."
+  - "Fresh pool on Meteora: ABC with 120 SOL. Analyzing."
+
+Respond with ONLY the message text, nothing else.`;
+
+      const response = await fetch(`${ollamaUrl}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'qwen3:8b',
+          prompt,
+          stream: false,
+          think: false, // Disable thinking mode for fast response
+          options: { temperature: 0.7, num_predict: 100 },
+        }),
+        signal: AbortSignal.timeout(15000), // 15s timeout
+      });
+
+      if (!response.ok) {
+        return fallback;
+      }
+
+      const result = await response.json() as { response?: string };
+      const generated = result.response?.trim();
+
+      // Use generated if valid, otherwise fallback
+      if (generated && generated.length > 5 && generated.length < 150) {
+        return generated;
+      }
+
+      return fallback;
+    } catch {
+      // LLM unavailable, use fallback
+      return fallback;
+    }
+  }
+
+  /**
    * Send pool discovery event to Workers API + local file (for agents)
    * This feeds the dashboard activity feed AND the Scout agent
    * Detection only - no analysis data
@@ -127,11 +197,14 @@ export class AlertManager {
     this.lastApiCallTime = now;
 
     try {
-      const isPumpFun = event.dex === 'PUMP_FUN';
-
-      const message = isPumpFun
-        ? `New pump.fun token: ${event.baseMint?.slice(0, 8)}...`
-        : `New ${event.dex} pool: ${event.baseMint?.slice(0, 8)}...`;
+      // Generate natural dialogue via LLM (async, non-blocking)
+      const message = await this.generateLLMDialogue('scout', 'pool_detected', {
+        token: event.baseMint?.slice(0, 8),
+        symbol: event.tokenSymbol,
+        dex: event.dex,
+        liquidity: event.enrichedData?.liquiditySol,
+        type: event.type,
+      });
 
       // Fire and forget - don't await the response
       fetch(`${this.config.workersApiUrl}/agents/command`, {
@@ -198,6 +271,19 @@ export class AlertManager {
         poolAddress: event.poolAddress,
         type: event.type || 'new_pool',
         timestamp: Date.now(),
+        slot: event.slot,
+        // Token metadata from Yellowstone Metaplex stream (NO RPC!)
+        tokenName: event.tokenName || null,
+        tokenSymbol: event.tokenSymbol || null,
+        // Enriched data from Yellowstone - no RPC needed!
+        liquiditySol: event.enrichedData?.liquiditySol,
+        tokenSupply: event.enrichedData?.tokenSupply,
+        realSolReserves: event.enrichedData?.realSolReserves,
+        realTokenReserves: event.enrichedData?.realTokenReserves,
+        complete: event.enrichedData?.complete,
+        // Graduation data
+        graduatedFrom: event.graduatedFrom,
+        bondingCurveTime: event.bondingCurveTime,
       }) + '\n';
 
       await fs.appendFile(AlertManager.POOL_EVENTS_FILE, entry);
@@ -221,7 +307,14 @@ export class AlertManager {
         ? Math.round(event.bondingCurveTime / 1000 / 60)
         : 0;
 
-      const message = `🎓 Graduated: ${event.baseMint?.slice(0, 8)}... (${bondingMinutes}min on curve)`;
+      // Generate natural dialogue via LLM
+      const message = await this.generateLLMDialogue('scout', 'graduation', {
+        token: event.baseMint?.slice(0, 8),
+        symbol: event.tokenSymbol,
+        dex: event.dex,
+        bondingMinutes,
+        graduatedFrom: event.graduatedFrom,
+      });
 
       const response = await fetch(`${this.config.workersApiUrl}/agents/command`, {
         method: 'POST',

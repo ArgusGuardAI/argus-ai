@@ -19,16 +19,13 @@ import { DataProvider, createDataProvider } from '../services/data-provider';
 const onchainRoutes = new Hono<{ Bindings: Bindings }>();
 
 /**
- * Helper to get RPC endpoint
+ * Helper to get RPC endpoint - YOUR OWN NODE ONLY
  */
 function getRpcEndpoint(env: Bindings): string {
-  if (env.SOLANA_RPC_URL) {
-    return env.SOLANA_RPC_URL;
+  if (!env.SOLANA_RPC_URL) {
+    throw new Error('SOLANA_RPC_URL not configured');
   }
-  if (env.HELIUS_API_KEY) {
-    return `https://mainnet.helius-rpc.com/?api-key=${env.HELIUS_API_KEY}`;
-  }
-  return 'https://api.mainnet-beta.solana.com';
+  return env.SOLANA_RPC_URL;
 }
 
 /**

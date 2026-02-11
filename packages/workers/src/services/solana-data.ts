@@ -3,11 +3,7 @@
  * Fetches on-chain data for comprehensive token analysis
  */
 
-const SOLANA_RPC_URL = 'https://api.mainnet-beta.solana.com';
-
-function getHeliusRpcUrl(apiKey: string): string {
-  return `https://mainnet.helius-rpc.com/?api-key=${apiKey}`;
-}
+// YOUR OWN NODE - pass rpcUrl to functions that need it
 
 export interface TokenOnChainData {
   // Token metadata
@@ -78,12 +74,12 @@ export interface BundleInfo {
  */
 export async function fetchTokenData(
   tokenAddress: string,
-  heliusApiKey?: string,
+  rpcUrl: string,
   knownLpAddresses?: string[]
 ): Promise<TokenOnChainData> {
-  const rpcUrl = heliusApiKey
-    ? getHeliusRpcUrl(heliusApiKey)
-    : SOLANA_RPC_URL;
+  if (!rpcUrl) {
+    throw new Error('SOLANA_RPC_URL must be provided');
+  }
 
   // Fetch token info first to get total supply
   const tokenInfo = await fetchTokenInfo(tokenAddress, rpcUrl);

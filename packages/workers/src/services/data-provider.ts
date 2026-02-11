@@ -10,7 +10,7 @@
  */
 
 import { OnChainAnalyzer, type OnChainAnalysis, type TokenHolder } from './onchain-analyzer';
-import { fetchDexScreenerData } from './dexscreener';
+// DexScreener removed — all data comes from on-chain sources
 
 // ============================================
 // INTERFACES
@@ -100,7 +100,8 @@ export interface BundleData {
 
 export class DataProvider {
   private mode: DataProviderMode;
-  private onChain: OnChainAnalyzer;
+  private onChain: OnChainAnalyzer | null = null;
+  private rpcEndpoint?: string;
 
   constructor(
     mode: DataProviderMode = 'HYBRID',
@@ -108,14 +109,24 @@ export class DataProvider {
     _heliusKey?: string // Reserved for future Helius-specific features
   ) {
     this.mode = mode;
-    this.onChain = new OnChainAnalyzer(rpcEndpoint);
+    this.rpcEndpoint = rpcEndpoint;
+    if (rpcEndpoint) {
+      this.onChain = new OnChainAnalyzer(rpcEndpoint);
+    }
+  }
+
+  private getOnChainAnalyzer(): OnChainAnalyzer {
+    if (!this.onChain) {
+      throw new Error('SOLANA_RPC_URL not configured - cannot perform on-chain analysis');
+    }
+    return this.onChain;
   }
 
   /**
    * Set SOL price for USD calculations
    */
   setSolPrice(price: number) {
-    this.onChain.setSolPrice(price);
+    this.getOnChainAnalyzer().setSolPrice(price);
   }
 
   /**
@@ -146,51 +157,23 @@ export class DataProvider {
   private async fetchOnChain(tokenAddress: string, start: number): Promise<TokenData> {
     console.log('[DataProvider] Using ON_CHAIN mode');
 
-    const analysis = await this.onChain.analyze(tokenAddress);
+    const analysis = await this.getOnChainAnalyzer().analyze(tokenAddress);
 
     return this.convertOnChainToTokenData(analysis, start, 'ON_CHAIN');
   }
 
   // ============================================
-  // HYBRID MODE (On-chain + DexScreener for price)
+  // HYBRID MODE (Now pure on-chain, kept for backwards compatibility)
+  // Previously used DexScreener for price — now uses on-chain pool data
   // ============================================
 
   private async fetchHybrid(tokenAddress: string, start: number): Promise<TokenData> {
-    console.log('[DataProvider] Using HYBRID mode');
+    console.log('[DataProvider] Using HYBRID mode (pure on-chain)');
 
-    // Parallel fetch: on-chain + DexScreener
-    const [analysis, dexData] = await Promise.all([
-      this.onChain.analyze(tokenAddress),
-      fetchDexScreenerData(tokenAddress).catch(() => null),
-    ]);
+    // Pure on-chain analysis — no external APIs
+    const analysis = await this.getOnChainAnalyzer().analyze(tokenAddress);
 
-    // Merge data, preferring DexScreener for market data
     const tokenData = this.convertOnChainToTokenData(analysis, start, 'HYBRID');
-
-    if (dexData) {
-      // Override with more accurate DexScreener data
-      tokenData.price = dexData.priceUsd ?? tokenData.price;
-      tokenData.marketCap = dexData.marketCap ?? tokenData.marketCap;
-      tokenData.liquidity = dexData.liquidityUsd ?? tokenData.liquidity;
-      tokenData.volume24h = dexData.volume24h ?? tokenData.volume24h;
-      tokenData.priceChange24h = dexData.priceChange24h;
-      tokenData.txns24h = dexData.txns24h ?? tokenData.txns24h;
-      tokenData.txns1h = dexData.txns1h;
-      tokenData.txns5m = dexData.txns5m;
-      tokenData.pairAddress = dexData.pairAddress;
-
-      // DexScreener age is more reliable
-      if (dexData.pairCreatedAt) {
-        const ageHours = (Date.now() - dexData.pairCreatedAt) / (1000 * 60 * 60);
-        tokenData.ageHours = Math.round(ageHours * 10) / 10;
-        tokenData.age = Math.floor(ageHours / 24);
-      }
-
-      // Use DexScreener name/symbol if available
-      if (dexData.name) tokenData.name = dexData.name;
-      if (dexData.symbol) tokenData.symbol = dexData.symbol;
-    }
-
     tokenData.fetchDuration = Date.now() - start;
     return tokenData;
   }
@@ -315,23 +298,22 @@ export class DataProvider {
 
 /**
  * Create a data provider based on environment config
+ *
+ * YOUR OWN NODE ONLY - NO THIRD PARTY APIS
  */
 export function createDataProvider(
   env: {
     DATA_PROVIDER_MODE?: string;
-    HELIUS_API_KEY?: string;
     SOLANA_RPC_URL?: string;
   }
 ): DataProvider {
   const mode = (env.DATA_PROVIDER_MODE || 'HYBRID') as DataProviderMode;
 
-  // Use Helius RPC if available, otherwise public
-  const rpcEndpoint = env.HELIUS_API_KEY
-    ? `https://mainnet.helius-rpc.com/?api-key=${env.HELIUS_API_KEY}`
-    : env.SOLANA_RPC_URL || undefined;
+  if (!env.SOLANA_RPC_URL) {
+    console.error('[DataProvider] ERROR: SOLANA_RPC_URL not set! No RPC available.');
+  }
 
-  return new DataProvider(mode, rpcEndpoint, env.HELIUS_API_KEY);
+  return new DataProvider(mode, env.SOLANA_RPC_URL);
 }
 
-// Default instance
-export const dataProvider = new DataProvider('HYBRID');
+// NOTE: No default instance - must provide SOLANA_RPC_URL

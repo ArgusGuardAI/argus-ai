@@ -33,6 +33,7 @@
   "author": "Argus AI",
   "license": "MIT",
   "dependencies": {
+    "@argus/monitor": "workspace:^",
     "@solana/web3.js": "^1.87.6",
     "bs58": "^6.0.0",
     "dotenv": "^17.2.3",

@@ -107,7 +107,7 @@ const DEFAULT_CONFIG: AutoTradeConfig = {
   // SELL DEFAULTS
   autoSellEnabled: true,   // Auto-sell ON by default
   takeProfitPercent: 100,  // Sell at 2x (100% profit)
-  stopLossPercent: 30,     // Sell if down 30%
+  stopLossPercent: 15,     // Sell if down 15% (tighter based on dry-run data)
   trailingStopPercent: 20, // Trailing stop at 20% from peak
 };
 
@@ -816,17 +816,14 @@ export function useAutoTrade(
 
     // TIERED POSITION SIZING based on risk score
     // Lower score = safer = bigger position
+    // Skip 60+ entirely (too risky based on dry-run data)
     let adjustedBuyAmount = currentConfig.buyAmountSol;
     let positionTier = 'FULL';
 
-    if (riskScore >= 80) {
-      // High risk - never buy
+    if (riskScore >= 60) {
+      // Medium-high to high risk - skip entirely
       log(`BLOCKED: ${tokenSymbol} score ${riskScore}/100 too risky - skipping!`, 'warning');
-      return { success: false, error: `Risk score ${riskScore} too high (max 80)` };
-    } else if (riskScore >= 60) {
-      // Medium-high risk - quarter position
-      adjustedBuyAmount = currentConfig.buyAmountSol * 0.25;
-      positionTier = 'QUARTER';
+      return { success: false, error: `Risk score ${riskScore} too high (max 60)` };
     } else if (riskScore >= 40) {
       // Medium risk - half position
       adjustedBuyAmount = currentConfig.buyAmountSol * 0.5;
@@ -867,6 +864,14 @@ export function useAutoTrade(
         const priceData = await getTokenPrice(tokenAddress);
         if (priceData) {
           // DexScreener has data - run additional safety checks
+
+          // CHECK 0: LIQUIDITY FILTER - Skip if liquidity < $15K (optimized from FP analysis)
+          const liquidity = priceData.liquidity || 0;
+          if (liquidity < 15000) {
+            log(`LOW LIQUIDITY: ${tokenSymbol} has $${liquidity.toLocaleString()} (min $15K) - skipping!`, 'warning');
+            return { success: false, error: `Liquidity $${liquidity.toLocaleString()} below $15K minimum` };
+          }
+
           const buys5m = priceData.txnsBuys5m;
           const sells5m = priceData.txnsSells5m;
 
@@ -890,14 +895,50 @@ export function useAutoTrade(
             return { success: false, error: `1hr dump: ${change1h.toFixed(1)}%` };
           }
 
-          log(`DexScreener OK: ${buys5m} buys, ${sells5m} sells, 5m: ${change5m >= 0 ? '+' : ''}${change5m.toFixed(1)}%`, 'info');
+          // CHECK 4: MOMENTUM FILTER - Only buy if price is trending up
+          // Require positive 5m change OR positive 1h change with recent activity
+          const hasMomentum = change5m > 0 || (change1h > 0 && buys5m > sells5m);
+          if (!hasMomentum) {
+            log(`NO MOMENTUM: ${tokenSymbol} 5m: ${change5m.toFixed(1)}%, 1h: ${change1h.toFixed(1)}% - skipping!`, 'warning');
+            return { success: false, error: `No momentum: 5m ${change5m.toFixed(1)}%, 1h ${change1h.toFixed(1)}%` };
+          }
+
+          // CHECK 5: CAP EXTREME MOMENTUM - Skip if pumping too fast (likely dump incoming)
+          if (change5m > 100) {
+            log(`EXTREME PUMP: ${tokenSymbol} +${change5m.toFixed(0)}% in 5min - likely dump incoming, skipping!`, 'warning');
+            return { success: false, error: `Extreme pump: +${change5m.toFixed(0)}% in 5min` };
+          }
+
+          // CHECK 6: AGE FILTER - Skip tokens < 10 min old (optimized from FP analysis)
+          const ageMinutes = priceData.tokenAgeMinutes || 0;
+          if (ageMinutes < 10) {
+            log(`TOO NEW: ${tokenSymbol} is only ${ageMinutes.toFixed(0)} min old - skipping!`, 'warning');
+            return { success: false, error: `Token only ${ageMinutes.toFixed(0)} min old (min 10)` };
+          }
+
+          // CHECK 7: VOLUME FILTER - Require decent trading activity relative to liquidity
+          const volume24h = priceData.volume24h || 0;
+          if (volume24h < liquidity * 0.25) {
+            log(`LOW VOLUME: ${tokenSymbol} has $${volume24h.toLocaleString()} vol vs $${liquidity.toLocaleString()} liq - skipping!`, 'warning');
+            return { success: false, error: `Volume $${volume24h.toLocaleString()} below 25% of liquidity` };
+          }
+
+          // CHECK 8: MAX VOLUME FILTER - Skip if volume too high (late entry = worse results)
+          if (volume24h > 150000) {
+            log(`HIGH VOLUME: ${tokenSymbol} has $${volume24h.toLocaleString()} vol - late entry, skipping!`, 'warning');
+            return { success: false, error: `Volume $${volume24h.toLocaleString()} too high (max $150K)` };
+          }
+
+          log(`DexScreener OK: $${liquidity.toLocaleString()} liq, $${volume24h.toLocaleString()} vol, ${buys5m} buys, ${sells5m} sells, 5m: ${change5m >= 0 ? '+' : ''}${change5m.toFixed(1)}% ✓`, 'info');
         } else {
-          // No DexScreener data (brand new token) - proceed with AI validation only
-          log(`NEW TOKEN: ${tokenSymbol} - no DexScreener data yet, proceeding with AI validation`, 'info');
+          // No DexScreener data (brand new token) - skip for safety (can't verify liquidity)
+          log(`NEW TOKEN: ${tokenSymbol} - no DexScreener data, skipping (can't verify liquidity)`, 'warning');
+          return { success: false, error: 'No market data available - cannot verify liquidity' };
         }
       } catch (e) {
-        // DexScreener check failed - proceed anyway since AI validated the token
-        log(`DexScreener check failed for ${tokenSymbol}, proceeding with AI validation`, 'warning');
+        // DexScreener check failed - skip for safety
+        log(`DexScreener check failed for ${tokenSymbol}, skipping for safety`, 'warning');
+        return { success: false, error: 'Market data check failed' };
       }
     }
 

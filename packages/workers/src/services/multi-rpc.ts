@@ -94,7 +94,7 @@ const RATE_LIMIT_CODES = [429, 503];
 const ERROR_COOLDOWN_MS = 30000;      // 30s cooldown after errors
 const MAX_CONSECUTIVE_ERRORS = 3;      // Mark unhealthy after 3 errors
 const LATENCY_PENALTY_THRESHOLD = 500; // Penalize endpoints slower than 500ms
-const REQUEST_TIMEOUT_MS = 10000;      // 10s timeout per request
+const REQUEST_TIMEOUT_MS = 60000;      // 60s timeout (node may be syncing)
 
 // ============================================
 // SMART RPC CLIENT
@@ -395,7 +395,10 @@ export class MultiRpcClient {
    */
   getPrimaryEndpoint(): string {
     const healthy = this.getHealthyEndpoints();
-    return healthy[0]?.url || this.endpoints[0]?.url || 'https://api.mainnet-beta.solana.com';
+    if (!healthy[0]?.url && !this.endpoints[0]?.url) {
+      throw new Error('No RPC endpoints configured');
+    }
+    return healthy[0]?.url || this.endpoints[0]?.url;
   }
 
   /**
@@ -426,54 +429,29 @@ export class MultiRpcClient {
 
 /**
  * Create a MultiRpcClient from environment variables
+ *
+ * CHAINSTACK PRIMARY + HELIUS FALLBACK
  */
 export function createMultiRpcClient(env: {
-  HELIUS_API_KEY?: string;
-  QUICKNODE_RPC_URL?: string;
-  ALCHEMY_RPC_URL?: string;
   SOLANA_RPC_URL?: string;
+  HELIUS_API_KEY?: string;
 }): MultiRpcClient {
   const client = new MultiRpcClient();
 
-  // FREE TIER endpoints (for light/medium calls)
-
-  // Priority 1: QuickNode (fast, 10M free/month)
-  if (env.QUICKNODE_RPC_URL) {
-    client.addEndpoint('QuickNode', env.QUICKNODE_RPC_URL, 'free', 1);
-  }
-
-  // Priority 2: Alchemy (reliable, 300M CU free/month)
-  if (env.ALCHEMY_RPC_URL) {
-    client.addEndpoint('Alchemy', env.ALCHEMY_RPC_URL, 'free', 2);
-  }
-
-  // Priority 5: Custom RPC URL
+  // CHAINSTACK - PRIMARY (Growth plan: 20M requests/month, 250 req/sec)
   if (env.SOLANA_RPC_URL) {
-    client.addEndpoint('Custom', env.SOLANA_RPC_URL, 'free', 5);
+    client.addEndpoint('Chainstack', env.SOLANA_RPC_URL, 'premium', 0);
+    console.log(`[MultiRPC] Added primary: Chainstack`);
+  } else {
+    console.error('[MultiRPC] ERROR: SOLANA_RPC_URL not set!');
   }
 
-  // PREMIUM endpoints (reserved for heavy calls)
-
-  // Priority 3: Helius (paid, save for heavy operations)
+  // HELIUS FALLBACK - secondary option if Chainstack has issues
   if (env.HELIUS_API_KEY) {
-    client.addEndpoint(
-      'Helius',
-      `https://mainnet.helius-rpc.com/?api-key=${env.HELIUS_API_KEY}`,
-      'premium',
-      3
-    );
+    const heliusUrl = `https://mainnet.helius-rpc.com/?api-key=${env.HELIUS_API_KEY}`;
+    client.addEndpoint('Helius', heliusUrl, 'premium', 5);
+    console.log(`[MultiRPC] Added Helius fallback`);
   }
-
-  // FALLBACK (last resort)
-
-  // Priority 10: Public Solana RPC (rate limited)
-  client.addEndpoint('Solana Public', 'https://api.mainnet-beta.solana.com', 'free', 10, 100);
-
-  const status = client.getStatus();
-  const freeCount = status.filter(s => s.tier === 'free').length;
-  const premiumCount = status.filter(s => s.tier === 'premium').length;
-
-  console.log(`[MultiRPC] Initialized: ${freeCount} free + ${premiumCount} premium endpoints`);
 
   return client;
 }

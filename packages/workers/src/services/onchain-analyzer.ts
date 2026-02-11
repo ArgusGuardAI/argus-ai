@@ -16,7 +16,7 @@ import { getSolPrice, getTokenPrice, calculatePriceFromPool, calculateLiquidity 
 import { findAllPools, type PoolInfo } from './dex-pools';
 import { fetchTokenMetadata } from './metaplex';
 import { isPumpfunToken, fetchPumpfunMetadata, getPumpfunPoolInfo } from './pumpfun';
-import { fetchDexScreenerData } from './dexscreener';
+// DexScreener removed — all data comes from on-chain sources
 
 // ============================================
 // INTERFACES
@@ -101,9 +101,9 @@ export class OnChainAnalyzer {
   private rpcEndpoint: string;
   private solPrice: number = 200;
 
-  constructor(rpcEndpointOrClient?: string | SolanaRpcClient) {
-    if (typeof rpcEndpointOrClient === 'string' || rpcEndpointOrClient === undefined) {
-      this.rpcEndpoint = rpcEndpointOrClient || 'https://api.mainnet-beta.solana.com';
+  constructor(rpcEndpointOrClient: string | SolanaRpcClient) {
+    if (typeof rpcEndpointOrClient === 'string') {
+      this.rpcEndpoint = rpcEndpointOrClient;
       this.rpc = new SolanaRpcClient(this.rpcEndpoint);
     } else {
       // Use pre-constructed RPC client (e.g., MultiRpcSolanaClient)
@@ -129,14 +129,32 @@ export class OnChainAnalyzer {
 
   /**
    * Full token analysis from on-chain data
+   *
+   * Options:
+   * - skipPools: Skip expensive getProgramAccounts pool discovery (use when DexScreener has liquidity)
+   * - skipVolume: Skip expensive transaction sampling for volume estimation (use when DexScreener has volume)
+   * - externalPrice: Pre-fetched price to use instead of on-chain calculation
+   * - externalLiquidity: Pre-fetched liquidity to use instead of on-chain calculation
+   * - externalVolume: Pre-fetched volume data to use instead of on-chain estimation
    */
-  async analyze(tokenMint: string): Promise<OnChainAnalysis> {
-    console.log(`[OnChain] Analyzing ${tokenMint.slice(0, 8)}...`);
+  async analyze(tokenMint: string, options?: {
+    skipPools?: boolean;
+    skipVolume?: boolean;
+    externalPrice?: number;
+    externalLiquidity?: number;
+    externalVolume?: { volume24h: number; txns24h: { buys: number; sells: number } };
+  }): Promise<OnChainAnalysis> {
+    const skipPools = options?.skipPools ?? false;
+    const skipVolume = options?.skipVolume ?? false;
+
+    console.log(`[OnChain] Analyzing ${tokenMint.slice(0, 8)}...${skipPools ? ' (skipping pool discovery)' : ''}${skipVolume ? ' (skipping volume estimation)' : ''}`);
     const start = Date.now();
 
-    // Fetch SOL price first
-    await this.fetchSolPrice();
-    console.log(`[OnChain] SOL price: $${this.solPrice}`);
+    // Fetch SOL price first (only needed for pool liquidity calculation)
+    if (!skipPools) {
+      await this.fetchSolPrice();
+      console.log(`[OnChain] SOL price: $${this.solPrice}`);
+    }
 
     // Check if this is a Pumpfun token (special handling)
     const isPumpfun = isPumpfunToken(tokenMint);
@@ -147,27 +165,31 @@ export class OnChainAnalyzer {
       console.log('[OnChain] Pumpfun token detected, fetching from Pumpfun API...');
       [pumpfunData, pumpfunPool] = await Promise.all([
         fetchPumpfunMetadata(tokenMint),
-        getPumpfunPoolInfo(this.rpc, tokenMint, this.solPrice),
+        skipPools ? Promise.resolve(null) : getPumpfunPoolInfo(this.rpc, tokenMint, this.solPrice),
       ]);
     }
 
-    // Parallel fetch of all data
+    // Parallel fetch of all data (skip pools if DexScreener has liquidity data)
     const [metadata, holders, pools, tokenPrice] = await Promise.all([
       this.getTokenMetadata(tokenMint, pumpfunData),
       this.getTopHolders(tokenMint, 25),
-      this.getPools(tokenMint),
-      getTokenPrice(tokenMint),
+      skipPools ? Promise.resolve([]) : this.getPools(tokenMint),
+      options?.externalPrice ? Promise.resolve(null) : getTokenPrice(tokenMint),
     ]);
 
     console.log(`[OnChain] Data fetch: ${Date.now() - start}ms`);
 
     // Calculate liquidity and price
-    let totalLiquidity = 0;
-    let price = tokenPrice?.priceUsd;
+    let totalLiquidity = options?.externalLiquidity ?? 0;
+    let price = options?.externalPrice ?? tokenPrice?.priceUsd;
     let marketCap: number | undefined;
 
-    // Use Pumpfun data if available
-    if (pumpfunPool) {
+    // Use external data if provided (from DexScreener), skip expensive pool calculations
+    if (options?.externalLiquidity && options?.externalPrice) {
+      marketCap = price ? price * metadata.supply : undefined;
+      console.log(`[OnChain] Using external data: $${totalLiquidity.toFixed(0)} liquidity, $${price?.toFixed(8)} price`);
+    } else if (pumpfunPool) {
+      // Use Pumpfun data if available
       totalLiquidity = pumpfunPool.liquidity;
       price = pumpfunPool.price;
       marketCap = pumpfunPool.marketCap;
@@ -220,8 +242,10 @@ export class OnChainAnalyzer {
     const bundle = await this.detectBundles(tokenMint, holders, ageHours, totalLiquidity, marketCap);
     console.log(`[OnChain] Bundle detection: ${Date.now() - bundleStart}ms`);
 
-    // Volume estimation
-    const { volume24h, txns24h } = await this.estimateVolume(tokenMint, price);
+    // Volume estimation - skip if external data provided (saves ~50 RPC calls)
+    const { volume24h, txns24h } = skipVolume && options?.externalVolume
+      ? options.externalVolume
+      : await this.estimateVolume(tokenMint, price);
 
     // Add pumpfun pool to pools array if found
     const allPools = pumpfunPool
@@ -287,32 +311,14 @@ export class OnChainAnalyzer {
 
     const info = mintData?.parsed?.info || {};
 
-    // Determine name/symbol with multiple fallbacks:
-    // 1. Pumpfun data (if available)
+    // Determine name/symbol from on-chain sources only:
+    // 1. Pumpfun data (if available) - from bonding curve
     // 2. Metaplex data (on-chain metadata)
-    // 3. DexScreener data (API fallback when Metaplex fails due to rate limits)
-    // 4. Defaults
-    let name = pumpfunData?.name || metaplexData?.name;
-    let symbol = pumpfunData?.symbol || metaplexData?.symbol;
-    let updateAuthority = pumpfunData?.creator || metaplexData?.updateAuthority || null;
-
-    // Fallback to DexScreener if name/symbol not found (e.g., Metaplex rate limited)
-    if (!name || name === 'Unknown' || !symbol || symbol === '???') {
-      try {
-        const dexData = await fetchDexScreenerData(mint);
-        if (dexData) {
-          if (!name || name === 'Unknown') {
-            name = dexData.name || 'Unknown';
-          }
-          if (!symbol || symbol === '???') {
-            symbol = dexData.symbol || '???';
-          }
-          console.log(`[OnChain] Used DexScreener fallback for metadata: ${name} (${symbol})`);
-        }
-      } catch (err) {
-        console.warn('[OnChain] DexScreener fallback failed:', err);
-      }
-    }
+    // 3. Defaults
+    // NOTE: No external API fallback - pure on-chain data only
+    const name = pumpfunData?.name || metaplexData?.name || 'Unknown';
+    const symbol = pumpfunData?.symbol || metaplexData?.symbol || '???';
+    const updateAuthority = pumpfunData?.creator || metaplexData?.updateAuthority || null;
 
     return {
       mint,
@@ -714,5 +720,4 @@ export class OnChainAnalyzer {
   }
 }
 
-// Default instance
-export const onChainAnalyzer = new OnChainAnalyzer();
+// NOTE: No default instance - must provide SOLANA_RPC_URL

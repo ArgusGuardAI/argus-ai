@@ -12,6 +12,8 @@
 import { BaseAgent, AgentConfig } from '../core/BaseAgent';
 import { MessageBus } from '../core/MessageBus';
 import { OnChainTools } from '../tools/OnChainTools';
+import type { Database } from '../services/Database';
+import type { LLMService } from '../services/LLMService';
 
 export interface ScammerProfile {
   wallet: string;
@@ -33,8 +35,10 @@ export class HunterAgent extends BaseAgent {
   private walletNetwork: Map<string, Set<string>> = new Map(); // wallet -> connected wallets
   private onChainTools: OnChainTools;
   private rpcEndpoint: string;
+  private database: Database | undefined;
+  private llm: LLMService | undefined;
 
-  constructor(messageBus: MessageBus, options: { name?: string; rpcEndpoint?: string } = {}) {
+  constructor(messageBus: MessageBus, options: { name?: string; rpcEndpoint?: string; database?: Database; llm?: LLMService } = {}) {
     const config: AgentConfig = {
       name: options.name || 'hunter-1',
       role: 'Hunter - Track scammer networks and repeat offenders',
@@ -77,6 +81,8 @@ export class HunterAgent extends BaseAgent {
     };
 
     super(config, messageBus);
+    this.database = options.database;
+    this.llm = options.llm;
     this.rpcEndpoint = options.rpcEndpoint || process.env.RPC_ENDPOINT || 'https://api.mainnet-beta.solana.com';
     this.onChainTools = new OnChainTools({ rpcEndpoint: this.rpcEndpoint });
   }
@@ -178,6 +184,32 @@ export class HunterAgent extends BaseAgent {
           'action',
           `Created scammer profile: ${wallet.slice(0, 8)}... pattern=${pattern.pattern}`
         );
+
+        // Generate AI dialogue for activity feed
+        let dialogue: string | null = null;
+        if (this.llm) {
+          dialogue = await this.llm.generateDialogue({
+            agent: 'hunter',
+            event: 'profile_created',
+            targetAgent: 'analyst',
+            data: {
+              wallet: wallet.slice(0, 8),
+              pattern: pattern.pattern,
+              confidence: pattern.confidence,
+              connectedWallets: newProfile.connectedWallets.length,
+            },
+          });
+        }
+
+        // Publish profile_created for WorkersSync activity feed
+        await this.messageBus.publish(`agent.${this.config.name}.profile_created`, {
+          wallet,
+          pattern: pattern.pattern,
+          confidence: pattern.confidence,
+          token,
+          connectedWallets: newProfile.connectedWallets.length,
+          dialogue: dialogue || `Built profile: ${wallet.slice(0, 8)}... — ${pattern.pattern} pattern detected`,
+        }, { from: this.config.name, priority: 'normal' });
       }
     }
 
@@ -296,7 +328,7 @@ export class HunterAgent extends BaseAgent {
   }
 
   /**
-   * Detect scam pattern from wallet behavior
+   * Detect scam pattern from wallet behavior — uses LLM when available
    */
   private async detectPattern(params: { wallet: string; profile?: any }): Promise<{
     pattern: ScammerProfile['pattern'];
@@ -305,7 +337,54 @@ export class HunterAgent extends BaseAgent {
   }> {
     const profile = params.profile || await this.profileWallet(params);
 
-    // Use BitNet to classify pattern
+    // Try LLM-powered pattern classification first
+    if (this.llm) {
+      try {
+        // Gather connected wallet info
+        const connections = this.walletNetwork.get(params.wallet);
+        const connectedWallets = connections ? Array.from(connections) : [];
+
+        // Find tokens this wallet is associated with from existing profiles
+        const existing = this.scammerProfiles.get(params.wallet);
+
+        const llmResult = await this.llm.classifyPattern({
+          wallet: params.wallet,
+          tokensInvolved: existing?.tokens || [],
+          ruggedTokens: existing?.ruggedTokens || [],
+          connectedWallets,
+          evidence: existing?.evidence || [
+            `Transaction count: ${profile.transactionCount || 0}`,
+            `Wallet age: ${profile.age || 0} hours`,
+            `Trading pattern: ${profile.tradingPattern || 'UNKNOWN'}`,
+            `SOL balance: ${profile.balance || 0}`,
+            `Tokens held: ${profile.tokensHeld || 0}`,
+          ],
+          bundleCount: connectedWallets.length > 0 ? connectedWallets.length : undefined,
+          transactionCount: profile.transactionCount,
+          walletAge: profile.age ? `${Math.floor(profile.age / 24)}d` : undefined,
+        });
+
+        if (llmResult) {
+          console.log(`[${this.config.name}] LLM pattern: ${llmResult.pattern} (confidence: ${llmResult.confidence.toFixed(2)}, ${llmResult.evidence.length} evidence points)`);
+
+          // Map LLM pattern to our type
+          const validPatterns = ['BUNDLE_COORDINATOR', 'RUG_PULLER', 'WASH_TRADER', 'INSIDER', 'UNKNOWN'];
+          const mappedPattern = validPatterns.includes(llmResult.pattern)
+            ? llmResult.pattern as ScammerProfile['pattern']
+            : 'UNKNOWN';
+
+          return {
+            pattern: mappedPattern,
+            confidence: Math.round(llmResult.confidence * 100),
+            evidence: llmResult.evidence,
+          };
+        }
+      } catch (err) {
+        console.warn(`[${this.config.name}] LLM pattern detection failed, falling back:`, err instanceof Error ? err.message : err);
+      }
+    }
+
+    // Fallback: use BitNet template generation
     const prompt = `
 Analyze this wallet profile for scam patterns:
 ${JSON.stringify(profile, null, 2)}
@@ -375,6 +454,7 @@ Return JSON with pattern, confidence (0-100), and evidence array.
 
     // User alert
     await this.messageBus.publish('user.alert', {
+      agent: 'HUNTER',
       severity: 'CRITICAL',
       title: isRepeat ? 'Known Scammer Active!' : 'New Scammer Identified',
       message: `Wallet ${wallet.slice(0, 8)}... (${profile.pattern}) ${
@@ -382,6 +462,34 @@ Return JSON with pattern, confidence (0-100), and evidence array.
       }`,
       action: 'AVOID all tokens from this wallet'
     });
+
+    // Generate AI dialogue for activity feed
+    let dialogue: string | null = null;
+    if (this.llm) {
+      dialogue = await this.llm.generateDialogue({
+        agent: 'hunter',
+        event: isRepeat ? 'repeat_scammer' : 'new_scammer',
+        targetAgent: 'trader',
+        data: {
+          wallet: wallet.slice(0, 8),
+          pattern: profile.pattern,
+          rugCount: profile.ruggedTokens.length,
+          isRepeat,
+          newToken: newToken?.slice(0, 8),
+        },
+      });
+    }
+
+    // Publish scammer_detected for WorkersSync activity feed
+    await this.messageBus.publish(`agent.${this.config.name}.scammer_detected`, {
+      wallet,
+      pattern: profile.pattern,
+      confidence: profile.confidence,
+      rugCount: profile.ruggedTokens.length,
+      isRepeat,
+      newToken,
+      dialogue: dialogue || `${isRepeat ? 'REPEAT' : 'NEW'} SCAMMER: ${wallet.slice(0, 8)}... (${profile.pattern}) — ${profile.ruggedTokens.length} past rugs`,
+    }, { from: this.config.name, priority: 'high' });
 
     await this.think('action', `Broadcast scammer alert: ${wallet.slice(0, 8)}...`);
   }
@@ -497,6 +605,39 @@ Return JSON with pattern, confidence (0-100), and evidence array.
    * Load known scammers from local file for persistence across restarts
    */
   private async loadScammerDatabase(): Promise<void> {
+    // Try PostgreSQL first
+    if (this.database?.isReady()) {
+      try {
+        const profiles = await this.database.getAllScammerProfiles();
+        for (const p of profiles) {
+          const profile: ScammerProfile = {
+            wallet: p.wallet,
+            pattern: p.pattern as ScammerProfile['pattern'],
+            confidence: p.confidence,
+            tokens: p.tokens || [],
+            ruggedTokens: p.rugged_tokens || [],
+            firstSeen: p.first_seen.getTime(),
+            lastSeen: p.last_seen.getTime(),
+            totalVictims: 0,
+            estimatedProfit: 0,
+            connectedWallets: p.connected_wallets || [],
+            evidence: p.evidence || [],
+          };
+          this.scammerProfiles.set(p.wallet, profile);
+          this.watchlist.add(p.wallet);
+
+          for (const connected of profile.connectedWallets) {
+            this.addToNetwork(p.wallet, connected);
+          }
+        }
+        console.log(`[Hunter] Loaded ${profiles.length} scammer profiles from database`);
+        return;
+      } catch (err) {
+        console.warn('[Hunter] Database load failed, trying file fallback:', (err as Error).message);
+      }
+    }
+
+    // Fallback to JSON file
     try {
       const fs = await import('fs').then(m => m.promises);
       const data = await fs.readFile('/opt/argus-ai/data/scammers.json', 'utf-8');
@@ -506,7 +647,6 @@ Return JSON with pattern, confidence (0-100), and evidence array.
         this.scammerProfiles.set(entry.wallet, entry.profile);
         this.watchlist.add(entry.wallet);
 
-        // Rebuild network from connections
         for (const connected of entry.profile.connectedWallets) {
           this.addToNetwork(entry.wallet, connected);
         }
@@ -514,15 +654,37 @@ Return JSON with pattern, confidence (0-100), and evidence array.
 
       console.log(`[Hunter] Loaded ${scammers.length} scammer profiles from disk`);
     } catch {
-      // File doesn't exist yet or parse error — start fresh
       console.log('[Hunter] No existing scammer database found, starting fresh');
     }
   }
 
   /**
-   * Persist scammer database to disk for survival across restarts
+   * Persist scammer database to PostgreSQL (with file fallback)
    */
   private async persistScammerDatabase(): Promise<void> {
+    // Persist to PostgreSQL
+    if (this.database?.isReady()) {
+      try {
+        for (const [wallet, profile] of this.scammerProfiles) {
+          await this.database.upsertScammerProfile({
+            wallet,
+            pattern: profile.pattern,
+            confidence: profile.confidence,
+            tokens: profile.tokens,
+            rugged_tokens: profile.ruggedTokens,
+            connected_wallets: profile.connectedWallets,
+            evidence: profile.evidence,
+            first_seen: new Date(profile.firstSeen),
+            last_seen: new Date(profile.lastSeen),
+          });
+        }
+        return;
+      } catch (err) {
+        console.error('[Hunter] Database persist failed:', (err as Error).message);
+      }
+    }
+
+    // Fallback to JSON file
     try {
       const fs = await import('fs').then(m => m.promises);
       const entries = Array.from(this.scammerProfiles.entries()).map(([wallet, profile]) => ({
@@ -549,22 +711,36 @@ Return JSON with pattern, confidence (0-100), and evidence array.
   }
 
   protected setupMessageHandlers(): void {
+    const agentType = this.config.name.replace(/-\d+$/, '');
+
     // Handle track requests from analysts
-    this.messageBus.subscribe(`agent.${this.config.name}.track_scammer`, async (msg) => {
+    const handleTrackScammer = async (msg: import('../core/MessageBus').Message) => {
       await this.trackScammer(msg.data.token, msg.data.report);
-    });
+    };
+    this.messageBus.subscribe(`agent.${this.config.name}.track_scammer`, handleTrackScammer);
+    if (agentType !== this.config.name) {
+      this.messageBus.subscribe(`agent.${agentType}.track_scammer`, handleTrackScammer);
+    }
 
     // Handle wallet check requests
-    this.messageBus.subscribe(`agent.${this.config.name}.check_wallet`, async (msg) => {
+    const handleCheckWallet = async (msg: import('../core/MessageBus').Message) => {
       const result = await this.checkRepeatOffender({ wallet: msg.data.wallet });
       await this.sendMessage(msg.from, 'wallet_check_result', result);
-    });
+    };
+    this.messageBus.subscribe(`agent.${this.config.name}.check_wallet`, handleCheckWallet);
+    if (agentType !== this.config.name) {
+      this.messageBus.subscribe(`agent.${agentType}.check_wallet`, handleCheckWallet);
+    }
 
     // Handle network query
-    this.messageBus.subscribe(`agent.${this.config.name}.get_network`, async (msg) => {
+    const handleGetNetwork = async (msg: import('../core/MessageBus').Message) => {
       const connections = await this.findConnections({ wallet: msg.data.wallet });
       await this.sendMessage(msg.from, 'network_result', connections);
-    });
+    };
+    this.messageBus.subscribe(`agent.${this.config.name}.get_network`, handleGetNetwork);
+    if (agentType !== this.config.name) {
+      this.messageBus.subscribe(`agent.${agentType}.get_network`, handleGetNetwork);
+    }
   }
 
   /**

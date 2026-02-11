@@ -302,9 +302,10 @@ Return your analysis as JSON.`;
 
     let riskLevel: TokenAnalysisOutput['riskLevel'] = 'SAFE';
     const score = Math.max(0, Math.min(100, parsed.riskScore || 50));
+    // Updated thresholds based on backtest (catches 80% of rugs)
     if (score >= 80) riskLevel = 'SCAM';
-    else if (score >= 60) riskLevel = 'DANGEROUS';
-    else if (score >= 40) riskLevel = 'SUSPICIOUS';
+    else if (score >= 65) riskLevel = 'DANGEROUS';  // Was 60
+    else if (score >= 55) riskLevel = 'SUSPICIOUS'; // Was 40
 
     return {
       riskScore: score,

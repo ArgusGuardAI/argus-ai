@@ -12,11 +12,12 @@ import { telegramRoutes } from './routes/telegram';
 import { trainingRoutes } from './routes/training';
 import { onchainRoutes } from './routes/onchain';
 import { agentRoutes } from './routes/agents';
+import { chatRoutes } from './routes/chat';
 
 export type Bindings = {
   SCAN_CACHE: KVNamespace;
   BUNDLE_DB: D1Database;  // D1 database for bundle network tracking
-  TOGETHER_AI_API_KEY: string;
+  TOGETHER_AI_API_KEY?: string;  // Deprecated — AI reasoning moved to agents server (self-hosted Ollama)
   TOGETHER_AI_MODEL?: string;
   SUPABASE_URL: string;
   SUPABASE_ANON_KEY: string;
@@ -77,6 +78,45 @@ app.get('/health', (c) => {
     environment: c.env.ENVIRONMENT,
     timestamp: Date.now(),
   });
+});
+
+// Debug RPC endpoint - test connectivity
+app.get('/debug/rpc', async (c) => {
+  const rpcUrl = c.env.SOLANA_RPC_URL;
+  if (!rpcUrl) {
+    return c.json({ error: 'SOLANA_RPC_URL not set' }, 500);
+  }
+
+  try {
+    console.log(`[Debug] Testing RPC: ${rpcUrl}`);
+    const response = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'debug',
+        method: 'getSlot',
+        params: [],
+      }),
+    });
+
+    const status = response.status;
+    const statusText = response.statusText;
+    const text = await response.text();
+
+    console.log(`[Debug] RPC response: ${status} ${statusText}`);
+
+    return c.json({
+      rpcUrl,
+      status,
+      statusText,
+      response: text.slice(0, 500),
+    });
+  } catch (err) {
+    const error = err instanceof Error ? err.message : String(err);
+    console.error(`[Debug] RPC error: ${error}`);
+    return c.json({ rpcUrl, error }, 500);
+  }
 });
 
 // Privacy policy page
@@ -187,6 +227,7 @@ app.route('/telegram', telegramRoutes);
 app.route('/training', trainingRoutes);
 app.route('/onchain', onchainRoutes);
 app.route('/agents', agentRoutes);
+app.route('/chat', chatRoutes);
 
 // 404 handler
 app.notFound((c) => {

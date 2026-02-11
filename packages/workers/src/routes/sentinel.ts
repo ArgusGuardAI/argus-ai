@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Bindings } from '../index';
-import { fetchHeliusTokenMetadata, analyzeTokenTransactions, analyzeDevSelling } from '../services/helius';
-import { fetchDexScreenerData } from '../services/dexscreener';
+// External API imports removed — all data comes from on-chain sources
+// Helius, DexScreener, and RugCheck are no longer used
 import { postTweet, formatAlertTweet, canTweet, recordTweet, type TwitterConfig } from '../services/twitter';
 import { sendMessage, formatAlertHtml } from '../services/telegram';
 import { checkRateLimit, getUserTier, getClientIP } from '../services/rate-limit';
@@ -10,49 +10,17 @@ import { convertToAnalysisInput, type TokenAnalysisOutput, createAIProvider, Loc
 import { createSentinelDataFetcher } from '../services/sentinel-data';
 import { storeBundleWallets, findRepeatOffenders, type SyndicateNetwork } from '../services/bundle-network';
 import { extractFromSentinelData, toFeatureVector, getFeatureSummary, getFeatureMemorySize } from '../services/feature-extractor';
-import { processTokenScan } from '../services/agent-events';
 
-const HELIUS_RPC_BASE = 'https://mainnet.helius-rpc.com';
-const RUGCHECK_API = 'https://api.rugcheck.xyz/v1';
-
-interface RugCheckReport {
-  markets?: Array<{
-    pubkey: string;
-    marketType: string;
-    lpLockedPct?: number;
-    lp?: {
-      lpLockedPct: number;
-    };
-  }>;
-}
-
-/**
- * Fetch LP lock data from RugCheck API (free, no API key needed)
- */
-async function fetchRugCheckData(tokenAddress: string): Promise<{ lpLockedPct: number } | null> {
-  try {
-    const response = await fetch(`${RUGCHECK_API}/tokens/${tokenAddress}/report`, {
-      headers: { 'Accept': 'application/json' },
-    });
-
-    if (!response.ok) {
-      console.log(`[RugCheck] Failed to fetch for ${tokenAddress.slice(0, 8)}... - ${response.status}`);
-      return null;
-    }
-
-    const data = await response.json() as RugCheckReport;
-
-    const market = data.markets?.[0];
-    const lpLockedPct = market?.lp?.lpLockedPct ?? market?.lpLockedPct ?? 0;
-
-    console.log(`[RugCheck] ${tokenAddress.slice(0, 8)}... - LP Locked: ${lpLockedPct.toFixed(1)}%`);
-
-    return { lpLockedPct };
-  } catch (error) {
-    console.error('[RugCheck] Error:', error instanceof Error ? error.message : 'Unknown error');
-    return null;
-  }
-}
+// ============================================
+// EXTERNAL APIs REMOVED - Pure On-Chain Data
+// ============================================
+// Previously used:
+// - DexScreener: price, liquidity, volume, market cap → now from on-chain pools
+// - RugCheck: LP lock percentage → now from on-chain holder analysis
+// - Helius: token metadata, transactions → now from RPC node
+//
+// All data now comes from your own Solana RPC node.
+// Cost: $0 external API calls
 
 interface WalletNode {
   id: string;
@@ -1106,14 +1074,15 @@ function applyHardcodedRules(
 
   // ============================================
   // DETERMINE FINAL RISK LEVEL
+  // Updated thresholds based on backtest (catches 80% of rugs)
   // ============================================
   let adjustedLevel: string;
-  if (adjustedScore >= 90) {
+  if (adjustedScore >= 80) {
     adjustedLevel = 'SCAM';
-  } else if (adjustedScore >= 70) {
-    adjustedLevel = 'DANGEROUS';
-  } else if (adjustedScore >= 50) {
-    adjustedLevel = 'SUSPICIOUS';
+  } else if (adjustedScore >= 65) {
+    adjustedLevel = 'DANGEROUS';  // Was 70
+  } else if (adjustedScore >= 55) {
+    adjustedLevel = 'SUSPICIOUS'; // Was 50
   } else {
     adjustedLevel = 'SAFE';
   }
@@ -1353,9 +1322,11 @@ function generateRecommendation(riskScore: number, bundleDetected: boolean, bund
 }
 
 /**
- * Generate AI analysis for the network
+ * @deprecated - This function used Together AI which has been removed.
+ * All analysis now uses LocalBitNetProvider (rule-based, $0 cost).
+ * Keeping for reference but this function is never called.
  */
-async function generateNetworkAnalysis(
+async function generateNetworkAnalysis_DEPRECATED(
   tokenInfo: {
     name: string;
     symbol: string;
@@ -1748,24 +1719,28 @@ sentinelRoutes.post('/analyze', async (c) => {
       }, 429);
     }
 
-    const heliusKey = c.env.HELIUS_API_KEY;
-    const togetherKey = c.env.TOGETHER_AI_API_KEY;
-    const model = c.env.TOGETHER_AI_MODEL || 'meta-llama/Llama-3.3-70B-Instruct-Turbo';
+    // Helius key no longer used — all data comes from on-chain sources
+    // const heliusKey = c.env.HELIUS_API_KEY;
+
+    // All modes now use pure on-chain data
+    // LEGACY mode is deprecated and falls through to ON_CHAIN
     const dataMode = c.env.DATA_PROVIDER_MODE || 'ON_CHAIN';
-    const aiMode = c.env.AI_PROVIDER || 'local-bitnet';
+    const aiMode = 'local-bitnet';
 
     // ============================================
-    // NEW: On-Chain Mode - Zero External Dependencies
+    // PURE ON-CHAIN MODE - Zero External Dependencies
+    // All external APIs (DexScreener, Helius, RugCheck) removed
     // ============================================
-    if (dataMode === 'ON_CHAIN' || dataMode === 'HYBRID') {
-      console.log(`[Sentinel] Using ${dataMode} mode with ${aiMode} AI`);
+    // Always use on-chain data regardless of DATA_PROVIDER_MODE
+    // The mode setting is kept for backwards compatibility but has no effect
+    console.log(`[Sentinel] Using pure ON_CHAIN mode with ${aiMode} AI (requested: ${dataMode})`);
       const fetchStart = Date.now();
 
-      // Use new on-chain data fetcher
+      // Use on-chain data fetcher — no external API calls
       const dataFetcher = createSentinelDataFetcher(c.env);
       const data = await dataFetcher.fetchData(tokenAddress);
 
-      console.log(`[Sentinel] ${dataMode} fetch took ${data.fetchDuration}ms`);
+      console.log(`[Sentinel] On-chain fetch took ${data.fetchDuration}ms`);
 
       // Extract compressed features for efficient inference
       const compressedFeatures = extractFromSentinelData(data);
@@ -1774,20 +1749,9 @@ sentinelRoutes.post('/analyze', async (c) => {
       console.log(`[Sentinel] Compressed features: ${featureVector.length} floats (${memSize.vector} bytes vs ~2MB raw)`);
       console.log(`[Sentinel] Feature summary: ${getFeatureSummary(compressedFeatures)}`);
 
-      // Use local BitNet or Together AI based on config
-      let aiProvider;
-      if (aiMode === 'local-bitnet' || aiMode === 'bitnet') {
-        aiProvider = new LocalBitNetProvider();
-      } else if (togetherKey) {
-        aiProvider = createAIProvider({
-          provider: 'together',
-          togetherApiKey: togetherKey,
-          togetherModel: model,
-        });
-      } else {
-        // Fallback to local BitNet if no Together AI key
-        aiProvider = new LocalBitNetProvider();
-      }
+      // Always use local BitNet for structural scoring
+      // Deep AI reasoning happens on the agents server via Ollama
+      const aiProvider = new LocalBitNetProvider();
 
       // Convert to AI input format
       const holders = data.holders.map(h => ({
@@ -1852,9 +1816,10 @@ sentinelRoutes.post('/analyze', async (c) => {
       }
 
       // Update risk level based on final score
+      // Updated thresholds based on backtest (catches 80% of rugs)
       if (finalScore >= 80) finalLevel = 'SCAM';
-      else if (finalScore >= 60) finalLevel = 'DANGEROUS';
-      else if (finalScore >= 40) finalLevel = 'SUSPICIOUS';
+      else if (finalScore >= 65) finalLevel = 'DANGEROUS';  // Was 60
+      else if (finalScore >= 55) finalLevel = 'SUSPICIOUS'; // Was 40
       else finalLevel = 'SAFE';
 
       // Build response
@@ -1923,674 +1888,20 @@ sentinelRoutes.post('/analyze', async (c) => {
       c.header('X-RateLimit-Reset', rateLimitResult.resetAt.toString());
       c.header('X-User-Tier', tier);
 
-      // Process agent events in background (non-blocking)
-      if (c.env.SCAN_CACHE) {
-        c.executionCtx.waitUntil(
-          processTokenScan(c.env.SCAN_CACHE, {
-            tokenAddress,
-            tokenSymbol: response.tokenInfo.symbol || 'UNKNOWN',
-            score: response.analysis.riskScore,
-            bundleDetected: response.bundleInfo.detected,
-            bundleCount: response.bundleInfo.count,
-            bundleWallets: response.bundleInfo.wallets,
-          }).catch(err => console.error('[AgentEvents] Error processing scan:', err))
-        );
-      }
+      // Agent events now come from the real agents server via WorkersSync
+      // No fake simulated conversations needed here
 
       return c.json(response);
-    }
 
     // ============================================
-    // LEGACY: Original API-based mode
+    // LEGACY MODE REMOVED - All external APIs deprecated
+    // The following code has been removed:
+    // - DexScreener API calls
+    // - Helius API calls
+    // - RugCheck API calls
+    // All data now comes from pure on-chain sources via SentinelDataFetcher
     // ============================================
 
-    if (!heliusKey) {
-      return c.json({ error: 'Helius API key not configured' }, 500);
-    }
-
-    if (!togetherKey) {
-      return c.json({ error: 'Together AI API key not configured' }, 500);
-    }
-
-    console.log('[Sentinel] Starting parallel fetch (LEGACY mode)...');
-    const fetchStart = Date.now();
-
-    const dexData = await fetchDexScreenerData(tokenAddress);
-
-    const knownLpAddresses: string[] = [];
-    if (dexData?.pairAddress) {
-      knownLpAddresses.push(dexData.pairAddress);
-      console.log(`[Sentinel] Known LP from DexScreener: ${dexData.pairAddress.slice(0, 8)}...`);
-    }
-
-    const [metadata, holders, txAnalysis, rugCheckData] = await Promise.all([
-      fetchHeliusTokenMetadata(tokenAddress, heliusKey),
-      fetchTopHolders(tokenAddress, heliusKey, 20, knownLpAddresses),
-      analyzeTokenTransactions(tokenAddress, heliusKey),
-      fetchRugCheckData(tokenAddress),
-    ]);
-    console.log(`[Sentinel] Parallel fetch took ${Date.now() - fetchStart}ms`);
-
-    const lpLockedPct = rugCheckData?.lpLockedPct ?? 0;
-
-    let creatorAddress: string | null = null;
-
-    if (!creatorAddress && metadata?.updateAuthority) {
-      creatorAddress = metadata.updateAuthority;
-      console.log('[Sentinel] Using update authority as creator:', creatorAddress.slice(0, 8));
-    }
-
-    if (!creatorAddress && holders.length > 0) {
-      const likelyCreator = holders.find(h => h.percent > 2 && h.percent < 40);
-      if (likelyCreator) {
-        creatorAddress = likelyCreator.address;
-        console.log('[Sentinel] Using top holder as likely creator:', creatorAddress.slice(0, 8), `(${likelyCreator.percent.toFixed(1)}%)`);
-      }
-    }
-
-    let creatorInfo = null;
-    let creatorHoldingsPercent = 0;
-
-    if (creatorAddress) {
-      const creatorHolder = holders.find(h => h.address === creatorAddress);
-      creatorHoldingsPercent = creatorHolder?.percent || 0;
-
-      creatorInfo = {
-        address: creatorAddress,
-        walletAge: -1,
-        tokensCreated: 0,
-        ruggedTokens: 0,
-        currentHoldings: creatorHoldingsPercent,
-      };
-      console.log(`[Sentinel] Creator: ${creatorAddress.slice(0, 8)}, holdings: ${creatorHoldingsPercent.toFixed(1)}%`);
-    }
-
-    let devActivity = null;
-    if (creatorAddress) {
-      try {
-        const devStart = Date.now();
-        const devResult = await analyzeDevSelling(creatorAddress, tokenAddress, heliusKey);
-        console.log(`[Sentinel] Dev selling analysis took ${Date.now() - devStart}ms: sold ${devResult.percentSold.toFixed(0)}%, holds ${devResult.currentHoldingsPercent.toFixed(1)}%`);
-
-        if (devResult.hasSold || devResult.currentHoldingsPercent > 0) {
-          devActivity = devResult;
-        } else {
-          console.log('[Sentinel] Creator never held tokens (likely protocol authority) — skipping dev activity');
-        }
-      } catch (err) {
-        console.warn('[Sentinel] Dev selling analysis failed:', err);
-      }
-    }
-
-    const mintAuthorityActive = !!metadata?.mintAuthority;
-    const freezeAuthorityActive = !!metadata?.freezeAuthority;
-
-    const ageHours = dexData?.pairCreatedAt
-      ? (Date.now() - dexData.pairCreatedAt) / (1000 * 60 * 60)
-      : undefined;
-
-    const isPumpFun = tokenAddress.endsWith('pump') || dexData?.dex === 'pumpfun';
-    let effectiveLiquidity = dexData?.liquidityUsd || 0;
-    if (isPumpFun && effectiveLiquidity <= 0 && dexData?.marketCap && dexData.marketCap > 0) {
-      effectiveLiquidity = Math.round(dexData.marketCap * 0.20);
-      console.log(`[Sentinel] PumpFun bonding curve: estimated liquidity $${effectiveLiquidity} from $${dexData.marketCap} market cap`);
-    }
-
-    const tokenInfo = {
-      address: tokenAddress,
-      name: metadata?.name || dexData?.name || 'Unknown',
-      symbol: metadata?.symbol || dexData?.symbol || '???',
-      price: dexData?.priceUsd,
-      marketCap: dexData?.marketCap,
-      liquidity: effectiveLiquidity,
-      age: ageHours !== undefined ? Math.floor(ageHours / 24) : undefined,
-      ageHours: ageHours !== undefined ? Math.round(ageHours * 10) / 10 : undefined,
-      holderCount: holders.length,
-      priceChange24h: dexData?.priceChange24h,
-      volume24h: dexData?.volume24h,
-      txns5m: dexData?.txns5m,
-      txns1h: dexData?.txns1h,
-      txns24h: dexData?.txns24h,
-      mintAuthorityActive,
-      freezeAuthorityActive,
-      lpLockedPct,
-    };
-
-    const holderDistribution = holders.slice(0, 10).map(h => {
-      let type: 'creator' | 'whale' | 'insider' | 'lp' | 'normal' = 'normal';
-      if (h.address === creatorAddress) type = 'creator';
-      else if (h.isLp) type = 'lp';
-      else if (h.percent > 10) type = 'whale';
-      else if (h.percent > 5) type = 'insider';
-      return {
-        address: h.address,
-        percent: h.percent,
-        type,
-      };
-    });
-
-    const txBundleDetected = txAnalysis.bundleDetected;
-    const txBundleCount = txAnalysis.coordinatedWallets;
-    const txBundlePercent = txAnalysis.bundledBuyPercent;
-
-    // Check if this is an established token (less suspicious for bundle patterns)
-    const isEstablishedToken = (
-      (tokenInfo.ageHours !== undefined && tokenInfo.ageHours > 168) || // >7 days old
-      (tokenInfo.liquidity !== undefined && tokenInfo.liquidity > 100000) || // >$100K liquidity
-      (tokenInfo.marketCap !== undefined && tokenInfo.marketCap > 1000000) // >$1M market cap
-    );
-
-    console.log(`[Sentinel] Token status: established=${isEstablishedToken}, age=${tokenInfo.ageHours?.toFixed(0)}h, liq=$${tokenInfo.liquidity?.toFixed(0)}, mcap=$${tokenInfo.marketCap?.toFixed(0)}`);
-
-    const nearIdenticalHoldings = holders.filter((h, i, arr) => {
-      if (i === 0) return false;
-      const prevPercent = arr[i - 1].percent;
-      return Math.abs(h.percent - prevPercent) < 0.1 && h.percent > 1 && arr[i - 1].percent > 1;
-    });
-
-    const exactSameHoldings = holders.filter((h, i, arr) => {
-      if (i === 0) return false;
-      const prevPercent = arr[i - 1].percent;
-      return Math.abs(h.percent - prevPercent) < 0.05 && h.percent > 0.5;
-    });
-
-    // For established tokens, require stronger evidence of coordination
-    const holderBundleThreshold = isEstablishedToken ? 8 : 5;
-    const exactHoldingsThreshold = isEstablishedToken ? 5 : 3;
-
-    const holderBundleDetected = nearIdenticalHoldings.length >= holderBundleThreshold || exactSameHoldings.length >= exactHoldingsThreshold;
-    const holderBundleCount = Math.max(nearIdenticalHoldings.length, exactSameHoldings.length);
-
-    // Determine bundle confidence - be more conservative for established tokens
-    let bundleConfidence: 'HIGH' | 'MEDIUM' | 'LOW' | 'NONE' = 'NONE';
-
-    if (isEstablishedToken) {
-      // Established tokens: require much stronger evidence
-      // Same-block transactions are NORMAL for high-volume tokens (arbitrage, MEV, etc.)
-      if (txBundleDetected && txBundlePercent > 50 && holderBundleDetected) {
-        bundleConfidence = 'HIGH'; // Very strong evidence
-      } else if (txBundleDetected && txBundlePercent > 30 && holderBundleDetected) {
-        bundleConfidence = 'MEDIUM'; // Moderate evidence
-      } else if (holderBundleDetected && exactSameHoldings.length >= exactHoldingsThreshold) {
-        bundleConfidence = 'LOW'; // Weak evidence
-      }
-      // Note: Pure same-block tx detection is ignored for established tokens
-    } else {
-      // New tokens: standard detection
-      if (txBundleDetected && txBundlePercent > 20) {
-        bundleConfidence = 'HIGH';
-      } else if (txBundleDetected && holderBundleDetected) {
-        bundleConfidence = 'HIGH';
-      } else if (txBundleDetected) {
-        bundleConfidence = 'MEDIUM';
-      } else if (holderBundleDetected && exactSameHoldings.length >= 3) {
-        bundleConfidence = 'MEDIUM';
-      } else if (holderBundleDetected) {
-        bundleConfidence = 'LOW';
-      }
-    }
-
-    const bundleDetected = bundleConfidence === 'HIGH' || bundleConfidence === 'MEDIUM';
-    const bundleCount = txBundleDetected ? txBundleCount : holderBundleCount;
-
-    let bundleDescription: string | undefined;
-    if (bundleDetected || bundleConfidence === 'LOW') {
-      const parts: string[] = [];
-      if (txBundleDetected) {
-        if (txBundlePercent > 0) {
-          parts.push(`${txBundleCount} wallets bought in same block (${txBundlePercent.toFixed(1)}% of buys)`);
-        } else {
-          parts.push(`${txBundleCount} wallets transacted in same block`);
-        }
-      }
-      if (exactSameHoldings.length >= 3) {
-        parts.push(`${exactSameHoldings.length} wallets with near-identical holdings`);
-      } else if (nearIdenticalHoldings.length >= 5) {
-        parts.push(`${nearIdenticalHoldings.length} wallets with similar holdings (possible coordination)`);
-      }
-      bundleDescription = parts.join('; ');
-    }
-
-    // Get ACTUAL bundle wallet addresses from transaction analysis
-    // Only use identifyBundleWallets as fallback if tx analysis found nothing
-    let bundleWalletAddresses: string[] = txAnalysis.bundleWalletAddresses || [];
-
-    // Only use holder-based identification if:
-    // 1. We have no tx-based bundle wallets AND
-    // 2. We detected bundles via other signals
-    if (bundleWalletAddresses.length === 0 && bundleDetected) {
-      bundleWalletAddresses = identifyBundleWallets(holders, { count: bundleCount, confidence: bundleConfidence });
-      console.log(`[Sentinel] Using holder-based bundle wallets (fallback): ${bundleWalletAddresses.length}`);
-    }
-
-    // Calculate ACTUAL bundle control percentage from ONLY the bundle wallets
-    // Only count wallets that are in our holders list (top 20)
-    const matchedBundleHolders = holders.filter(h => bundleWalletAddresses.includes(h.address));
-    const rawBundleControlPercent = matchedBundleHolders.reduce((sum, h) => sum + h.percent, 0);
-
-    // SANITY CHECK: Control percent can never exceed 100% (mathematically impossible)
-    // If it does, something is wrong with the data - cap it
-    const actualBundleControlPercent = Math.min(rawBundleControlPercent, 100);
-
-    console.log(`[Sentinel] Bundle wallets from tx: ${bundleWalletAddresses.length}, matched in holders: ${matchedBundleHolders.length}, raw: ${rawBundleControlPercent.toFixed(1)}%, capped: ${actualBundleControlPercent.toFixed(1)}%`);
-
-    if (rawBundleControlPercent > 100) {
-      console.warn(`[Sentinel] WARNING: Raw bundle control ${rawBundleControlPercent.toFixed(1)}% exceeds 100% - data issue detected`);
-    }
-
-    // Build detailed wallet info with holdings for each bundle wallet
-    const bundleWalletsWithHoldings = matchedBundleHolders.map(h => ({
-      address: h.address,
-      percent: h.percent,
-      isLp: h.isLp,
-    })).sort((a, b) => b.percent - a.percent);
-
-    const bundleInfo = {
-      detected: bundleDetected,
-      confidence: bundleConfidence,
-      count: bundleCount,
-      txBundlePercent: txBundlePercent,
-      suspiciousPatterns: txAnalysis.suspiciousPatterns,
-      description: bundleDescription,
-      wallets: bundleWalletAddresses,
-      walletsWithHoldings: bundleWalletsWithHoldings, // Detailed wallet info for UI
-      controlPercent: actualBundleControlPercent, // Actual holdings of bundle wallets (capped at 100%)
-    };
-
-    if (bundleDetected) {
-      console.log(`[Sentinel] BUNDLE DETECTED (${bundleConfidence}): ${bundleDescription}`);
-    } else if (bundleConfidence === 'LOW') {
-      console.log(`[Sentinel] Possible bundle (LOW confidence): ${bundleDescription}`);
-    }
-
-    // ============================================
-    // NEW: Assess bundle quality
-    // ============================================
-    let bundleQuality: BundleQuality | undefined = undefined;
-    
-    if (bundleDetected || bundleConfidence === 'LOW') {
-      const qualityStart = Date.now();
-      bundleQuality = await assessBundleQuality(
-        bundleInfo,
-        holders,
-        creatorAddress,
-        tokenInfo.ageHours,
-        heliusKey
-      );
-      console.log(`[Sentinel] Bundle quality assessment took ${Date.now() - qualityStart}ms`);
-      console.log(`[Sentinel] Bundle quality: ${bundleQuality.assessment} (score: ${bundleQuality.legitimacyScore})`);
-    }
-
-    // ============================================
-    // WASH TRADING DETECTION
-    // Check if bundle wallets are creating fake buy pressure
-    // ============================================
-    let washTrading: WashTradingResult | null = null;
-
-    // Use actual detected bundle wallet addresses from transaction analysis
-    // Fall back to holder-based heuristic if tx analysis didn't find wallets
-    let bundleWalletsForWashDetection = txAnalysis.bundleWalletAddresses || [];
-    console.log(`[Sentinel] Bundle wallet addresses from tx analysis: ${bundleWalletsForWashDetection.length}`);
-
-    // Fallback: if tx analysis didn't find bundle wallets but we detected bundles via holder patterns,
-    // use the top holders with similar holdings as the bundle wallets
-    console.log(`[Sentinel] Wash trading check: bundleDetected=${bundleDetected}, bundleInfo.count=${bundleInfo.count}, walletsLen=${bundleWalletsForWashDetection.length}`);
-    if (bundleWalletsForWashDetection.length < 3 && bundleDetected && bundleInfo.count >= 3) {
-      bundleWalletsForWashDetection = identifyBundleWallets(holders, bundleInfo);
-      console.log(`[Sentinel] Using holder-based bundle wallets as fallback: ${bundleWalletsForWashDetection.length}`);
-    }
-
-    if (bundleDetected && bundleWalletsForWashDetection.length >= 3) {
-      const washStart = Date.now();
-
-      washTrading = await detectWashTrading(
-        bundleWalletsForWashDetection,
-        tokenAddress,
-        heliusKey,
-        tokenInfo.txns24h?.buys || 0,
-        tokenInfo.txns24h?.sells || 0
-      );
-
-      console.log(`[Sentinel] Wash trading detection took ${Date.now() - washStart}ms`);
-
-      if (washTrading.detected) {
-        console.log(`[Sentinel] WASH TRADING DETECTED: ${washTrading.bundleBuys}/${washTrading.totalBuys} buys (${washTrading.washTradingPercent.toFixed(1)}%) from bundles`);
-      } else {
-        console.log(`[Sentinel] No significant wash trading detected (${washTrading.washTradingPercent.toFixed(1)}% from bundles)`);
-      }
-    } else if (bundleDetected) {
-      console.log(`[Sentinel] Skipping wash trading detection - only ${bundleWalletsForWashDetection.length} bundle wallets found`);
-    }
-
-    // ============================================
-    // BUNDLE NETWORK MAP (10K holder feature)
-    // Store bundle wallets and check for repeat offenders
-    // ============================================
-    let syndicateNetwork: SyndicateNetwork | null = null;
-
-    if (bundleDetected && bundleWalletsForWashDetection.length > 0 && c.env.BUNDLE_DB) {
-      const networkStart = Date.now();
-
-      try {
-        // Build holdings map for the bundle wallets
-        const holdingsMap = new Map<string, number>();
-        for (const walletAddr of bundleWalletsForWashDetection) {
-          const holder = holders.find(h => h.address === walletAddr);
-          if (holder) {
-            holdingsMap.set(walletAddr, holder.percent);
-          }
-        }
-
-        // Check for repeat offenders BEFORE storing (so we find wallets from previous scans)
-        syndicateNetwork = await findRepeatOffenders(
-          c.env.BUNDLE_DB,
-          bundleWalletsForWashDetection,
-          tokenAddress
-        );
-
-        if (syndicateNetwork.detected) {
-          console.log(`[Sentinel] SYNDICATE ALERT: ${syndicateNetwork.repeatOffenders} repeat offenders found, ${syndicateNetwork.rugRate}% historical rug rate`);
-        }
-
-        // Store the bundle wallets for future lookups
-        await storeBundleWallets(
-          c.env.BUNDLE_DB,
-          tokenAddress,
-          tokenInfo.symbol,
-          bundleWalletsForWashDetection,
-          bundleInfo.confidence as 'HIGH' | 'MEDIUM' | 'LOW',
-          holdingsMap
-        );
-
-        console.log(`[Sentinel] Bundle network check took ${Date.now() - networkStart}ms`);
-      } catch (error) {
-        console.error('[Sentinel] Bundle network error (non-fatal):', error);
-        // Non-fatal - continue with analysis
-      }
-    }
-
-    const network = buildNetworkGraph(
-      tokenAddress,
-      tokenInfo.symbol,
-      creatorAddress,
-      holders,
-      creatorHoldingsPercent
-    );
-
-    const aiStart = Date.now();
-    const aiAnalysis = await generateNetworkAnalysis(
-      tokenInfo,
-      network,
-      creatorInfo,
-      bundleInfo,
-      bundleQuality,
-      devActivity,
-      togetherKey,
-      model
-    );
-    console.log(`[Sentinel] AI analysis took ${Date.now() - aiStart}ms, AI score: ${aiAnalysis.riskScore}`);
-
-    const hasWebsite = !!(dexData?.websites && dexData.websites.length > 0);
-    const hasTwitter = !!(dexData?.socials?.some(s =>
-      s.type === 'twitter' || s.url?.includes('twitter.com') || s.url?.includes('x.com')
-    ));
-
-    const aiScore = aiAnalysis.riskScore;
-
-    const analysis = applyHardcodedRules(aiAnalysis, {
-      tokenInfo: {
-        marketCap: tokenInfo.marketCap,
-        liquidity: tokenInfo.liquidity,
-        ageHours: tokenInfo.ageHours,
-        volume24h: tokenInfo.volume24h,
-        txns24h: tokenInfo.txns24h,
-        mintAuthorityActive: tokenInfo.mintAuthorityActive,
-        freezeAuthorityActive: tokenInfo.freezeAuthorityActive,
-        lpLockedPct: tokenInfo.lpLockedPct,
-      },
-      holders,
-      creatorInfo,
-      bundleInfo,
-      bundleQuality,
-      washTrading,
-      devActivity,
-      isPumpFun,
-      hasWebsite,
-      hasTwitter,
-      creatorAddress,
-    });
-
-    const rulesOverride = aiScore !== analysis.riskScore;
-    if (rulesOverride) {
-      console.log(`[Sentinel] Rules override: AI=${aiScore} → Final=${analysis.riskScore} (${analysis.riskLevel})`);
-    } else {
-      console.log(`[Sentinel] Final score: ${analysis.riskScore} (${analysis.riskLevel})`);
-    }
-
-    // Auto-tweet
-    if (analysis.riskScore >= 70 && c.env.TWITTER_API_KEY) {
-      const twitterConfig: TwitterConfig = {
-        apiKey: c.env.TWITTER_API_KEY,
-        apiSecret: c.env.TWITTER_API_SECRET || '',
-        accessToken: c.env.TWITTER_ACCESS_TOKEN || '',
-        accessTokenSecret: c.env.TWITTER_ACCESS_TOKEN_SECRET || '',
-      };
-
-      c.executionCtx.waitUntil(
-        (async () => {
-          try {
-            const { allowed, reason } = await canTweet(c.env.SCAN_CACHE, tokenAddress);
-            if (!allowed) {
-              console.log(`[Twitter] Skipping tweet for ${tokenAddress}: ${reason}`);
-              return;
-            }
-
-            const tweetText = formatAlertTweet({
-              tokenAddress,
-              name: tokenInfo.name,
-              symbol: tokenInfo.symbol,
-              riskScore: analysis.riskScore,
-              riskLevel: analysis.riskLevel,
-              liquidity: tokenInfo.liquidity || 0,
-              marketCap: tokenInfo.marketCap || 0,
-              ageHours: tokenInfo.ageHours || 0,
-              bundleDetected: bundleInfo?.detected || false,
-              bundleCount: bundleInfo?.count || 0,
-              bundleConfidence: bundleInfo?.confidence || 'NONE',
-              flags: analysis.flags || [],
-              summary: analysis.summary || '',
-            });
-
-            const result = await postTweet(tweetText, twitterConfig);
-            if (result.success && result.tweetId) {
-              await recordTweet(c.env.SCAN_CACHE, tokenAddress, result.tweetId);
-              console.log(`[Twitter] Alert posted: ${result.tweetUrl}`);
-            } else {
-              console.warn(`[Twitter] Failed to post: ${result.error}`);
-            }
-          } catch (err) {
-            console.error('[Twitter] Auto-tweet error:', err);
-          }
-        })()
-      );
-    }
-
-    // Auto-telegram
-    if (analysis.riskScore >= 70 && c.env.TELEGRAM_BOT_TOKEN && c.env.TELEGRAM_CHANNEL_ID) {
-      c.executionCtx.waitUntil(
-        (async () => {
-          try {
-            const tgKey = `telegram:${tokenAddress}`;
-            const existing = await c.env.SCAN_CACHE.get(tgKey);
-            if (existing) {
-              console.log(`[Telegram] Already alerted for ${tokenAddress}`);
-              return;
-            }
-
-            const html = formatAlertHtml({
-              tokenAddress,
-              name: tokenInfo.name,
-              symbol: tokenInfo.symbol,
-              riskScore: analysis.riskScore,
-              riskLevel: analysis.riskLevel,
-              liquidity: tokenInfo.liquidity || 0,
-              marketCap: tokenInfo.marketCap || 0,
-              ageHours: tokenInfo.ageHours || 0,
-              bundleDetected: bundleInfo?.detected || false,
-              bundleCount: bundleInfo?.count || 0,
-              bundleConfidence: bundleInfo?.confidence || 'NONE',
-              flags: analysis.flags || [],
-              summary: analysis.summary || '',
-            });
-
-            const result = await sendMessage(
-              c.env.TELEGRAM_BOT_TOKEN!,
-              c.env.TELEGRAM_CHANNEL_ID!,
-              html
-            );
-
-            if (result.ok) {
-              await c.env.SCAN_CACHE.put(tgKey, String(result.messageId), {
-                expirationTtl: 7 * 24 * 60 * 60,
-              });
-              console.log(`[Telegram] Alert posted to channel, msg ${result.messageId}`);
-            } else {
-              console.warn(`[Telegram] Failed to post: ${result.error}`);
-            }
-          } catch (err) {
-            console.error('[Telegram] Auto-alert error:', err);
-          }
-        })()
-      );
-    }
-
-    // ============================================
-    // SAVE TRAINING DATA (for BitNet fine-tuning)
-    // ============================================
-    try {
-      const trainingInput = convertToAnalysisInput(
-        tokenInfo,
-        holders.map(h => ({ percent: h.percent, isWhale: h.percent > 10, address: h.address })),
-        bundleInfo,
-        bundleQuality,
-        creatorInfo,
-        devActivity,
-        washTrading,
-        bundleQuality?.signals.negative.some(s => s.includes('age')) ? 0 : 30, // Avg bundle wallet age
-        bundleInfo.controlPercent // Actual holdings of bundle wallets (calculated correctly)
-      );
-
-      const aiOutput: TokenAnalysisOutput = {
-        riskScore: aiScore,
-        riskLevel: analysis.riskLevel as 'SAFE' | 'SUSPICIOUS' | 'DANGEROUS' | 'SCAM',
-        confidence: 70,
-        summary: analysis.summary || 'Analysis completed.',
-        prediction: analysis.prediction || 'Unable to predict.',
-        recommendation: analysis.recommendation || 'Exercise caution.',
-        flags: analysis.flags.map(f => ({
-          type: f.type,
-          severity: f.severity as 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL',
-          message: f.message,
-        })),
-        networkInsights: analysis.networkInsights,
-      };
-
-      // Save asynchronously (don't block response)
-      c.executionCtx.waitUntil(
-        saveTrainingExample(
-          c.env.BUNDLE_DB,
-          tokenAddress,
-          tokenInfo.symbol || '???',
-          trainingInput,
-          aiOutput,
-          analysis.riskScore,
-          analysis.riskLevel,
-          rulesOverride,
-          rulesOverride ? `AI: ${aiScore} → Final: ${analysis.riskScore}` : undefined,
-          'together',
-          model,
-          Date.now() - fetchStart
-        ).catch(err => console.error('[Training] Failed to save:', err))
-      );
-    } catch (trainingErr) {
-      console.error('[Training] Error preparing data:', trainingErr);
-    }
-
-    c.header('X-RateLimit-Limit', String(rateLimitResult.limit));
-    c.header('X-RateLimit-Remaining', String(rateLimitResult.remaining));
-    c.header('X-RateLimit-Reset', String(rateLimitResult.resetAt));
-    c.header('X-User-Tier', tier);
-
-    // Process agent events in background (non-blocking) - LEGACY path
-    if (c.env.SCAN_CACHE) {
-      c.executionCtx.waitUntil(
-        processTokenScan(c.env.SCAN_CACHE, {
-          tokenAddress,
-          tokenSymbol: tokenInfo.symbol || 'UNKNOWN',
-          score: analysis.riskScore,
-          bundleDetected: bundleInfo.detected,
-          bundleCount: bundleInfo.count,
-          bundleWallets: bundleInfo.wallets,
-          syndicateNetwork: syndicateNetwork ? {
-            detected: syndicateNetwork.detected,
-            repeatOffenders: syndicateNetwork.repeatOffenders,
-            rugRate: syndicateNetwork.rugRate,
-          } : undefined,
-        }).catch(err => console.error('[AgentEvents] Error processing scan:', err))
-      );
-    }
-
-    return c.json({
-      tokenInfo,
-      pairAddress: dexData?.pairAddress || null,
-      security: {
-        mintRevoked: !mintAuthorityActive,
-        freezeRevoked: !freezeAuthorityActive,
-        lpLockedPct,
-        isPumpFun,
-      },
-      network,
-      analysis,
-      aiScore,
-      rulesOverride,
-      creatorInfo,
-      holderDistribution,
-      bundleInfo: {
-        ...bundleInfo,
-        washTrading: washTrading ? {
-          detected: washTrading.detected,
-          totalBuys: washTrading.totalBuys,
-          bundleBuys: washTrading.bundleBuys,
-          organicBuys: washTrading.organicBuys,
-          washTradingPercent: washTrading.washTradingPercent,
-          realBuyRatio: washTrading.realBuyRatio,
-          warning: washTrading.warning,
-        } : null,
-      },
-      bundleQuality: bundleQuality ? {
-        legitimacyScore: bundleQuality.legitimacyScore,
-        assessment: bundleQuality.assessment,
-        positiveSignals: bundleQuality.signals.positive,
-        negativeSignals: bundleQuality.signals.negative,
-      } : null,
-      syndicateNetwork: syndicateNetwork ? {
-        detected: syndicateNetwork.detected,
-        repeatOffenders: syndicateNetwork.repeatOffenders,
-        totalTokensTouched: syndicateNetwork.totalTokensTouched,
-        rugRate: syndicateNetwork.rugRate,
-        highRiskWallets: syndicateNetwork.highRiskWallets,
-        networkWarning: syndicateNetwork.networkWarning,
-      } : null,
-      devActivity: devActivity ? {
-        hasSold: devActivity.hasSold,
-        percentSold: devActivity.percentSold,
-        sellCount: devActivity.sellCount,
-        currentHoldingsPercent: devActivity.currentHoldingsPercent,
-        severity: devActivity.severity,
-        message: devActivity.message,
-      } : null,
-      timestamp: Date.now(),
-    });
   } catch (error) {
     console.error('[Sentinel] Analysis error:', error);
     return c.json(

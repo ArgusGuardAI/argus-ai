@@ -255,6 +255,20 @@ export abstract class BaseAgent {
   }
 
   /**
+   * Configure BitNet metrics reporting URL
+   */
+  setMetricsUrl(url: string): void {
+    this.engine.setMetricsUrl(url);
+  }
+
+  /**
+   * Get BitNet inference stats
+   */
+  getBitNetStats(): { lastMs: number; avgMs: number; totalInferences: number } {
+    return this.engine.getInferenceStats();
+  }
+
+  /**
    * Setup base message handlers
    */
   private setupBaseMessageHandlers(): void {

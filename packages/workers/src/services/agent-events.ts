@@ -68,8 +68,10 @@ export interface AgentStats {
 const EVENTS_KEY = 'agents:events';
 const STATS_KEY = 'agents:stats';
 const GRADUATIONS_KEY = 'agents:graduations';
+const DISCOVERIES_KEY = 'agents:discoveries';
 const MAX_EVENTS = 100;
 const MAX_GRADUATIONS = 50;
+const MAX_DISCOVERIES = 50;
 
 /**
  * Generate unique event ID
@@ -242,181 +244,31 @@ export async function getAgentStats(kv: KVNamespace): Promise<AgentStats> {
 }
 
 /**
- * Create events from a token scan result
- * Called after /sentinel/analyze completes
- *
- * Implements agent-to-agent communication:
- * SCOUT detects → requests ANALYST analysis → ANALYST reports → HUNTER tracks (if risky)
+ * Store a discovery result from the agents server
+ * Deduplicates by token address (latest wins)
  */
-export async function processTokenScan(
+export async function storeDiscovery(
   kv: KVNamespace,
-  scanResult: {
-    tokenAddress: string;
-    tokenSymbol: string;
-    score: number;
-    bundleDetected: boolean;
-    bundleCount?: number;
-    bundleWallets?: string[];
-    syndicateNetwork?: {
-      detected: boolean;
-      repeatOffenders: number;
-      rugRate: number;
-    };
-  }
+  discovery: any
 ): Promise<void> {
-  const { tokenAddress, tokenSymbol, score, bundleDetected, bundleCount, syndicateNetwork } = scanResult;
+  const existing = await kv.get<any[]>(DISCOVERIES_KEY, 'json') || [];
 
-  // Update stats for scan
-  const statsUpdates: Parameters<typeof updateAgentStats>[1] = { scan: true };
+  // Deduplicate by token (keep latest)
+  const filtered = existing.filter((d: any) => d.token !== discovery.token);
+  const updated = [discovery, ...filtered].slice(0, MAX_DISCOVERIES);
 
-  // 1. SCOUT detects token and requests ANALYST analysis
-  await storeAgentEvent(kv, {
-    agent: 'SCOUT',
-    type: 'comms',
-    message: `→ ANALYST: New token detected, requesting analysis`,
-    severity: 'info',
-    data: {
-      tokenAddress,
-      tokenSymbol: `$${tokenSymbol}`,
-      targetAgent: 'ANALYST',
-      requestType: 'analyze',
-    },
-  });
+  await kv.put(DISCOVERIES_KEY, JSON.stringify(updated), { expirationTtl: 86400 });
+}
 
-  // Small delay simulation for agent processing (these get timestamped slightly apart)
-  // 2. ANALYST responds with analysis results
-  if (score < 40) {
-    // Critical risk - ANALYST alerts and requests HUNTER investigation
-    await storeAgentEvent(kv, {
-      agent: 'ANALYST',
-      type: 'comms',
-      message: `→ HUNTER: CRITICAL risk (${score}/100), requesting wallet investigation`,
-      severity: 'critical',
-      data: {
-        tokenAddress,
-        tokenSymbol: `$${tokenSymbol}`,
-        score,
-        targetAgent: 'HUNTER',
-        requestType: 'investigate',
-      },
-    });
-    statsUpdates.alert = true;
-    statsUpdates.highRisk = true;
-
-    // 3. HUNTER acknowledges and begins tracking
-    await storeAgentEvent(kv, {
-      agent: 'HUNTER',
-      type: 'comms',
-      message: `→ ANALYST: Acknowledged, tracking suspicious wallets on $${tokenSymbol}`,
-      severity: 'warning',
-      data: {
-        tokenAddress,
-        tokenSymbol: `$${tokenSymbol}`,
-        targetAgent: 'ANALYST',
-        requestType: 'tracking_started',
-      },
-    });
-
-  } else if (score < 60) {
-    // Medium risk - ANALYST warns SCOUT
-    await storeAgentEvent(kv, {
-      agent: 'ANALYST',
-      type: 'comms',
-      message: `→ SCOUT: Moderate risk (${score}/100), flagging for watchlist`,
-      severity: 'warning',
-      data: {
-        tokenAddress,
-        tokenSymbol: `$${tokenSymbol}`,
-        score,
-        targetAgent: 'SCOUT',
-        requestType: 'flag',
-      },
-    });
-    statsUpdates.alert = true;
-
-  } else {
-    // Safe token - ANALYST confirms to SCOUT
-    await storeAgentEvent(kv, {
-      agent: 'ANALYST',
-      type: 'comms',
-      message: `→ SCOUT: Analysis complete (${score}/100), token appears safe`,
-      severity: 'info',
-      data: {
-        tokenAddress,
-        tokenSymbol: `$${tokenSymbol}`,
-        score,
-        targetAgent: 'SCOUT',
-        requestType: 'cleared',
-      },
-    });
-  }
-
-  // 4. If bundle detected, HUNTER reports to ANALYST
-  if (bundleDetected && bundleCount && bundleCount > 0) {
-    await storeAgentEvent(kv, {
-      agent: 'HUNTER',
-      type: 'comms',
-      message: `→ ANALYST: Found ${bundleCount} coordinated wallets on $${tokenSymbol}`,
-      severity: 'warning',
-      data: {
-        tokenAddress,
-        tokenSymbol: `$${tokenSymbol}`,
-        bundleCount,
-        targetAgent: 'ANALYST',
-        requestType: 'bundle_report',
-      },
-    });
-    statsUpdates.bundleDetected = true;
-
-    // ANALYST acknowledges bundle intel
-    await storeAgentEvent(kv, {
-      agent: 'ANALYST',
-      type: 'comms',
-      message: `→ HUNTER: Received, factoring ${bundleCount} wallets into risk model`,
-      severity: 'info',
-      data: {
-        tokenAddress,
-        tokenSymbol: `$${tokenSymbol}`,
-        targetAgent: 'HUNTER',
-        requestType: 'intel_received',
-      },
-    });
-  }
-
-  // 5. If syndicate network found, escalate through all agents
-  if (syndicateNetwork?.detected && syndicateNetwork.repeatOffenders > 0) {
-    // HUNTER alerts entire swarm
-    await storeAgentEvent(kv, {
-      agent: 'HUNTER',
-      type: 'comms',
-      message: `→ ALL: SYNDICATE ALERT - ${syndicateNetwork.repeatOffenders} repeat scammers, ${Math.round(syndicateNetwork.rugRate * 100)}% rug rate`,
-      severity: 'critical',
-      data: {
-        tokenAddress,
-        tokenSymbol: `$${tokenSymbol}`,
-        rugRate: syndicateNetwork.rugRate,
-        requestType: 'syndicate_alert',
-      },
-    });
-    statsUpdates.syndicateFound = true;
-
-    // TRADER responds to syndicate warning
-    await storeAgentEvent(kv, {
-      agent: 'TRADER',
-      type: 'comms',
-      message: `→ HUNTER: Blacklisting $${tokenSymbol}, blocking all trade routes`,
-      severity: 'critical',
-      data: {
-        tokenAddress,
-        tokenSymbol: `$${tokenSymbol}`,
-        targetAgent: 'HUNTER',
-        requestType: 'blacklist',
-      },
-    });
-  }
-
-  // Update stats
-  await updateAgentStats(kv, statsUpdates);
+/**
+ * Get recent discoveries
+ */
+export async function getDiscoveries(
+  kv: KVNamespace,
+  limit = 20
+): Promise<any[]> {
+  const discoveries = await kv.get<any[]>(DISCOVERIES_KEY, 'json') || [];
+  return discoveries.slice(0, limit);
 }
 
 /**

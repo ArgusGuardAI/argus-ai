@@ -105,6 +105,12 @@ export class BitNetEngine {
   // Optional LLM service for real text generation
   private llmService: { generate(prompt: string, format?: 'json' | 'text'): Promise<string | null> } | null = null;
 
+  // Metrics reporting
+  private metricsUrl: string | null = null;
+  private lastInferenceMs: number = 0;
+  private totalInferences: number = 0;
+  private totalInferenceMs: number = 0;
+
   constructor(modelPath: string = 'rule-based') {
     this.config = {
       modelPath,
@@ -238,11 +244,26 @@ export class BitNetEngine {
       await this.loadModel();
     }
 
+    // Time the inference
+    const startTime = performance.now();
+
+    let result: ClassifierOutput;
     if (this.useNeuralInference) {
-      return this.neuralClassify(features);
+      result = this.neuralClassify(features);
+    } else {
+      result = this.ruleBasedClassify(features);
     }
 
-    return this.ruleBasedClassify(features);
+    // Track inference time
+    const inferenceMs = performance.now() - startTime;
+    this.lastInferenceMs = inferenceMs;
+    this.totalInferences++;
+    this.totalInferenceMs += inferenceMs;
+
+    // Report metrics asynchronously (non-blocking)
+    this.reportMetrics(inferenceMs, result.confidence).catch(() => {});
+
+    return result;
   }
 
   /**
@@ -523,6 +544,47 @@ export class BitNetEngine {
   setLLMService(llm: { generate(prompt: string, format?: 'json' | 'text'): Promise<string | null> }): void {
     this.llmService = llm;
     console.log('[BitNetEngine] LLM service connected — generate() will use real AI');
+  }
+
+  /**
+   * Configure metrics reporting URL
+   */
+  setMetricsUrl(url: string): void {
+    this.metricsUrl = url;
+    console.log(`[BitNetEngine] Metrics reporting enabled → ${url}`);
+  }
+
+  /**
+   * Report inference metrics to Workers API
+   */
+  private async reportMetrics(inferenceMs: number, confidence: number): Promise<void> {
+    if (!this.metricsUrl) return;
+
+    try {
+      await fetch(this.metricsUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inferenceMs,
+          confidence,
+          timestamp: Date.now(),
+        }),
+      });
+    } catch (err) {
+      // Silent fail - metrics are non-critical
+      console.debug('[BitNetEngine] Failed to report metrics:', err);
+    }
+  }
+
+  /**
+   * Get current inference stats
+   */
+  getInferenceStats(): { lastMs: number; avgMs: number; totalInferences: number } {
+    return {
+      lastMs: this.lastInferenceMs,
+      avgMs: this.totalInferences > 0 ? this.totalInferenceMs / this.totalInferences : 0,
+      totalInferences: this.totalInferences,
+    };
   }
 
   /**

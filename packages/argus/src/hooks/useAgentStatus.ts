@@ -113,14 +113,10 @@ interface UseAgentStatusReturn {
   clearActivity: () => void;
 }
 
-// API base URL
+// API base URL - always use production for live agent data
 const getApiBaseUrl = (): string => {
-  // In development, use local workers
-  if (window.location.hostname === 'localhost') {
-    return 'http://localhost:8787';
-  }
-  // In production, use the workers domain
-  return 'https://argus-workers.anthropic.workers.dev';
+  // Use production Workers API for live agent data
+  return 'https://argusguard-api.hermosillo-jessie.workers.dev';
 };
 
 export function useAgentStatus(options: UseAgentStatusOptions = {}): UseAgentStatusReturn {

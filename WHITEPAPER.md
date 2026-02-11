@@ -465,19 +465,34 @@ By combining AI analysis, bundle detection, security checks, and one-click tradi
 
 ---
 
+## Infrastructure
+
+### Self-Hosted Solana Infrastructure
+
+Argus runs on dedicated Hetzner infrastructure with zero third-party RPC dependencies:
+
+| Server | Purpose | Cost |
+|--------|---------|------|
+| **RPC Node** | All Solana RPC calls | $0/month (self-hosted) |
+| **Agents Server** | Multi-agent AI system + PostgreSQL | $0/month (self-hosted) |
+| **Yellowstone Node** | Real-time Geyser streaming | $0/month (self-hosted) |
+
+This eliminates:
+- Helius RPC costs ($0 vs $500+/month at scale)
+- Rate limiting from third-party providers
+- Single points of failure
+
 ## Data Sources
 
 | Data | Source | Cost |
 |------|--------|------|
+| RPC Calls | Self-hosted Solana node | $0 |
 | Price, Volume, Liquidity, Market Cap | DexScreener API | FREE |
 | Buy/Sell Counts, Trading Activity | DexScreener API | FREE |
-| Top Holders, Mint/Freeze Authority | Helius RPC | Free tier |
-| Transaction History (bundle detection) | Helius RPC | Free tier |
+| Creator Detection (optional) | Helius DAS API | Optional |
 | AI Risk Analysis | Together AI | Paid |
-| AI Risk Analysis (local dev) | Groq API | FREE |
 | Swap Execution | Jupiter API | FREE |
-| Real-time Pool Detection | Helius WebSocket | Free tier |
-| SOL Price | Jupiter / CoinGecko | FREE |
+| Real-time Streaming | Yellowstone/Geyser | $0 (self-hosted) |
 
 ---
 
