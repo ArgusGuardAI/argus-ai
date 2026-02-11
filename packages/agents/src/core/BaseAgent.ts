@@ -57,6 +57,7 @@ export abstract class BaseAgent {
   protected messageBus: MessageBus;
   protected thoughts: ThoughtEntry[] = [];
   protected running: boolean = false;
+  protected static readonly MAX_THOUGHTS = 1000; // Prevent memory overflow
 
   // LLM-powered reasoning (optional, falls back to BitNet)
   protected llmService: LLMService | null = null;
@@ -161,6 +162,11 @@ export abstract class BaseAgent {
     };
 
     this.thoughts.push(thought);
+
+    // Prevent memory overflow - trim oldest thoughts when limit exceeded
+    if (this.thoughts.length > BaseAgent.MAX_THOUGHTS) {
+      this.thoughts = this.thoughts.slice(-BaseAgent.MAX_THOUGHTS);
+    }
 
     // Store in memory
     if (this.config.memory) {

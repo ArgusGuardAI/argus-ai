@@ -123,6 +123,7 @@ export class DebateProtocol {
   private agents: Map<string, AgentProfile>;
   private activeDebates: Map<string, DebateResult>;
   private debateHistory: DebateResult[] = [];
+  private static readonly MAX_HISTORY = 100; // Prevent memory overflow
 
   constructor(llm: LLMService, messageBus: MessageBus) {
     this.llm = llm;
@@ -191,8 +192,11 @@ export class DebateProtocol {
       timestamp: Date.now(),
     };
 
-    // Store result
+    // Store result (with overflow protection)
     this.debateHistory.push(result);
+    if (this.debateHistory.length > DebateProtocol.MAX_HISTORY) {
+      this.debateHistory = this.debateHistory.slice(-DebateProtocol.MAX_HISTORY);
+    }
 
     // Publish result to message bus
     await this.messageBus.publish('debate.result', result);

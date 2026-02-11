@@ -539,6 +539,110 @@ const styles = `
     margin-top: 4px;
   }
 
+  /* Compression comparison table */
+  .compression-table-wrapper {
+    margin-top: 60px;
+    max-width: 700px;
+    margin-left: auto;
+    margin-right: auto;
+    opacity: 0;
+    transform: translateY(30px);
+    transition: opacity 0.6s ease 0.5s, transform 0.6s ease 0.5s;
+  }
+
+  .compression-table-wrapper.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .compression-table-title {
+    text-align: center;
+    font-size: 0.8rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 20px;
+  }
+
+  .compression-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.9rem;
+  }
+
+  .compression-table th {
+    padding: 16px 20px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-main);
+    border-bottom: 2px solid var(--accent);
+    background: rgba(220, 38, 38, 0.1);
+  }
+
+  .compression-table th:first-child {
+    border-radius: 8px 0 0 0;
+  }
+
+  .compression-table th:last-child {
+    border-radius: 0 8px 0 0;
+  }
+
+  .compression-table td {
+    padding: 14px 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    color: var(--text-muted);
+  }
+
+  .compression-table tr:last-child td {
+    border-bottom: none;
+  }
+
+  .compression-table tr:last-child td:first-child {
+    border-radius: 0 0 0 8px;
+  }
+
+  .compression-table tr:last-child td:last-child {
+    border-radius: 0 0 8px 0;
+  }
+
+  .compression-table tbody tr {
+    background: var(--bg-card);
+    transition: background 0.2s ease;
+  }
+
+  .compression-table tbody tr:hover {
+    background: rgba(220, 38, 38, 0.05);
+  }
+
+  .compression-table .raw-data {
+    color: var(--text-dim);
+  }
+
+  .compression-table .compressed {
+    color: var(--emerald);
+    font-weight: 600;
+  }
+
+  .compression-table .highlight-row td {
+    background: rgba(220, 38, 38, 0.1);
+  }
+
+  .compression-table .highlight-row .compressed {
+    color: var(--accent);
+    font-weight: 700;
+  }
+
+  @media (max-width: 600px) {
+    .compression-table {
+      font-size: 0.75rem;
+    }
+    .compression-table th,
+    .compression-table td {
+      padding: 10px 12px;
+    }
+  }
+
   /* Section: Origin Vault */
   .section-vault {
     background:
@@ -2435,12 +2539,17 @@ export default function Landing() {
                 The impossible <span>engine</span>
               </h1>
               <p className="narrative-text">
-                They said you can't run AI without burning money. They were wrong.
-                BitNet uses ternary weights: just -1, 0, and +1. No 32-bit floats. No GPU. No cloud.
-                The model is 20x smaller. Inference takes 13 milliseconds on a CPU.
-                We compress 2MB of blockchain data into 116 bytes — a 17,000x reduction that fits
-                a million token fingerprints in 116MB of RAM. This is what lets Argus run forever
-                at zero cost. The titan doesn't need to eat.
+                These aren't chatbots. They're autonomous AI agents that think, reason, and debate.
+                Each agent runs a ReAct loop — Thought, Action, Observation — powered by real LLMs.
+                When stakes are high, they convene a multi-agent debate: propose, argue, counter, vote.
+                Weighted consensus. 60% threshold. No single point of failure.
+              </p>
+              <p className="narrative-text" style={{ marginTop: '20px' }}>
+                But intelligence without efficiency is just a cloud bill. BitNet uses ternary weights:
+                just -1, 0, and +1. No 32-bit floats. No GPU required.
+                We compress 2MB of blockchain data into 116 bytes — a 17,000x reduction.
+                Store a million token fingerprints in 116MB of RAM. The agents remember everything.
+                The titan thinks deeply but doesn't need to eat.
               </p>
             </div>
             <div className="engine-stats">
@@ -2464,6 +2573,42 @@ export default function Landing() {
                 <div className="engine-stat-label">Forever</div>
                 <div className="engine-stat-detail">No cloud. No bills.</div>
               </div>
+            </div>
+
+            {/* Compression comparison table */}
+            <div className={`compression-table-wrapper ${visibleSections.has('engine') ? 'visible' : ''}`}>
+              <div className="compression-table-title">Real-World Impact</div>
+              <table className="compression-table">
+                <thead>
+                  <tr>
+                    <th>Tokens Stored</th>
+                    <th>Raw Data</th>
+                    <th>Compressed</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>1,000</td>
+                    <td className="raw-data">2 GB</td>
+                    <td className="compressed">116 KB</td>
+                  </tr>
+                  <tr>
+                    <td>10,000</td>
+                    <td className="raw-data">20 GB</td>
+                    <td className="compressed">1.16 MB</td>
+                  </tr>
+                  <tr>
+                    <td>100,000</td>
+                    <td className="raw-data">200 GB</td>
+                    <td className="compressed">11.6 MB</td>
+                  </tr>
+                  <tr className="highlight-row">
+                    <td>1,000,000</td>
+                    <td className="raw-data">2 TB</td>
+                    <td className="compressed">116 MB</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </section>
 
