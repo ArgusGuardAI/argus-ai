@@ -19,6 +19,8 @@ import { WorkersSync, WorkersSyncConfig } from '../services/WorkersSync';
 import { OutcomeLearner } from '../learning/OutcomeLearner';
 import { PatternLibrary } from '../learning/PatternLibrary';
 import { PositionStore } from '../services/PositionStore';
+import { DebateProtocol, Proposal, DebateResult, createProposalId, shouldDebate } from '../reasoning/DebateProtocol';
+import { getGoalTracker, GoalTracker } from './AgentGoals';
 import type { Database } from '../services/Database';
 import type { LLMService } from '../services/LLMService';
 
@@ -77,6 +79,10 @@ export class AgentCoordinator {
   private positionStore: PositionStore | null = null;
   private outcomeCheckTimer: NodeJS.Timeout | null = null;
 
+  // Autonomous reasoning components
+  private debateProtocol: DebateProtocol | null = null;
+  private goalTracker: GoalTracker;
+
   // Agent pools
   private scouts: ScoutAgent[] = [];
   private analysts: AnalystAgent[] = [];
@@ -110,6 +116,13 @@ export class AgentCoordinator {
     this.llm = config.llm;
     this.outcomeLearner = new OutcomeLearner();
     this.patternLibrary = new PatternLibrary();
+    this.goalTracker = getGoalTracker();
+
+    // Initialize debate protocol if LLM is available
+    if (this.llm) {
+      this.debateProtocol = new DebateProtocol(this.llm, this.messageBus);
+      console.log('[Coordinator] DebateProtocol enabled (LLM available)');
+    }
 
     // Wire database to learning components
     if (this.database) {
@@ -461,6 +474,43 @@ export class AgentCoordinator {
       console.log(`[EMERGENCY] ${msg.data.reason}`);
       // Could trigger emergency shutdown or notifications here
     });
+
+    // Handle debate requests (for multi-agent consensus on critical decisions)
+    this.messageBus.subscribe('debate.request', async (msg) => {
+      if (!this.debateProtocol) {
+        console.log('[Coordinator] Debate requested but no LLM available - auto-approving');
+        await this.messageBus.publish('debate.result', {
+          proposal: msg.data,
+          decision: 'APPROVED',
+          confidence: 0.5,
+          consensusReasoning: 'Auto-approved (no LLM for debate)',
+          arguments: [],
+          counters: [],
+          votes: [],
+        });
+        return;
+      }
+
+      const proposal: Proposal = {
+        id: createProposalId(),
+        agent: msg.from || 'unknown',
+        action: msg.data.action,
+        target: msg.data.target,
+        amount: msg.data.amount,
+        reasoning: msg.data.reasoning,
+        confidence: msg.data.confidence || 0.7,
+        context: msg.data.context || {},
+        timestamp: Date.now(),
+      };
+
+      console.log(`[Coordinator] Starting debate on ${proposal.action} for ${proposal.target.slice(0, 8)}...`);
+
+      const result = await this.debateProtocol.debate(proposal);
+
+      console.log(`[Coordinator] Debate concluded: ${result.decision} (${(result.confidence * 100).toFixed(0)}% confidence)`);
+
+      // Result is auto-published by DebateProtocol
+    });
   }
 
   /**
@@ -653,5 +703,63 @@ export class AgentCoordinator {
       lastMs,
       agentBreakdown: breakdown,
     };
+  }
+
+  /**
+   * Get debate history
+   */
+  getDebateHistory(limit: number = 20): DebateResult[] {
+    return this.debateProtocol?.getHistory(limit) || [];
+  }
+
+  /**
+   * Get goal progress summary for all agents
+   */
+  getGoalSummary(): Record<string, { progress: number; onTrack: number; total: number }> {
+    return this.goalTracker.getSummary();
+  }
+
+  /**
+   * Trigger a debate on a proposal manually
+   */
+  async triggerDebate(proposal: {
+    agent: string;
+    action: 'BUY' | 'SELL' | 'IGNORE' | 'TRACK' | 'ALERT';
+    target: string;
+    reasoning: string;
+    confidence?: number;
+    context?: Record<string, unknown>;
+  }): Promise<DebateResult | null> {
+    if (!this.debateProtocol) {
+      console.log('[Coordinator] Cannot trigger debate - no LLM available');
+      return null;
+    }
+
+    const fullProposal: Proposal = {
+      id: createProposalId(),
+      agent: proposal.agent,
+      action: proposal.action,
+      target: proposal.target,
+      reasoning: proposal.reasoning,
+      confidence: proposal.confidence || 0.7,
+      context: proposal.context || {},
+      timestamp: Date.now(),
+    };
+
+    return this.debateProtocol.debate(fullProposal);
+  }
+
+  /**
+   * Check if autonomous reasoning (LLM) is available
+   */
+  isAutonomousReasoningEnabled(): boolean {
+    return this.llm !== undefined && this.debateProtocol !== null;
+  }
+
+  /**
+   * Update agent success rate in debate protocol (for learning)
+   */
+  updateAgentDebateSuccess(agentName: string, wasCorrect: boolean): void {
+    this.debateProtocol?.updateAgentSuccess(agentName, wasCorrect);
   }
 }

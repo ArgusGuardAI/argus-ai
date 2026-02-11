@@ -526,6 +526,49 @@ export class WorkersSync {
         timestamp: Date.now(),
       });
     });
+
+    // Multi-agent debate results (autonomous reasoning)
+    this.messageBus.subscribe('debate.result', async (msg) => {
+      const decision = msg.data.decision || 'UNKNOWN';
+      const confidence = Math.round((msg.data.confidence || 0) * 100);
+      const action = msg.data.proposal?.action || 'action';
+      const target = msg.data.proposal?.target?.slice(0, 8) || 'target';
+      const proposer = msg.data.proposal?.agent?.toUpperCase() || 'AGENT';
+      const reasoning = msg.data.consensusReasoning || '';
+
+      // Build vote summary
+      const votes = msg.data.votes || [];
+      const yesVotes = votes.filter((v: any) => v.decision === 'YES').map((v: any) => v.agent);
+      const noVotes = votes.filter((v: any) => v.decision === 'NO').map((v: any) => v.agent);
+
+      let message: string | null = null;
+      if (this.llm) {
+        message = await this.llm.generateDialogue({
+          agent: 'analyst',
+          event: 'debate_result',
+          data: { decision, confidence, action, target, yesVotes, noVotes },
+        });
+      }
+      if (!message) {
+        const voteStr = yesVotes.length > 0 || noVotes.length > 0
+          ? ` [${yesVotes.join(', ')} YES | ${noVotes.join(', ')} NO]`
+          : '';
+        message = `DEBATE: ${action} on ${target}... ${decision} (${confidence}%)${voteStr}`;
+      }
+
+      this.queueEvent({
+        agent: 'SWARM',
+        type: 'comms',
+        message,
+        severity: decision === 'APPROVED' ? 'info' : 'warning',
+        data: {
+          tokenAddress: msg.data.proposal?.target,
+          targetAgent: proposer,
+          requestType: 'debate_result',
+        },
+        timestamp: Date.now(),
+      });
+    });
   }
 
   /**

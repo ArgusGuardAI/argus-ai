@@ -25,12 +25,14 @@ export { BaseAgent } from './core/BaseAgent';
 export { MessageBus } from './core/MessageBus';
 export { AgentMemory } from './core/AgentMemory';
 export { AgentCoordinator } from './core/AgentCoordinator';
+export { GoalTracker, getGoalTracker, AGENT_GOALS } from './core/AgentGoals';
 
 // Core - Types
 export type { AgentConfig, Tool, ThoughtEntry, AgentAction } from './core/BaseAgent';
 export type { Message, MessageHandler } from './core/MessageBus';
 export type { MemoryEntry, SimilarityResult } from './core/AgentMemory';
 export type { CoordinatorConfig, SystemStatus } from './core/AgentCoordinator';
+export type { Goal, GoalType, GoalProgress, AgentGoalSet } from './core/AgentGoals';
 
 // Agents - Classes
 export { ScoutAgent } from './agents/ScoutAgent';
@@ -46,9 +48,21 @@ export type { Position, TradingStrategy, TradeResult, PriceUpdateEvent } from '.
 
 // Reasoning - Classes
 export { BitNetEngine } from './reasoning/BitNetEngine';
+export { ReActLoop, createReActLoop } from './reasoning/ReActLoop';
+export { DebateProtocol, createProposalId, shouldDebate } from './reasoning/DebateProtocol';
 
 // Reasoning - Types
 export type { ClassifierOutput, ReasoningOutput, GenerateOptions } from './reasoning/BitNetEngine';
+export type { Thought, Action, Observation, ReActStep, ReActResult, ReActConfig } from './reasoning/ReActLoop';
+export type { Proposal, Argument, Counter, Vote, DebateResult, AgentProfile } from './reasoning/DebateProtocol';
+
+// Prompts
+export { AGENT_PROMPTS, buildSystemPrompt, getAgentDescription, getAgentPersonality, getAgentForTask } from './prompts/SystemPrompts';
+export type { AgentPrompt } from './prompts/SystemPrompts';
+
+// Tool Registry
+export { AGENT_TOOL_DEFINITIONS, getToolDefinitions, createTools, validateToolParams, formatToolsForPrompt } from './tools/ToolRegistry';
+export type { ToolDefinition } from './tools/ToolRegistry';
 
 // Tools - Classes
 export { OnChainTools } from './tools/OnChainTools';

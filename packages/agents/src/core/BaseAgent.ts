@@ -2,16 +2,22 @@
  * BaseAgent - Foundation for All AI Agents
  *
  * Provides core capabilities:
- * - BitNet-powered reasoning
+ * - LLM-powered reasoning via ReActLoop (primary)
+ * - BitNet-powered reasoning (fallback)
  * - Memory (short-term + long-term with vector storage)
  * - Inter-agent communication via MessageBus
  * - Tool execution framework
+ * - Goal tracking and optimization
  * - Autonomous reasoning loops
  */
 
 import { BitNetEngine, ClassifierOutput } from '../reasoning/BitNetEngine';
+import { ReActLoop, ReActResult, createReActLoop } from '../reasoning/ReActLoop';
 import { AgentMemory } from './AgentMemory';
 import { MessageBus } from './MessageBus';
+import { GoalTracker, getGoalTracker, Goal } from './AgentGoals';
+import { buildSystemPrompt } from '../prompts/SystemPrompts';
+import type { LLMService } from '../services/LLMService';
 
 export interface Tool {
   name: string;
@@ -28,6 +34,7 @@ export interface AgentConfig {
   memory: boolean;
   reasoning: boolean;
   maxReasoningSteps?: number;
+  llmService?: LLMService; // Optional LLM for autonomous reasoning
 }
 
 export interface ThoughtEntry {
@@ -51,15 +58,52 @@ export abstract class BaseAgent {
   protected thoughts: ThoughtEntry[] = [];
   protected running: boolean = false;
 
+  // LLM-powered reasoning (optional, falls back to BitNet)
+  protected llmService: LLMService | null = null;
+  protected reactLoop: ReActLoop | null = null;
+  protected systemPrompt: string;
+
+  // Goal tracking
+  protected goalTracker: GoalTracker;
+
   constructor(config: AgentConfig, messageBus: MessageBus) {
     this.config = config;
     this.messageBus = messageBus;
     this.engine = new BitNetEngine(config.model);
     this.memory = new AgentMemory(config.name);
+    this.goalTracker = getGoalTracker();
+    this.systemPrompt = buildSystemPrompt(config.name);
+
+    // Initialize LLM-powered reasoning if service provided
+    if (config.llmService) {
+      this.llmService = config.llmService;
+      this.reactLoop = new ReActLoop(
+        config.llmService,
+        config.tools,
+        config.name,
+        this.systemPrompt,
+        { maxIterations: config.maxReasoningSteps || 5 }
+      );
+    }
 
     // Setup message handlers
     this.setupBaseMessageHandlers();
     this.setupMessageHandlers();
+  }
+
+  /**
+   * Set or update the LLM service (can be called after construction)
+   */
+  setLLMService(llm: LLMService): void {
+    this.llmService = llm;
+    this.reactLoop = new ReActLoop(
+      llm,
+      this.config.tools,
+      this.config.name,
+      this.systemPrompt,
+      { maxIterations: this.config.maxReasoningSteps || 5 }
+    );
+    console.log(`[${this.config.name}] LLM service configured`);
   }
 
   /**
@@ -135,7 +179,55 @@ export abstract class BaseAgent {
   }
 
   /**
-   * Execute a reasoning loop to determine next action
+   * Execute autonomous reasoning using LLM (ReAct) with BitNet fallback
+   *
+   * This is the primary reasoning method for autonomous agents.
+   * Uses LLM-powered ReAct loop when available, falls back to BitNet rules.
+   */
+  protected async autonomousReason(context: string): Promise<ReActResult> {
+    // Try LLM-powered reasoning first
+    if (this.reactLoop && this.llmService) {
+      try {
+        const isAvailable = await this.llmService.isAvailable();
+        if (isAvailable) {
+          await this.think('reasoning', 'Starting LLM-powered reasoning...');
+          const result = await this.reactLoop.reason(context);
+          await this.think('reasoning', `Concluded: ${result.conclusion.slice(0, 100)}...`, result.confidence);
+          return result;
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        await this.think('reflection', `LLM reasoning failed: ${msg}, using fallback`);
+      }
+    }
+
+    // Fall back to BitNet-based reasoning
+    return this.fallbackReason(context);
+  }
+
+  /**
+   * BitNet-based fallback reasoning (rule-based)
+   */
+  protected async fallbackReason(context: string): Promise<ReActResult> {
+    await this.think('reasoning', 'Using rule-based reasoning (BitNet fallback)');
+
+    const action = await this.reasoningLoop(context);
+    const startTime = Date.now();
+
+    return {
+      conclusion: action ? `Action: ${action.tool} - ${action.reason}` : 'No action determined',
+      confidence: action ? 0.7 : 0.4,
+      history: [],
+      decision: action ? {
+        action: 'NONE',
+        reason: action.reason,
+      } : undefined,
+      totalTimeMs: Date.now() - startTime,
+    };
+  }
+
+  /**
+   * Execute a reasoning loop to determine next action (BitNet-based)
    */
   protected async reasoningLoop(context: string): Promise<AgentAction | null> {
     if (!this.config.reasoning) {
@@ -237,14 +329,64 @@ export abstract class BaseAgent {
     running: boolean;
     thoughtCount: number;
     memoryStats: any;
+    llmEnabled: boolean;
+    goalProgress: number;
+    goals: Goal[];
   } {
+    const goalSet = this.goalTracker.getGoals(this.config.name);
+
     return {
       name: this.config.name,
       role: this.config.role,
       running: this.running,
       thoughtCount: this.thoughts.length,
-      memoryStats: this.memory.getStats()
+      memoryStats: this.memory.getStats(),
+      llmEnabled: this.llmService !== null,
+      goalProgress: goalSet?.overallProgress || 0,
+      goals: goalSet?.goals || [],
     };
+  }
+
+  /**
+   * Update a goal metric
+   */
+  protected updateGoal(goalId: string, value: number): void {
+    const progress = this.goalTracker.updateGoal(this.config.name, goalId, value);
+    if (progress && !progress.onTrack) {
+      this.log('warn', `Goal ${goalId} is behind target: ${value} vs target`);
+    }
+  }
+
+  /**
+   * Get priority goals (PRIMARY type not on track)
+   */
+  protected getPriorityGoals(): Goal[] {
+    return this.goalTracker.getPriorityGoals(this.config.name);
+  }
+
+  /**
+   * Check if LLM is available for reasoning
+   */
+  async isLLMAvailable(): Promise<boolean> {
+    return this.llmService?.isAvailable() ?? false;
+  }
+
+  /**
+   * Log helper that uses agent name prefix
+   */
+  protected log(level: 'info' | 'warn' | 'error', message: string): void {
+    const prefix = `[${this.config.name}]`;
+    switch (level) {
+      case 'info':
+        console.log(prefix, message);
+        break;
+      case 'warn':
+        console.warn(prefix, message);
+        break;
+      case 'error':
+        console.error(prefix, message);
+        break;
+    }
   }
 
   /**
