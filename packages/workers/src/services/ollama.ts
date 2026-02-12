@@ -1,12 +1,13 @@
 /**
- * Ollama Client - Connect to self-hosted Ollama on agents server
+ * Ollama Client - Connect to self-hosted Ollama server
  *
- * Server: 46.XXX.X.XXX (agents-n-database)
  * Provides natural language understanding for the chat interface.
+ * Configure via LLM_ENDPOINT environment variable.
  */
 
-// Ollama server on the RPC node (DeepSeek-R1 32B + Qwen 3 8B)
-const OLLAMA_ENDPOINT = 'http://144.XX.XX.XXX:8899';
+// Ollama server (DeepSeek-R1 32B + Qwen 3 8B)
+// Set via environment variable - never hardcode IPs
+const OLLAMA_ENDPOINT = process.env.LLM_ENDPOINT || 'http://localhost:11434';
 
 export interface OllamaMessage {
   role: 'system' | 'user' | 'assistant';

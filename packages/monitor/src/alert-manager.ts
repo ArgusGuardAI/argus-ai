@@ -47,7 +47,7 @@ export interface AlertManagerConfig {
   telegramChannelId?: string;
   minSeverityForTelegram?: 'info' | 'warning' | 'critical';
   enableConsoleAlerts?: boolean;
-  ollamaEndpoint?: string; // e.g., http://144.XX.XX.XXX:11434
+  ollamaEndpoint?: string; // Set via OLLAMA_ENDPOINT env var
 }
 
 /**
@@ -111,7 +111,7 @@ export class AlertManager {
     event: string,
     data: Record<string, unknown>
   ): Promise<string> {
-    const ollamaUrl = this.config.ollamaEndpoint || process.env.OLLAMA_ENDPOINT || 'http://144.XX.XX.XXX:8899';
+    const ollamaUrl = this.config.ollamaEndpoint || process.env.OLLAMA_ENDPOINT || 'http://localhost:11434';
 
     // Fallback message in case LLM fails
     const symbol = data.symbol || data.token || 'token';

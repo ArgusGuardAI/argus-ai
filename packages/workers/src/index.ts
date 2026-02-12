@@ -34,6 +34,7 @@ export type Bindings = {
   TELEGRAM_CHANNEL_ID?: string;
   ADMIN_SECRET?: string; // For training data API access
   BITNET_ENDPOINT?: string; // Future BitNet inference endpoint
+  LLM_ENDPOINT?: string; // Self-hosted Ollama server endpoint
   AI_PROVIDER?: 'together' | 'bitnet' | 'local-bitnet' | 'hybrid'; // AI provider selection
   DATA_PROVIDER_MODE?: 'ON_CHAIN' | 'HYBRID' | 'LEGACY'; // Data source mode
   // Multi-RPC endpoints (automatic failover)

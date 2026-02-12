@@ -268,7 +268,8 @@ chatRoutes.get('/health', async (c) => {
 
   try {
     // Quick check to Ollama on RPC node
-    const response = await fetch('http://144.XX.XX.XXX:8899/api/tags', {
+    const llmEndpoint = c.env.LLM_ENDPOINT || 'http://localhost:11434';
+    const response = await fetch(`${llmEndpoint}/api/tags`, {
       signal: AbortSignal.timeout(5000),
     });
     if (response.ok) {

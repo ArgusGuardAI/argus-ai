@@ -28,7 +28,7 @@ import {
 const DEXSCREENER_API = 'https://api.dexscreener.com';
 const POSITIONS_FILE = './data/paper-agi-positions.json';
 const TRADES_FILE = './data/paper-agi-trades.jsonl';
-const OLLAMA_ENDPOINT = process.env.OLLAMA_ENDPOINT || 'http://144.XX.XX.XXX:8899';
+const OLLAMA_ENDPOINT = process.env.OLLAMA_ENDPOINT || 'http://localhost:11434';
 const WORKERS_API_URL = process.env.WORKERS_API_URL || 'https://argusguard-api.hermosillo-jessie.workers.dev';
 const WORKERS_API_SECRET = process.env.WORKERS_API_SECRET || '';
 

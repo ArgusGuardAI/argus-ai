@@ -1,16 +1,16 @@
 /**
  * LLMService - Real AI reasoning via local Ollama server
  *
- * Calls a self-hosted Ollama instance running on the ex-RPC node
- * (144.XX.XX.XXX) with DeepSeek-R1 32B for deep reasoning and
- * Qwen 3 8B for fast classification. Zero API costs.
+ * Calls a self-hosted Ollama instance with DeepSeek-R1 32B for
+ * deep reasoning and Qwen 3 8B for fast classification. Zero API costs.
+ * Configure endpoint via LLM_ENDPOINT environment variable.
  *
  * Graceful degradation: if LLM server is unreachable, callers
  * get null and fall back to existing rule-based logic.
  */
 
 export interface LLMConfig {
-  endpoint: string;        // http://144.XX.XX.XXX:8899
+  endpoint: string;        // Set via LLM_ENDPOINT env var
   reasoningModel: string;  // deepseek-r1:32b
   fastModel: string;       // qwen3:8b
   reasoningTimeout: number; // 300000ms for deep reasoning (DeepSeek-R1 thinks long)
