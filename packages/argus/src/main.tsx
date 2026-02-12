@@ -7,83 +7,39 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { WalletContextProvider } from './contexts/AuthContext';
 import './index.css';
 
-// Code-split: lazy load pages so each subdomain only downloads what it needs
-const AgentDashboard = React.lazy(() => import('./AgentDashboard')); // New agent-only mode
+// ONE DASHBOARD - Terminal with AGI Council
 const TerminalApp = React.lazy(() => import('./TerminalApp'));
-const App = React.lazy(() => import('./App')); // Legacy dashboard
 const Landing = React.lazy(() => import('./pages/Landing'));
-const NotFound = React.lazy(() => import('./pages/NotFound'));
-const Maintenance = React.lazy(() => import('./pages/Maintenance'));
 
-// MAINTENANCE MODE - set to true to show maintenance page on app subdomain
-const MAINTENANCE_MODE = false;
-
-// Minimal loading spinner matching the dark theme
+// Loading spinner
 const Loading = () => (
-  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#09090b' }}>
-    <div style={{ width: 32, height: 32, border: '3px solid #27272a', borderTopColor: '#10b981', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#040405' }}>
+    <div style={{ width: 32, height: 32, border: '3px solid #131518', borderTopColor: '#00e040', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
     <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
   </div>
 );
 
-// Check environment
 const isAppSubdomain = window.location.hostname.startsWith('app.');
-const isLocalhost = window.location.hostname === 'localhost';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter>
       <Suspense fallback={<Loading />}>
-        <Routes>
-          {MAINTENANCE_MODE && !isLocalhost ? (
-            // ALL production sites -> maintenance page when enabled
-            <Route path="*" element={<Maintenance />} />
-          ) : isAppSubdomain ? (
-            // app.argusguard.io -> agent-only dashboard in production
-            <Route path="*" element={
-              <WalletContextProvider>
-                <AgentDashboard />
-              </WalletContextProvider>
-            } />
-          ) : isLocalhost ? (
-            // localhost -> agent dashboard for development/testing
-            <>
-              <Route path="/" element={
-                <WalletContextProvider>
-                  <AgentDashboard />
-                </WalletContextProvider>
-              } />
-              <Route path="/landing" element={<Landing />} />
-              <Route path="/terminal" element={
-                <WalletContextProvider>
-                  <TerminalApp />
-                </WalletContextProvider>
-              } />
-              <Route path="/original" element={
-                <WalletContextProvider>
-                  <App />
-                </WalletContextProvider>
-              } />
-              <Route path="*" element={<NotFound />} />
-            </>
-          ) : (
-            // argusguard.io -> landing page with dashboard routes
-            <>
-              <Route path="/" element={<Landing />} />
-              <Route path="/dashboard" element={
-                <WalletContextProvider>
-                  <App />
-                </WalletContextProvider>
-              } />
-              <Route path="/terminal" element={
-                <WalletContextProvider>
-                  <TerminalApp />
-                </WalletContextProvider>
-              } />
-              <Route path="*" element={<NotFound />} />
-            </>
-          )}
-        </Routes>
+        <WalletContextProvider>
+          <Routes>
+            {isAppSubdomain ? (
+              // app.argusguard.io -> Terminal Dashboard
+              <Route path="*" element={<TerminalApp />} />
+            ) : (
+              // localhost or argusguard.io
+              <>
+                <Route path="/" element={<TerminalApp />} />
+                <Route path="/landing" element={<Landing />} />
+                <Route path="*" element={<TerminalApp />} />
+              </>
+            )}
+          </Routes>
+        </WalletContextProvider>
       </Suspense>
     </BrowserRouter>
   </React.StrictMode>

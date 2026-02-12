@@ -9,8 +9,8 @@
  * Inference: ~1ms on CPU (addition/subtraction only, no multiplication)
  *
  * Usage:
- *   pnpm train --data ./data/training-20260129.jsonl
- *   pnpm train --data ./data/training-20260129.jsonl --epochs 200 --lr 0.01
+ *   pnpm train --data ./data/training-balanced.jsonl
+ *   pnpm train --data ./data/training-balanced.jsonl --epochs 200 --lr 0.01
  */
 
 import { Command } from 'commander';
@@ -675,7 +675,7 @@ const program = new Command();
 program
   .name('train')
   .description('Train BitNet ternary classifier for token risk scoring')
-  .option('-d, --data <path>', 'Training data JSONL file', './data/training-20260129.jsonl')
+  .option('-d, --data <path>', 'Training data JSONL file', './data/training-balanced.jsonl')
   .option('-o, --output <path>', 'Output model file', '../../packages/agents/src/reasoning/bitnet-weights.json')
   .option('-e, --epochs <n>', 'Training epochs', '200')
   .option('--lr <rate>', 'Learning rate', '0.01')

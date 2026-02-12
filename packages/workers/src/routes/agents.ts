@@ -9,7 +9,7 @@
 
 import { Hono } from 'hono';
 import type { Bindings } from '../index';
-import { getAgentEvents, getAgentStats, storeAgentEvent, updateAgentStats, storeGraduation, getGraduations, storeDiscovery, getDiscoveries, type AgentEvent, type AgentStats, type GraduationEvent } from '../services/agent-events';
+import { getAgentEvents, getAgentStats, storeAgentEvent, storeBatchAgentEvents, updateAgentStats, storeGraduation, getGraduations, storeDiscovery, getDiscoveries, type AgentEvent, type AgentStats, type GraduationEvent } from '../services/agent-events';
 
 // Types
 interface AgentState {
@@ -236,29 +236,68 @@ agentRoutes.get('/stats', async (c) => {
 agentRoutes.post('/command', async (c) => {
   try {
     const body = await c.req.json<{
-      type: 'analyze' | 'track_wallet' | 'monitor_alert';
+      type: 'analyze' | 'track_wallet' | 'monitor_alert' | 'monitor_alert_batch';
       tokenAddress?: string;
       walletAddress?: string;
       priority?: 'high' | 'normal';
       alert?: {
         agent: 'SCOUT' | 'ANALYST' | 'HUNTER' | 'TRADER';
-        type: 'scan' | 'alert' | 'discovery' | 'analysis' | 'graduation';
+        type: 'scan' | 'alert' | 'discovery' | 'analysis' | 'graduation' | 'council';
         message: string;
         severity: 'info' | 'warning' | 'critical';
         data?: {
           mint?: string;
+          symbol?: string;
           dex?: string;
           poolAddress?: string;
           suspicionScore?: number;
           reasons?: string[];
           graduatedFrom?: string;
           bondingCurveTime?: number;
+          decision?: string;
+          confidence?: number;
         };
       };
+      alerts?: Array<{
+        agent: 'SCOUT' | 'ANALYST' | 'HUNTER' | 'TRADER';
+        type: 'scan' | 'alert' | 'discovery' | 'analysis' | 'graduation' | 'council';
+        message: string;
+        severity: 'info' | 'warning' | 'critical';
+        data?: {
+          mint?: string;
+          symbol?: string;
+        };
+      }>;
     }>();
 
     if (!body.type) {
       return c.json({ error: 'Missing command type' }, 400);
+    }
+
+    // Handle batch alerts - stores all events in single KV write (no race condition)
+    if (body.type === 'monitor_alert_batch' && body.alerts && body.alerts.length > 0) {
+      if (c.env.SCAN_CACHE) {
+        c.executionCtx.waitUntil(
+          (async () => {
+            try {
+              // Store all events in a single KV operation
+              await storeBatchAgentEvents(c.env.SCAN_CACHE, body.alerts!.map(alert => ({
+                agent: alert.agent,
+                type: alert.type as AgentEvent['type'],
+                message: alert.message,
+                severity: alert.severity,
+                data: {
+                  tokenAddress: alert.data?.mint,
+                  tokenSymbol: alert.data?.symbol,
+                },
+              })));
+            } catch (err) {
+              console.error('[Agents] Batch KV error:', err);
+            }
+          })()
+        );
+      }
+      return c.json({ success: true, message: 'Batch alerts queued', count: body.alerts.length });
     }
 
     // Handle monitor alerts - return immediately, store in background
@@ -303,8 +342,7 @@ agentRoutes.post('/command', async (c) => {
                   severity: alert.severity,
                   data: {
                     tokenAddress: alert.data?.mint,
-                    tokenSymbol: alert.data?.dex ? `${alert.data.dex}` : undefined,
-                    score: alert.data?.suspicionScore,
+                    tokenSymbol: alert.data?.symbol,
                   },
                 });
               }

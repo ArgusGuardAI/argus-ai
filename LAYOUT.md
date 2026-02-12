@@ -35,32 +35,38 @@ solana-safeguard-ai/
 │   │       └── contexts/
 │   │           └── AuthContext.tsx   # Wallet connection + auth tiers
 │   │
-│   ├── sniper/                 # Token Scanner Backend
+│   ├── monitor/                # WebSocket Pool Detection ($0/month)
 │   │   ├── package.json
 │   │   ├── tsconfig.json
 │   │   └── src/
 │   │       ├── index.ts             # Main entry
-│   │       ├── server.ts            # HTTP + WebSocket server
-│   │       ├── cli.ts               # CLI interface
-│   │       ├── types.ts             # Type definitions
-│   │       ├── engine/
-│   │       │   ├── sniper.ts        # Main scanner engine
-│   │       │   ├── analyzer.ts      # AI risk analysis
-│   │       │   ├── pre-filter.ts    # Trending token pre-filter
-│   │       │   ├── launch-filter.ts # New pool launch filter
-│   │       │   ├── heuristic-scorer.ts   # Heuristic scoring
-│   │       │   ├── onchain-security.ts   # On-chain security checks
-│   │       │   └── token-security-api.ts # Token security API
-│   │       ├── listeners/
-│   │       │   ├── raydium.ts       # Raydium AMM pool listener
-│   │       │   ├── meteora.ts       # Meteora DLMM pool listener
-│   │       │   ├── dexscreener.ts   # DexScreener trending tokens
-│   │       │   ├── pumpfun.ts       # PumpFun token listener
-│   │       │   └── geckoterminal.ts # GeckoTerminal listener
-│   │       ├── trading/
-│   │       │   └── executor.ts      # Trade execution
-│   │       └── utils/
-│   │           └── helius-budget.ts # Helius API budget tracking
+│   │       ├── pool-monitor.ts      # Yellowstone gRPC subscriptions
+│   │       ├── quick-analyzer.ts    # Fast 2-call token assessment
+│   │       ├── alert-manager.ts     # Telegram + Workers alerts
+│   │       └── scammer-db.ts        # Local scammer database
+│   │
+│   ├── agents/                 # Multi-Agent AI System
+│   │   ├── package.json
+│   │   ├── tsconfig.json
+│   │   └── src/
+│   │       ├── index.ts             # Main exports
+│   │       ├── start.ts             # Standalone agent runner
+│   │       ├── agents/              # Scout, Analyst, Hunter, Trader
+│   │       ├── core/                # Coordinator, MessageBus, Memory
+│   │       ├── reasoning/           # BitNetEngine, DebateProtocol
+│   │       ├── learning/            # PatternLibrary, OutcomeLearner
+│   │       └── services/            # LLM, Database, WorkersSync
+│   │
+│   ├── vault/                  # Secure Key Vault (isolated origin)
+│   │   ├── package.json
+│   │   ├── vite.config.ts
+│   │   └── src/
+│   │       └── vault.ts             # Key storage, signing via postMessage
+│   │
+│   ├── training/               # ML Training Data Collection
+│   │   ├── package.json
+│   │   ├── scripts/                 # Data collection scripts
+│   │   └── data/                    # Training datasets
 │   │
 │   ├── workers/                # Cloudflare Workers API (production)
 │   │   ├── package.json

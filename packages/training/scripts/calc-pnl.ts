@@ -67,7 +67,7 @@ function main() {
     const score = p.prediction.score;
     const liquidity = p.initialData?.liquidity || 0;
 
-    // LIQUIDITY FILTER: Skip if liquidity < $15K (optimized from FP analysis)
+    // LIQUIDITY FILTER: Skip if liquidity < $15K
     if (liquidity < 15000) {
       if (p.outcome!.isRug) rugsAvoided++;
       continue;
@@ -97,9 +97,9 @@ function main() {
       continue;
     }
 
-    // AGE FILTER: Skip tokens < 10 min old (optimized from FP analysis)
+    // AGE FILTER: Skip tokens < 15 min old (optimized from dry-run analysis)
     const ageHours = p.initialData?.ageHours ?? 0;
-    if (ageHours < 0.167) { // 10 minutes = 0.167 hours
+    if (ageHours < 0.25) { // 15 minutes = 0.25 hours
       if (p.outcome!.isRug) rugsAvoided++;
       continue;
     }
@@ -192,7 +192,7 @@ function main() {
   console.log(`  Liquidity filter:   >= $15K`);
   console.log(`  Momentum filter:    5m > 0% OR (1h > 0% AND buys > sells)`);
   console.log(`  Momentum cap:       Skip if 5m > 100% (extreme pump)`);
-  console.log(`  Age filter:         >= 10 min old`);
+  console.log(`  Age filter:         >= 15 min old`);
   console.log(`  Volume filter:      24h volume >= 25% of liquidity`);
   console.log(`  Max volume:         <= $150K (avoid late entries)`);
   console.log(`  Stop loss:          -15% (auto-sell)`);

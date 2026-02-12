@@ -19,7 +19,7 @@ Development guidance for AI assistants working on the Solana Safeguard AI codeba
 - **Workers** (`packages/workers`) - Cloudflare Workers API (production)
 - **Vault** (`packages/vault`) - Secure key management (isolated origin)
 - **Training** (`packages/training`) - ML training data collection
-- **Sniper** (`packages/sniper`) - Token scanner backend (deprecated, use Workers)
+- **Monitor** (`packages/monitor`) - WebSocket pool detection ($0/month)
 
 ### Technical Innovations
 - **17,000x Compression**: 2MB raw data → 116-byte feature vectors (29 dimensions)
@@ -77,10 +77,8 @@ packages/
 │   ├── src/quick-analyzer.ts  # 2-call quick analysis
 │   ├── src/alert-manager.ts   # Telegram + Workers API alerts
 │   └── src/scammer-db.ts      # Local scammer database
-├── training/        # ML Training Data Collection
-│   └── scripts/         # Data collection and feature extraction
-└── sniper/          # Token Scanner (DEPRECATED - uses heavy RPC)
-    └── ...              # Use Workers API instead
+└── training/        # ML Training Data Collection
+    └── scripts/         # Data collection and feature extraction
 ```
 
 ---
@@ -129,10 +127,6 @@ pnpm dev                  # Start dashboard at localhost:3000
 # Vault (Key Management) - required for trading wallet to work
 cd packages/vault
 pnpm dev                  # Start vault at localhost:3001
-
-# Sniper (Local Backend)
-cd packages/sniper
-pnpm dev                  # Start backend at localhost:8788
 
 # Workers (API)
 cd packages/workers
@@ -205,25 +199,9 @@ WebSocket-based pool monitoring at $0/month. Runs locally or on a cheap VPS.
 | `src/alert-manager.ts` | Push alerts to Workers API, Telegram, console |
 | `src/scammer-db.ts` | Local scammer database with caching |
 
-### Sniper Package (`packages/sniper/`) - DEPRECATED
-
-**WARNING:** Sniper uses WebSocket subscriptions that consume RPC credits rapidly. Use Monitor package instead.
-
-| File | Purpose |
-|------|---------|
-| `src/server.ts` | HTTP server with `/api/analyze-full` endpoint |
-| `src/listeners/` | Real-time pool listeners (expensive) |
-
 ---
 
 ## API Endpoints
-
-### Local Development (sniper at localhost:8788)
-```
-POST /api/analyze-full
-Body: { "address": "<token_address>" }
-Returns: AnalysisResult (direct format)
-```
 
 ### Production (Workers API)
 
@@ -806,11 +784,8 @@ CREATE TABLE token_outcomes (
 - If not, update Landing.tsx href values
 
 ### RPC credits depleting quickly
-- Check if sniper is running (uses WebSocket subscriptions that burn credits)
-- Stop sniper: `pkill -f sniper` or kill the process
-- Use Workers API instead of sniper for production
 - **Helius webhooks cost 1 credit per push** - don't use for monitoring
-- Use WebSocket subscriptions for free monitoring
+- Use WebSocket subscriptions for free monitoring (Monitor package)
 
 ### Agent events not showing
 - Ensure `SCAN_CACHE` KV namespace is bound in wrangler.toml

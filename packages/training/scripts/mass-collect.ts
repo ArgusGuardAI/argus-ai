@@ -45,7 +45,7 @@ function parseEnvString(key: string, defaultVal: string): string {
 
 const CONFIG = {
   // File paths (env: ARGUS_RAW_TOKENS_FILE, ARGUS_LABELED_FILE, ARGUS_TRAINING_FILE)
-  rawTokensFile: parseEnvString('ARGUS_RAW_TOKENS_FILE', './data/raw-tokens.jsonl'),
+  rawTokensFile: parseEnvString('ARGUS_RAW_TOKENS_FILE', './data/raw-pumpfun.jsonl'),
   labeledDataFile: parseEnvString('ARGUS_LABELED_FILE', './data/labeled-tokens.jsonl'),
   trainingFile: parseEnvString('ARGUS_TRAINING_FILE', './data/training-large.jsonl'),
 

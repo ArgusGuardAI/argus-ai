@@ -10,7 +10,7 @@ export interface AgentEvent {
   id: string;
   timestamp: number;
   agent: 'SCOUT' | 'ANALYST' | 'HUNTER' | 'TRADER';
-  type: 'scan' | 'alert' | 'analysis' | 'trade' | 'discovery' | 'graduation' | 'comms';
+  type: 'scan' | 'alert' | 'analysis' | 'trade' | 'discovery' | 'graduation' | 'comms' | 'council';
   message: string;
   severity: 'info' | 'warning' | 'critical';
   data?: {
@@ -111,6 +111,32 @@ export async function storeAgentEvent(
   await kv.put(EVENTS_KEY, JSON.stringify(updated), { expirationTtl: 86400 });
 
   return fullEvent;
+}
+
+/**
+ * Store multiple agent events in a single KV write (avoids race condition)
+ */
+export async function storeBatchAgentEvents(
+  kv: KVNamespace,
+  events: Array<Omit<AgentEvent, 'id' | 'timestamp'>>
+): Promise<AgentEvent[]> {
+  const now = Date.now();
+  const fullEvents: AgentEvent[] = events.map((event, index) => ({
+    ...event,
+    id: generateEventId() + `_${index}`,
+    timestamp: now + index, // Slightly different timestamps to maintain order
+  }));
+
+  // Get existing events
+  const existing = await kv.get<AgentEvent[]>(EVENTS_KEY, 'json') || [];
+
+  // Prepend all new events and limit size
+  const updated = [...fullEvents, ...existing].slice(0, MAX_EVENTS);
+
+  // Store with 24h TTL
+  await kv.put(EVENTS_KEY, JSON.stringify(updated), { expirationTtl: 86400 });
+
+  return fullEvents;
 }
 
 /**

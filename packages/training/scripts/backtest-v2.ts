@@ -59,7 +59,7 @@ function runBacktest(records: TrainingRecord[], threshold: number, label: string
 }
 
 console.log('Loading training data...');
-const records = loadData('./data/training-v2.jsonl');
+const records = loadData('./data/training-balanced.jsonl');
 
 console.log('');
 console.log('╔══════════════════════════════════════════════════════════════╗');

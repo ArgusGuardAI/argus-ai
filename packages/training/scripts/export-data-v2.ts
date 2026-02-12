@@ -30,7 +30,7 @@
  * Added (as defaults): gini, freshWalletRatio, lpBurned, tradingRecency
  *
  * Usage:
- *   npx tsx scripts/export-data-v2.ts --input data/training-20260129.jsonl --output data/training-v2.jsonl
+ *   npx tsx scripts/export-data-v2.ts --input data/training-balanced.jsonl --output data/training-balanced.jsonl
  */
 
 import { Command } from 'commander';
@@ -306,8 +306,8 @@ const program = new Command();
 program
   .name('export-data-v2')
   .description('Remap 31-feature training data to 29-feature ScoutAgent layout')
-  .option('-i, --input <path>', 'Input JSONL file (31 features)', './data/training-20260129.jsonl')
-  .option('-o, --output <path>', 'Output JSONL file (29 features)', './data/training-v2.jsonl')
+  .option('-i, --input <path>', 'Input JSONL file (31 features)', './data/training-balanced.jsonl')
+  .option('-o, --output <path>', 'Output JSONL file (29 features)', './data/training-balanced.jsonl')
   .action((options) => {
     remapData(options.input, options.output);
   });

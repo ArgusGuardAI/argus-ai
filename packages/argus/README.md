@@ -34,16 +34,19 @@ pnpm dev
 
 Dashboard runs at `http://localhost:3000`
 
-For local development with the sniper backend:
+For full local development:
 ```bash
-# Terminal 1: Start backend
-cd ../sniper && pnpm dev    # localhost:8788
+# Terminal 1: Start Workers API
+cd ../workers && pnpm dev    # localhost:8787
 
-# Terminal 2: Start dashboard
+# Terminal 2: Start Vault (for trading)
+cd ../vault && pnpm dev      # localhost:3001
+
+# Terminal 3: Start dashboard
 pnpm dev                     # localhost:3000
 ```
 
-In production, the dashboard uses the Cloudflare Workers API (see `packages/workers/wrangler.toml` for config).
+In production, the dashboard uses the Cloudflare Workers API.
 
 ## Deployment
 

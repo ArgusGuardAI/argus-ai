@@ -11,12 +11,19 @@
  * - Meteora
  */
 
-import Client, {
-  CommitmentLevel,
-  SubscribeRequest,
-  SubscribeUpdate,
-  SubscribeUpdateAccountInfo,
-} from '@triton-one/yellowstone-grpc';
+import YellowstoneGrpcPkg from '@triton-one/yellowstone-grpc';
+import type { SubscribeRequest, SubscribeUpdate, SubscribeUpdateAccountInfo } from '@triton-one/yellowstone-grpc';
+
+// Handle ESM/CJS interop - the package exports default as the Client class
+const Client = (YellowstoneGrpcPkg as any).default || YellowstoneGrpcPkg;
+type Client = InstanceType<typeof Client>;
+
+// CommitmentLevel enum values (avoid named export issues with Node ESM)
+const CommitmentLevel = {
+  PROCESSED: 0,
+  CONFIRMED: 1,
+  FINALIZED: 2,
+} as const;
 import { PublicKey } from '@solana/web3.js';
 import { Buffer } from 'buffer';
 

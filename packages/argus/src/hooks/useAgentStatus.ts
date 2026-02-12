@@ -88,11 +88,11 @@ export interface GraduationsResponse {
 
 interface UseAgentStatusOptions {
   enabled?: boolean;
-  statusInterval?: number;      // ms between status polls (default: 5000)
-  activityInterval?: number;    // ms between activity polls (default: 3000)
+  statusInterval?: number;      // ms between status polls (default: 3000)
+  activityInterval?: number;    // ms between activity polls (default: 1000) - FAST!
   statsInterval?: number;       // ms between stats polls (default: 30000)
   graduationsInterval?: number; // ms between graduations polls (default: 5000)
-  maxActivityEvents?: number;   // max events to keep in state (default: 50)
+  maxActivityEvents?: number;   // max events to keep in state (default: 100)
 }
 
 interface UseAgentStatusReturn {
@@ -122,11 +122,11 @@ const getApiBaseUrl = (): string => {
 export function useAgentStatus(options: UseAgentStatusOptions = {}): UseAgentStatusReturn {
   const {
     enabled = true,
-    statusInterval = 5000,
-    activityInterval = 3000,
+    statusInterval = 3000,
+    activityInterval = 1000,  // Poll every 1 second for fast updates
     statsInterval = 30000,
     graduationsInterval = 5000,
-    maxActivityEvents = 50,
+    maxActivityEvents = 100,
   } = options;
 
   // State

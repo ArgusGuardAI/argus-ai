@@ -192,14 +192,15 @@ packages/
 │   ├── src/pages/          # Landing page
 │   ├── src/hooks/          # useAutoTrade hook (trading, positions)
 │   └── src/lib/            # Jupiter swap, trading wallet
-├── sniper/             # Analysis Backend (local dev)
-│   ├── src/server.ts       # REST API + WebSocket server
-│   ├── src/engine/         # Analyzer, launch-filter, sniper
-│   └── src/listeners/      # Raydium, Meteora, DexScreener, Pumpfun
 ├── workers/            # Cloudflare Workers API (production)
 │   ├── src/routes/         # sentinel, analyze, jupiter endpoints
 │   └── src/services/       # Helius, DexScreener, Together AI
-└── shared/             # Shared types & constants
+├── monitor/            # WebSocket Pool Detection ($0/month)
+│   ├── src/pool-monitor.ts # Real-time DEX subscriptions
+│   └── src/quick-analyzer.ts # Fast 2-call token assessment
+├── agents/             # Multi-Agent AI System
+│   └── src/agents/         # Scout, Analyst, Hunter, Trader
+└── training/           # ML Training Data Collection
 ```
 
 ---

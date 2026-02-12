@@ -8,7 +8,7 @@
  *
  * Usage:
  *   pnpm collect-outcomes
- *   pnpm collect-outcomes --data ./data/training-20260129.jsonl
+ *   pnpm collect-outcomes --data ./data/training-balanced.jsonl
  */
 
 import { Command } from 'commander';
@@ -224,7 +224,7 @@ const program = new Command();
 program
   .name('collect-outcomes')
   .description('Auto-label training data by checking DexScreener prices')
-  .option('-d, --data <path>', 'Training data JSONL file', './data/training-20260129.jsonl')
+  .option('-d, --data <path>', 'Training data JSONL file', './data/training-balanced.jsonl')
   .option('-o, --output <path>', 'Output file (default: overwrite input)')
   .option('--delay <ms>', 'Delay between API calls in ms', '250')
   .option('--dry-run', 'Don\'t write output file', false)

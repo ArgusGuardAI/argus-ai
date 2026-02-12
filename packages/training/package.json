@@ -4,10 +4,11 @@
   "description": "BitNet model training pipeline for ArgusAI",
   "type": "module",
   "scripts": {
-    "backfill": "npx tsx scripts/backfill.ts",
-    "export": "npx tsx scripts/export-data.ts",
+    "backfill": "npx tsx scripts/backfill-historical.ts",
+    "export": "npx tsx scripts/export-data-v2.ts",
     "evaluate": "npx tsx scripts/evaluate.ts",
     "train": "npx tsx scripts/train.ts",
+    "backtest": "npx tsx scripts/backtest-v2.ts",
     "collect-outcomes": "npx tsx scripts/collect-outcomes.ts",
     "collect": "npx tsx scripts/mass-collect.ts",
     "collect:fetch": "npx tsx scripts/mass-collect.ts --mode=fetch",
@@ -15,10 +16,13 @@
     "collect:loop": "npx tsx scripts/mass-collect.ts --mode=loop",
     "collect:stats": "npx tsx scripts/mass-collect.ts --mode=stats",
     "find-rugs": "npx tsx scripts/find-rugs.ts",
-    "backfill-historical": "npx tsx scripts/backfill-historical.ts",
+    "dry-run": "npx tsx scripts/dry-run.ts",
+    "paper-trade": "npx tsx scripts/paper-trade-agi.ts",
     "weekly-retrain": "./scripts/weekly-retrain.sh"
   },
   "dependencies": {
+    "@solana/web3.js": "^1.95.0",
+    "@triton-one/yellowstone-grpc": "^5.0.2",
     "commander": "^12.0.0",
     "dotenv": "^16.4.0"
   },
