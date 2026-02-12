@@ -490,7 +490,7 @@ This eliminates:
 | Price, Volume, Liquidity, Market Cap | DexScreener API | FREE |
 | Buy/Sell Counts, Trading Activity | DexScreener API | FREE |
 | Creator Detection (optional) | Helius DAS API | Optional |
-| AI Risk Analysis | Together AI | Paid |
+| AI Risk Analysis | BitNet + Self-hosted LLM (DeepSeek, Qwen) | $0 |
 | Swap Execution | Jupiter API | FREE |
 | Real-time Streaming | Yellowstone/Geyser | $0 (self-hosted) |
 

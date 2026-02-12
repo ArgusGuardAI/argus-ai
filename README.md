@@ -74,7 +74,9 @@ Argus AI is a comprehensive token research tool that provides instant AI analysi
 ### Prerequisites
 - Node.js 18+
 - pnpm 8+
-- API Keys: Helius (optional), Together AI or Groq
+- Self-hosted Solana RPC node
+- Self-hosted LLM server (Ollama with DeepSeek/Qwen)
+- Helius API key (optional, for DAS API)
 
 ### Installation
 
@@ -89,8 +91,8 @@ pnpm install
 Create `packages/workers/.dev.vars`:
 
 ```env
-SOLANA_RPC_URL=http://YOUR_NODE_IP:8899   # Your own Solana RPC node
-TOGETHER_AI_API_KEY=your-key              # For AI analysis
+SOLANA_RPC_URL=http://YOUR_RPC_NODE:8899  # Your Solana RPC node
+LLM_ENDPOINT=http://YOUR_LLM_SERVER:11434 # Your Ollama server
 HELIUS_API_KEY=your-helius-key            # Optional - for DAS API only
 ```
 
@@ -150,9 +152,9 @@ pnpm dev
 ### Analysis Flow
 
 1. **Paste Token Address** → Enter any Solana token mint
-2. **Fetch Data** → DexScreener (market) + Helius RPC (holders, security)
+2. **Fetch Data** → DexScreener (market) + RPC (holders, security)
 3. **Detect Bundles** → Transaction analysis finds coordinated wallets
-4. **AI Analysis** → Together AI generates risk score and verdict
+4. **AI Analysis** → BitNet + Self-hosted LLM generates risk score and verdict
 5. **Guardrails** → Deterministic checks enforce minimum risk floors
 6. **Display Results** → All panels update with comprehensive data
 7. **Trade** → One-click buy with Jupiter aggregator
@@ -327,9 +329,17 @@ Deterministic checks that enforce minimum risk scores regardless of AI output:
 | Price, Volume, Liquidity | DexScreener API | FREE |
 | Buy/Sell Counts | DexScreener API | FREE |
 | Creator Detection | Helius DAS API | Optional |
-| AI Risk Analysis | Together AI | Paid |
+| AI Risk Analysis | BitNet + Self-hosted LLM | $0 (self-hosted) |
 | Swap Execution | Jupiter API | FREE |
 | Real-time Streaming | Yellowstone/Geyser | $0 (self-hosted) |
+
+### Self-Hosted LLM Models
+
+| Model | Purpose | Speed |
+|-------|---------|-------|
+| `deepseek-r1:32b` | Deep reasoning / analysis | ~5-10s |
+| `qwen3:8b` | Fast inference / council votes | ~1-2s |
+| `argus-sentinel-v1.bitnet` | Risk classification | ~13ms |
 
 ---
 

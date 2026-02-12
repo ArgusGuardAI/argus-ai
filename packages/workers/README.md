@@ -79,8 +79,8 @@ X-User-Tier: free
 ### Required
 
 ```bash
-wrangler secret put TOGETHER_AI_API_KEY   # AI analysis
-wrangler secret put SOLANA_RPC_URL        # http://144.XX.XX.XXX:8899
+wrangler secret put SOLANA_RPC_URL        # Your Solana RPC node
+wrangler secret put LLM_ENDPOINT          # Self-hosted Ollama server
 ```
 
 ### Optional
@@ -161,7 +161,7 @@ src/
     ├── multi-rpc.ts       # Smart RPC routing
     ├── onchain-analyzer.ts # On-chain data extraction
     ├── feature-extractor.ts # 29-dim feature vectors
-    ├── ai-provider.ts      # Together AI / BitNet
+    ├── ai-provider.ts      # BitNet + Ollama LLM
     ├── rate-limit.ts       # Rate limiting
     └── helius.ts           # DAS API (optional)
 ```

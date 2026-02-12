@@ -414,10 +414,18 @@ const similar = await memory.findSimilar(features, 5, 0.85);
 | Server | IP | Specs | Purpose |
 |--------|-----|-------|---------|
 | **RPC Node** | 144.XX.XX.XXX:8899 | Dedicated | Solana RPC - all API calls |
-| **agents-n-database** | 46.XXX.X.XXX | CPX32, 160 GB | Agents + PostgreSQL |
+| **agents-n-database** | 46.XXX.X.XXX | CPX32, 160 GB | Agents + PostgreSQL + LLMs |
 | **yellowstone-streaming-node** | 46.XXX.XXX.XXX | CPX22, 80 GB | Geyser/Yellowstone streaming |
 
 All servers in Nuremberg, eu-central.
+
+### Self-Hosted LLM Models
+
+| Model | Purpose | Speed |
+|-------|---------|-------|
+| `deepseek-r1:32b` | Reasoning / deep analysis | ~5-10s |
+| `qwen3:8b` | Fast inference / council votes | ~1-2s |
+| `argus-sentinel-v1.bitnet` | Risk classification | ~13ms |
 
 ### RPC Configuration
 
@@ -425,21 +433,24 @@ All servers in Nuremberg, eu-central.
 
 ```bash
 # Workers API
-wrangler secret put SOLANA_RPC_URL  # http://144.XX.XX.XXX:8899
+wrangler secret put SOLANA_RPC_URL     # http://144.XX.XX.XXX:8899
+wrangler secret put LLM_ENDPOINT       # http://46.XXX.X.XXX:11434
 
 # Agents (.env on agents-n-database server)
 RPC_ENDPOINT=http://144.XX.XX.XXX:8899
 RPC_WS_ENDPOINT=ws://144.XX.XX.XXX:8900
+LLM_ENDPOINT=http://localhost:11434
 ```
 
-### External APIs Still Used
+### External APIs Used
 
 | API | Purpose | Required |
 |-----|---------|----------|
 | Helius DAS | Token creator detection, metadata | Optional |
 | DexScreener | Price, volume, market data | Yes |
-| Together AI | AI risk analysis | Yes |
 | Jupiter | Swap execution | Yes |
+
+**Note:** All AI inference is self-hosted (no paid API costs).
 
 ### Method Classification
 
@@ -656,9 +667,10 @@ const isAppSubdomain = window.location.hostname.startsWith('app.');
 Set via `wrangler secret put <KEY>`:
 
 ```bash
-# Required
-TOGETHER_AI_API_KEY      # AI risk analysis
-SOLANA_RPC_URL           # Your Hetzner node (http://144.XX.XX.XXX:8899)
+# Required - Infrastructure
+SOLANA_RPC_URL           # Your Hetzner Solana node
+LLM_ENDPOINT             # Self-hosted Ollama/LLM server
+YELLOWSTONE_ENDPOINT     # Geyser streaming endpoint
 
 # Optional
 HELIUS_API_KEY           # DAS API only (for creator detection)
@@ -670,13 +682,16 @@ TWITTER_ACCESS_TOKEN_SECRET
 TELEGRAM_BOT_TOKEN       # Telegram alerts
 TELEGRAM_CHANNEL_ID
 ADMIN_SECRET             # Training data API access
+
+# LEGACY (not used - kept for reference)
+# TOGETHER_AI_API_KEY    # Replaced by self-hosted LLM
 ```
 
 ### Workers Local Development (.dev.vars)
 
 ```env
-TOGETHER_AI_API_KEY=your-together-ai-api-key
-SOLANA_RPC_URL=http://144.XX.XX.XXX:8899
+SOLANA_RPC_URL=http://your-rpc-node:8899
+LLM_ENDPOINT=http://your-llm-server:11434
 HELIUS_API_KEY=your-helius-api-key  # Optional, for DAS API only
 ```
 
