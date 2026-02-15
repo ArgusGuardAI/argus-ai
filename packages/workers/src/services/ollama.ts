@@ -6,8 +6,8 @@
  */
 
 // Ollama server (DeepSeek-R1 32B + Qwen 3 8B)
-// Set via environment variable - never hardcode IPs
-const OLLAMA_ENDPOINT = process.env.LLM_ENDPOINT || 'http://localhost:11434';
+// Endpoint passed via function parameters from c.env.LLM_ENDPOINT
+const DEFAULT_OLLAMA_ENDPOINT = 'http://localhost:11434';
 
 export interface OllamaMessage {
   role: 'system' | 'user' | 'assistant';
@@ -66,7 +66,8 @@ If the user wants to buy, include [BUY:amount:address] format.`;
  */
 export async function chat(
   userMessage: string,
-  conversationHistory: OllamaMessage[] = []
+  conversationHistory: OllamaMessage[] = [],
+  endpoint: string = DEFAULT_OLLAMA_ENDPOINT
 ): Promise<string> {
   const messages: OllamaMessage[] = [
     { role: 'system', content: SYSTEM_PROMPT },
@@ -75,7 +76,7 @@ export async function chat(
   ];
 
   try {
-    const response = await fetch(`${OLLAMA_ENDPOINT}/api/chat`, {
+    const response = await fetch(`${endpoint}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -107,7 +108,8 @@ export async function chat(
  */
 export async function chatStream(
   userMessage: string,
-  conversationHistory: OllamaMessage[] = []
+  conversationHistory: OllamaMessage[] = [],
+  endpoint: string = DEFAULT_OLLAMA_ENDPOINT
 ): Promise<ReadableStream> {
   const messages: OllamaMessage[] = [
     { role: 'system', content: SYSTEM_PROMPT },
@@ -115,7 +117,7 @@ export async function chatStream(
     { role: 'user', content: userMessage },
   ];
 
-  const response = await fetch(`${OLLAMA_ENDPOINT}/api/chat`, {
+  const response = await fetch(`${endpoint}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

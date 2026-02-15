@@ -35,6 +35,7 @@ export type Bindings = {
   ADMIN_SECRET?: string; // For training data API access
   BITNET_ENDPOINT?: string; // Future BitNet inference endpoint
   LLM_ENDPOINT?: string; // Self-hosted Ollama server endpoint
+  AGENTS_API_URL?: string; // Agents server (46.225.3.208:8080) - all analysis proxied here
   AI_PROVIDER?: 'together' | 'bitnet' | 'local-bitnet' | 'hybrid'; // AI provider selection
   DATA_PROVIDER_MODE?: 'ON_CHAIN' | 'HYBRID' | 'LEGACY'; // Data source mode
   // Multi-RPC endpoints (automatic failover)

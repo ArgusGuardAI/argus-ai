@@ -430,28 +430,24 @@ export class MultiRpcClient {
 /**
  * Create a MultiRpcClient from environment variables
  *
- * CHAINSTACK PRIMARY + HELIUS FALLBACK
+ * HETZNER RPC ONLY - No third-party fallbacks
  */
 export function createMultiRpcClient(env: {
   SOLANA_RPC_URL?: string;
-  HELIUS_API_KEY?: string;
+  HELIUS_API_KEY?: string; // Kept for DAS API only, NOT for RPC
 }): MultiRpcClient {
   const client = new MultiRpcClient();
 
-  // CHAINSTACK - PRIMARY (Growth plan: 20M requests/month, 250 req/sec)
+  // YOUR OWN HETZNER NODE ONLY
   if (env.SOLANA_RPC_URL) {
-    client.addEndpoint('Chainstack', env.SOLANA_RPC_URL, 'premium', 0);
-    console.log(`[MultiRPC] Added primary: Chainstack`);
+    client.addEndpoint('Hetzner', env.SOLANA_RPC_URL, 'premium', 0);
+    console.log(`[MultiRPC] Using Hetzner node: ${env.SOLANA_RPC_URL}`);
   } else {
-    console.error('[MultiRPC] ERROR: SOLANA_RPC_URL not set!');
+    console.error('[MultiRPC] ERROR: SOLANA_RPC_URL not set! Must point to your Hetzner node.');
   }
 
-  // HELIUS FALLBACK - secondary option if Chainstack has issues
-  if (env.HELIUS_API_KEY) {
-    const heliusUrl = `https://mainnet.helius-rpc.com/?api-key=${env.HELIUS_API_KEY}`;
-    client.addEndpoint('Helius', heliusUrl, 'premium', 5);
-    console.log(`[MultiRPC] Added Helius fallback`);
-  }
+  // NO THIRD-PARTY FALLBACKS - Helius key is for DAS API only, not RPC
+  // All RPC calls go through your own node
 
   return client;
 }

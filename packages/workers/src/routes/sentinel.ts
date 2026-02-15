@@ -1719,21 +1719,50 @@ sentinelRoutes.post('/analyze', async (c) => {
       }, 429);
     }
 
-    // Helius key no longer used — all data comes from on-chain sources
-    // const heliusKey = c.env.HELIUS_API_KEY;
+    // ============================================
+    // PROXY TO AGENTS SERVER (Option B)
+    // Workers is thin proxy — all analysis on your servers
+    // ============================================
+    if (c.env.AGENTS_API_URL) {
+      console.log(`[Sentinel] Proxying to agents server: ${c.env.AGENTS_API_URL}`);
+      const proxyStart = Date.now();
 
-    // All modes now use pure on-chain data
-    // LEGACY mode is deprecated and falls through to ON_CHAIN
+      try {
+        const agentsResponse = await fetch(`${c.env.AGENTS_API_URL}/analyze`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tokenAddress }),
+        });
+
+        if (!agentsResponse.ok) {
+          const errorText = await agentsResponse.text();
+          console.error(`[Sentinel] Agents server error: ${agentsResponse.status} - ${errorText}`);
+          throw new Error(`Agents server returned ${agentsResponse.status}`);
+        }
+
+        const result = await agentsResponse.json();
+        console.log(`[Sentinel] Proxy complete in ${Date.now() - proxyStart}ms`);
+
+        // Add rate limit headers
+        return c.json(result, 200, {
+          'X-RateLimit-Limit': String(rateLimitResult.limit),
+          'X-RateLimit-Remaining': String(rateLimitResult.remaining),
+          'X-RateLimit-Reset': String(rateLimitResult.resetAt),
+          'X-User-Tier': rateLimitResult.tier,
+          'X-Data-Source': 'AGENTS',
+        });
+      } catch (proxyError) {
+        console.error('[Sentinel] Agents proxy failed, falling back to local:', proxyError);
+        // Fall through to local analysis if proxy fails
+      }
+    }
+
+    // ============================================
+    // FALLBACK: Local analysis (if agents server unavailable)
+    // ============================================
     const dataMode = c.env.DATA_PROVIDER_MODE || 'ON_CHAIN';
     const aiMode = 'local-bitnet';
-
-    // ============================================
-    // PURE ON-CHAIN MODE - Zero External Dependencies
-    // All external APIs (DexScreener, Helius, RugCheck) removed
-    // ============================================
-    // Always use on-chain data regardless of DATA_PROVIDER_MODE
-    // The mode setting is kept for backwards compatibility but has no effect
-    console.log(`[Sentinel] Using pure ON_CHAIN mode with ${aiMode} AI (requested: ${dataMode})`);
+    console.log(`[Sentinel] Using local ON_CHAIN mode with ${aiMode} AI (requested: ${dataMode})`);
       const fetchStart = Date.now();
 
       // Use on-chain data fetcher — no external API calls
