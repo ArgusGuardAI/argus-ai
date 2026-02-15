@@ -9,7 +9,7 @@
 
 import { Hono } from 'hono';
 import type { Bindings } from '../index';
-import { getAgentEvents, getAgentStats, storeAgentEvent, storeBatchAgentEvents, updateAgentStats, storeGraduation, getGraduations, storeDiscovery, getDiscoveries, type AgentEvent, type AgentStats, type GraduationEvent } from '../services/agent-events';
+import { getAgentEvents, getAgentStats, storeAgentEvent, storeBatchAgentEvents, updateAgentStats, storeGraduation, getGraduations, storeDiscovery, getDiscoveries, type AgentEvent, type AgentStats } from '../services/agent-events';
 
 // Types
 interface AgentState {
@@ -266,6 +266,8 @@ agentRoutes.post('/command', async (c) => {
         data?: {
           mint?: string;
           symbol?: string;
+          tokenAddress?: string;
+          tokenSymbol?: string;
         };
       }>;
     }>();
@@ -281,14 +283,15 @@ agentRoutes.post('/command', async (c) => {
           (async () => {
             try {
               // Store all events in a single KV operation
+              // Accept both tokenAddress/tokenSymbol (new) and mint/symbol (legacy)
               await storeBatchAgentEvents(c.env.SCAN_CACHE, body.alerts!.map(alert => ({
                 agent: alert.agent,
                 type: alert.type as AgentEvent['type'],
                 message: alert.message,
                 severity: alert.severity,
                 data: {
-                  tokenAddress: alert.data?.mint,
-                  tokenSymbol: alert.data?.symbol,
+                  tokenAddress: alert.data?.tokenAddress || alert.data?.mint,
+                  tokenSymbol: alert.data?.tokenSymbol || alert.data?.symbol,
                 },
               })));
             } catch (err) {

@@ -11,7 +11,7 @@
 import { TOKENS } from './solana-rpc';
 
 // Raydium SOL/USDC pool address (most liquid)
-const SOL_USDC_POOL = '58oQChx4yWmvKdwLLZzBi4ChoCc2fqCUWBkwMihLYQo2';
+const _SOL_USDC_POOL = '58oQChx4yWmvKdwLLZzBi4ChoCc2fqCUWBkwMihLYQo2';
 
 // Pool vault addresses for SOL/USDC pool
 const SOL_USDC_VAULTS = {

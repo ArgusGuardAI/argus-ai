@@ -307,7 +307,7 @@ trendsRoutes.get('/', async (c) => {
     // Analyze with Together AI
     const narratives = await analyzeMemeNarratives(
       uniqueTokens,
-      c.env.TOGETHER_AI_API_KEY,
+      c.env.TOGETHER_AI_API_KEY || '',
       c.env.TOGETHER_AI_MODEL
     );
 

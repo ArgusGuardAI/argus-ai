@@ -282,7 +282,7 @@ export class BitNetInferenceEngine {
     // ============================================
     // LOW HOLDER COUNT (Rug indicator)
     // ============================================
-    if (features.holders.holderCountLog < 0.3) { // < ~50 holders
+    if (features.holders.countLog < 0.3) { // < ~50 holders
       score += 10;
       flags.push({ type: 'LOW_HOLDERS', probability: 0.7, severity: 'MEDIUM' });
     }

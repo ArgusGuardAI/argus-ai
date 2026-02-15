@@ -1,15 +1,15 @@
 import { Hono } from 'hono';
 import type { Bindings } from '../index';
-// External API imports removed — all data comes from on-chain sources
-// Helius, DexScreener, and RugCheck are no longer used
-import { postTweet, formatAlertTweet, canTweet, recordTweet, type TwitterConfig } from '../services/twitter';
-import { sendMessage, formatAlertHtml } from '../services/telegram';
+// Twitter/Telegram alerts disabled - uncomment when re-enabling
+// import { postTweet, formatAlertTweet, canTweet, recordTweet, type TwitterConfig } from '../services/twitter';
+// import { sendMessage, formatAlertHtml } from '../services/telegram';
 import { checkRateLimit, getUserTier, getClientIP } from '../services/rate-limit';
-import { saveTrainingExample } from '../services/training-data';
-import { convertToAnalysisInput, type TokenAnalysisOutput, createAIProvider, LocalBitNetProvider } from '../services/ai-provider';
+import { LocalBitNetProvider, convertToAnalysisInput } from '../services/ai-provider';
 import { createSentinelDataFetcher } from '../services/sentinel-data';
-import { storeBundleWallets, findRepeatOffenders, type SyndicateNetwork } from '../services/bundle-network';
+// Bundle network tracking disabled - uncomment when re-enabling
+// import { storeBundleWallets, findRepeatOffenders, type SyndicateNetwork } from '../services/bundle-network';
 import { extractFromSentinelData, toFeatureVector, getFeatureSummary, getFeatureMemorySize } from '../services/feature-extractor';
+import { HELIUS_RPC_BASE } from '../services/helius';
 
 // ============================================
 // EXTERNAL APIs REMOVED - Pure On-Chain Data
@@ -276,7 +276,7 @@ async function getRecentBuyTransactions(
 /**
  * Detect wash trading by cross-referencing bundle wallets with recent buys
  */
-async function detectWashTrading(
+async function _detectWashTrading(
   bundleWallets: string[],
   tokenAddress: string,
   heliusKey: string,
@@ -382,7 +382,7 @@ function identifyBundleWallets(
 /**
  * Assess bundle legitimacy based on wallet behavior patterns
  */
-async function assessBundleQuality(
+async function _assessBundleQuality(
   bundleInfo: { detected: boolean; count: number; confidence: string },
   holders: HolderInfo[],
   creatorAddress: string | null,
@@ -645,7 +645,7 @@ interface AnalysisResult {
  * Apply hardcoded minimum score rules for critical red flags
  * These rules OVERRIDE the AI score when specific conditions are met
  */
-function applyHardcodedRules(
+function _applyHardcodedRules(
   result: AnalysisResult,
   data: RulesInputData
 ): AnalysisResult {
@@ -1107,7 +1107,7 @@ const sentinelRoutes = new Hono<{ Bindings: Bindings }>();
 /**
  * Fetch top token holders using Helius RPC
  */
-async function fetchTopHolders(
+async function _fetchTopHolders(
   tokenAddress: string,
   apiKey: string,
   limit: number = 20,
@@ -1223,7 +1223,7 @@ async function fetchTopHolders(
 /**
  * Build network graph from token data
  */
-function buildNetworkGraph(
+function _buildNetworkGraph(
   tokenAddress: string,
   tokenSymbol: string,
   creatorAddress: string | null,
@@ -1326,7 +1326,7 @@ function generateRecommendation(riskScore: number, bundleDetected: boolean, bund
  * All analysis now uses LocalBitNetProvider (rule-based, $0 cost).
  * Keeping for reference but this function is never called.
  */
-async function generateNetworkAnalysis_DEPRECATED(
+async function _generateNetworkAnalysis_DEPRECATED(
   tokenInfo: {
     name: string;
     symbol: string;

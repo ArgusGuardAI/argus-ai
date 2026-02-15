@@ -7,7 +7,7 @@
 import { Hono } from 'hono';
 import type { Bindings } from '../index';
 import { chat, chatStream, parseIntent, getFallbackResponse, type ChatIntent } from '../services/ollama';
-import { SentinelDataFetcher } from '../services/sentinel-data';
+import { createSentinelDataFetcher } from '../services/sentinel-data';
 
 const chatRoutes = new Hono<{ Bindings: Bindings }>();
 
@@ -41,7 +41,7 @@ chatRoutes.post('/message', async (c) => {
 
   try {
     const body = await c.req.json<ChatRequest>();
-    const { message, walletAddress } = body;
+    const { message, walletAddress: _walletAddress } = body;
 
     if (!message || typeof message !== 'string') {
       return c.json({ error: 'Message is required' }, 400);
@@ -64,27 +64,31 @@ chatRoutes.post('/message', async (c) => {
         if (intent.tokenAddress) {
           // Run actual analysis
           try {
-            const fetcher = new SentinelDataFetcher(c.env);
-            const data = await fetcher.fetch(intent.tokenAddress);
+            const fetcher = createSentinelDataFetcher(c.env);
+            const data = await fetcher.fetchData(intent.tokenAddress);
 
-            // Convert to safety score (inverted from risk)
-            const safetyScore = Math.max(0, 100 - (data.analysis?.riskScore || 50));
+            // Calculate safety score from token metrics
+            let riskScore = 50; // Base score
+            if (data.bundleInfo?.detected) riskScore += 20;
+            if (data.tokenInfo?.mintAuthorityActive) riskScore += 15;
+            if (data.tokenInfo?.lpLockedPct < 50) riskScore += 10;
+            if (data.tokenInfo?.holderCount < 100) riskScore += 5;
+            const safetyScore = Math.max(0, Math.min(100, 100 - riskScore));
             const verdict = safetyScore >= 60 ? 'SAFE' : safetyScore >= 40 ? 'SUSPICIOUS' : 'DANGEROUS';
 
             analysis = {
               score: safetyScore,
               verdict,
-              summary: data.analysis?.reasoning || 'Analysis complete.',
+              summary: 'On-chain analysis complete.',
             };
             tokenAddress = intent.tokenAddress;
             tokenSymbol = data.tokenInfo?.symbol || undefined;
 
             response = `I've analyzed ${tokenSymbol || 'this token'}.\n\n` +
-              `Safety Score: ${safetyScore}/100 (${verdict})\n` +
-              `${data.analysis?.reasoning || ''}\n\n` +
-              (data.bundleInfo?.bundleDetected ? `Warning: Bundle activity detected with ${data.bundleInfo.bundleCount} coordinated wallets.\n` : '') +
-              (data.security?.mintDisabled === false ? 'Warning: Mint authority is still active.\n' : '') +
-              (data.security?.lpLocked === false ? 'Warning: Liquidity is not locked.\n' : '');
+              `Safety Score: ${safetyScore}/100 (${verdict})\n\n` +
+              (data.bundleInfo?.detected ? `Warning: Bundle activity detected with ${data.bundleInfo.count} coordinated wallets.\n` : '') +
+              (data.tokenInfo?.mintAuthorityActive ? 'Warning: Mint authority is still active.\n' : '') +
+              (data.tokenInfo?.lpLockedPct < 50 ? 'Warning: Liquidity is not fully locked.\n' : '');
           } catch (err) {
             console.error('[Chat] Analysis error:', err);
             response = `I encountered an error analyzing ${intent.tokenAddress}. Please try again.`;

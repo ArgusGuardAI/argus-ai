@@ -29,7 +29,7 @@ const LIGHT_METHODS = new Set([
 ]);
 
 // Medium methods - moderate cost, prefer fast endpoints
-const MEDIUM_METHODS = new Set([
+const _MEDIUM_METHODS = new Set([
   'getAccountInfo',
   'getMultipleAccounts',
   'getTokenSupply',
@@ -189,7 +189,7 @@ export class MultiRpcClient {
   /**
    * Select best endpoint for a given method
    */
-  private selectEndpoint(method: string): RpcEndpoint | null {
+  private _selectEndpoint(method: string): RpcEndpoint | null {
     const weight = getMethodWeight(method);
 
     // For heavy methods, prefer premium endpoints if available

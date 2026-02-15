@@ -9,7 +9,7 @@
  */
 
 const HELIUS_API_BASE = 'https://api.helius.xyz/v0';
-const HELIUS_RPC_BASE = 'https://mainnet.helius-rpc.com';
+export const HELIUS_RPC_BASE = 'https://mainnet.helius-rpc.com';
 
 /**
  * Find the original creator/deployer of a token

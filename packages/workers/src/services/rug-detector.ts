@@ -10,7 +10,7 @@
  */
 
 import { SolanaRpcClient } from './solana-rpc';
-import { getPrimaryPool, type PoolInfo } from './dex-pools';
+import { getPrimaryPool } from './dex-pools';
 import { markTokenAsRugged } from './bundle-network';
 
 interface RugCheckResult {

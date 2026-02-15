@@ -101,7 +101,7 @@ export interface BundleData {
 export class DataProvider {
   private mode: DataProviderMode;
   private onChain: OnChainAnalyzer | null = null;
-  private rpcEndpoint?: string;
+  private _rpcEndpoint?: string;
 
   constructor(
     mode: DataProviderMode = 'HYBRID',
@@ -109,7 +109,7 @@ export class DataProvider {
     _heliusKey?: string // Reserved for future Helius-specific features
   ) {
     this.mode = mode;
-    this.rpcEndpoint = rpcEndpoint;
+    this._rpcEndpoint = rpcEndpoint;
     if (rpcEndpoint) {
       this.onChain = new OnChainAnalyzer(rpcEndpoint);
     }
