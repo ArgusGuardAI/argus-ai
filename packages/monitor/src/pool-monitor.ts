@@ -42,6 +42,9 @@ export const METAPLEX_TOKEN_METADATA_PROGRAM = new PublicKey('metaqbxxUerdq28cj1
 // Token-2022 Program - pump.fun uses this since Nov 2025 with embedded metadata
 export const TOKEN_2022_PROGRAM = new PublicKey('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb');
 
+// SPL Token Program - for vault account tracking (Raydium AMM V4, Meteora DLMM)
+export const SPL_TOKEN_PROGRAM = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
+
 // Token metadata cache (mint -> name/symbol)
 export interface TokenMetadata {
   name: string;
@@ -78,6 +81,10 @@ export interface PoolEvent {
     realSolReserves?: number;       // In lamports
     realTokenReserves?: number;
     liquiditySol?: number;          // Calculated SOL liquidity
+
+    // Raw reserve amounts (Raydium CPMM)
+    token0Amount?: number;          // Raw token0 reserves
+    token1Amount?: number;          // Raw token1 reserves
 
     // Token info (from bonding curve / pool data)
     tokenSupply?: number;
@@ -120,6 +127,7 @@ export interface MonitorConfig {
 const PUMP_FUN_BONDING_CURVE_DISCRIMINATOR = Buffer.from([
   0x17, 0xb7, 0xf8, 0x37, 0x60, 0xd8, 0xac, 0x60
 ]);
+// Pump.fun bonding curve: 8 (discriminator) + 32 (mint) + 8*5 (reserves/supply) + 1 (complete) + more = 151 bytes
 const PUMP_FUN_BONDING_CURVE_SIZE = 151;
 
 /**
@@ -170,13 +178,46 @@ export class PoolMonitor {
   private heliusApiKey: string | undefined;
   private static readonly PUMP_FUN_CLEANUP_AGE_MS = 2 * 60 * 60 * 1000; // 2 hours
 
+  // Pending bonding curves waiting for mint registration
+  // bondingCurveAddress → {poolData, timestamp}
+  private pendingBondingCurves: Map<string, {
+    poolData: {
+      poolAddress: string;
+      baseMint?: string;
+      quoteMint?: string;
+      enrichedData?: PoolEvent['enrichedData'];
+    };
+    pubkey: string;
+    slot: number;
+    timestamp: number;
+  }> = new Map();
+  private static readonly PENDING_BC_MAX_AGE_MS = 30000; // 30 seconds max wait
+
   // Position price tracking: poolAddress → {tokenAddress, lastPrice, dex}
   private positionPools: Map<string, {
     tokenAddress: string;
     lastPrice: number;
     dex: keyof typeof DEX_PROGRAMS;
   }> = new Map();
-  private static readonly PRICE_CHANGE_THRESHOLD = 0.005; // 0.5% change threshold
+  private static readonly PRICE_CHANGE_THRESHOLD = 0.001; // 0.1% change threshold (lowered for better tracking)
+
+  // Vault tracking for AMM pools: vaultAddress → {poolAddress, isBase}
+  // Used to get liquidity for Raydium AMM V4, Meteora DLMM from their vault accounts
+  private vaultToPool: Map<string, { poolAddress: string; isBase: boolean; mint: string }> = new Map();
+
+  // Pool vault balances: poolAddress → {baseBalance, quoteBalance, baseMint, quoteMint, dex}
+  private poolVaultBalances: Map<string, {
+    baseBalance: number;
+    quoteBalance: number;
+    baseMint: string;
+    quoteMint: string;
+    dex: keyof typeof DEX_PROGRAMS;
+    baseVault: string;
+    quoteVault: string;
+  }> = new Map();
+
+  // Track which vaults we've already subscribed to
+  private subscribedVaults: Set<string> = new Set();
 
   constructor(config: MonitorConfig) {
     this.config = config;
@@ -225,21 +266,13 @@ export class PoolMonitor {
 
       const request: SubscribeRequest = {
         accounts: {
-          // DEX programs for pool detection
+          // DEX programs for pool detection - single combined subscription
           dex: {
-            owner: ownerPubkeys,
-            account: [],
-            filters: [],
-          },
-          // Metaplex Token Metadata for legacy token names
-          metadata: {
-            owner: [METAPLEX_TOKEN_METADATA_PROGRAM.toBase58()],
-            account: [],
-            filters: [],
-          },
-          // Token-2022 for pump.fun tokens (since Nov 2025, metadata embedded in mint)
-          token2022: {
-            owner: [TOKEN_2022_PROGRAM.toBase58()],
+            owner: [
+              ...ownerPubkeys,
+              METAPLEX_TOKEN_METADATA_PROGRAM.toBase58(),
+              TOKEN_2022_PROGRAM.toBase58(),
+            ],
             account: [],
             filters: [],
           },
@@ -328,6 +361,12 @@ export class PoolMonitor {
       return;
     }
 
+    // Check if this is an SPL Token account (vault for Raydium AMM V4, Meteora)
+    if (ownerBase58 === SPL_TOKEN_PROGRAM.toBase58()) {
+      this.handleVaultUpdate(accountInfo);
+      return;
+    }
+
     // Determine which DEX owns this account
     const dex = OWNER_TO_DEX.get(ownerBase58);
 
@@ -340,6 +379,7 @@ export class PoolMonitor {
 
     // Check if this is a tracked position pool (for price updates)
     if (this.positionPools.has(pubkey)) {
+      console.log(`[PoolMonitor] Received update for TRACKED pool: ${pubkey.slice(0, 8)}... (${dex})`);
       this.handlePositionPriceUpdate(pubkey, data, slot);
       // Continue processing normally - we still want to detect new pools
     }
@@ -351,6 +391,26 @@ export class PoolMonitor {
     // Parse the account data
     const poolData = this.parsePoolData(dex, data);
     if (!poolData) return;
+
+    // For Pump.fun, look up mint from bondingCurve→mint mapping
+    // (the mint is not stored in the bonding curve account data)
+    if (dex === 'PUMP_FUN' && !poolData.baseMint) {
+      const mint = this.getMintFromBondingCurve(pubkey);
+      if (mint) {
+        poolData.baseMint = mint;
+      } else {
+        // Mint not registered yet - queue this bonding curve and wait
+        if (this.pendingBondingCurves.size < 1000) {
+          this.pendingBondingCurves.set(pubkey, {
+            poolData,
+            pubkey,
+            slot,
+            timestamp: Date.now(),
+          });
+        }
+        return; // Wait for mint registration
+      }
+    }
 
     // Generate unique key for dedup
     const poolKey = `${dex}:${poolData.baseMint || 'unknown'}:${poolData.quoteMint || 'unknown'}`;
@@ -608,6 +668,23 @@ export class PoolMonitor {
       return;
     }
 
+    // Subscribe to vault accounts for AMM pools (Raydium AMM V4, Meteora DLMM)
+    // This enables us to get real liquidity data from vault account updates
+    if ((dex === 'RAYDIUM_AMM_V4' || dex === 'METEORA_DLMM') &&
+        event.enrichedData?.baseVault &&
+        event.enrichedData?.quoteVault &&
+        event.baseMint &&
+        event.quoteMint) {
+      this.subscribeToVaults(
+        event.poolAddress,
+        event.enrichedData.baseVault,
+        event.enrichedData.quoteVault,
+        event.baseMint,
+        event.quoteMint,
+        dex
+      );
+    }
+
     this.eventQueue.push({ dex, event });
     this.processQueue();
   }
@@ -856,6 +933,181 @@ export class PoolMonitor {
   }
 
   // ============================================
+  // VAULT ACCOUNT HANDLING (Raydium AMM V4, Meteora DLMM)
+  // ============================================
+
+  /**
+   * Handle SPL Token account updates for tracked vaults
+   * These vaults hold the actual liquidity for AMM pools
+   *
+   * SPL Token Account Layout (165 bytes):
+   * [0:32]   mint
+   * [32:64]  owner
+   * [64:72]  amount (u64)
+   * [72:73]  delegate_option
+   * ... more fields
+   */
+  private handleVaultUpdate(accountInfo: SubscribeUpdateAccountInfo): void {
+    try {
+      const pubkey = new PublicKey(accountInfo.pubkey).toBase58();
+
+      // Check if this is a tracked vault
+      const vaultInfo = this.vaultToPool.get(pubkey);
+      if (!vaultInfo) return; // Not a tracked vault
+
+      const data = Buffer.from(accountInfo.data);
+      if (data.length < 72) return; // Too short for token account
+
+      // Parse the token balance (u64 at offset 64)
+      const balance = Number(data.readBigUInt64LE(64));
+
+      // Update the pool's vault balance
+      const poolInfo = this.poolVaultBalances.get(vaultInfo.poolAddress);
+      if (poolInfo) {
+        if (vaultInfo.isBase) {
+          poolInfo.baseBalance = balance;
+        } else {
+          poolInfo.quoteBalance = balance;
+        }
+
+        // Calculate liquidity from vault balances
+        const WSOL_MINT = 'So11111111111111111111111111111111111111112';
+        const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+        const USDT_MINT = 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB';
+
+        let liquiditySol = 0;
+        if (poolInfo.baseMint === WSOL_MINT) {
+          liquiditySol = poolInfo.baseBalance / 1e9;
+        } else if (poolInfo.quoteMint === WSOL_MINT) {
+          liquiditySol = poolInfo.quoteBalance / 1e9;
+        } else if (poolInfo.baseMint === USDC_MINT || poolInfo.baseMint === USDT_MINT) {
+          liquiditySol = poolInfo.baseBalance / 1e6;
+        } else if (poolInfo.quoteMint === USDC_MINT || poolInfo.quoteMint === USDT_MINT) {
+          liquiditySol = poolInfo.quoteBalance / 1e6;
+        } else {
+          // Non-SOL/stablecoin pair - use geometric mean estimate
+          const geomMean = Math.sqrt(poolInfo.baseBalance * poolInfo.quoteBalance);
+          liquiditySol = geomMean / 1e11;
+        }
+
+        // Log significant vault updates (reduced frequency)
+        if (liquiditySol > 1) {
+          console.log(`[Vault] ${vaultInfo.poolAddress.slice(0, 8)}... liquidity: ${liquiditySol.toFixed(2)} SOL (${poolInfo.dex})`);
+        }
+      }
+    } catch {
+      // Ignore parse errors
+    }
+  }
+
+  /**
+   * Subscribe to vault accounts for a pool
+   * Called when we detect a new pool from Raydium AMM V4 or Meteora DLMM
+   */
+  subscribeToVaults(
+    poolAddress: string,
+    baseVault: string,
+    quoteVault: string,
+    baseMint: string,
+    quoteMint: string,
+    dex: keyof typeof DEX_PROGRAMS
+  ): void {
+    // Skip if already subscribed
+    if (this.subscribedVaults.has(baseVault) && this.subscribedVaults.has(quoteVault)) {
+      return;
+    }
+
+    // Track vault → pool mapping
+    this.vaultToPool.set(baseVault, { poolAddress, isBase: true, mint: baseMint });
+    this.vaultToPool.set(quoteVault, { poolAddress, isBase: false, mint: quoteMint });
+
+    // Initialize pool vault balances
+    this.poolVaultBalances.set(poolAddress, {
+      baseBalance: 0,
+      quoteBalance: 0,
+      baseMint,
+      quoteMint,
+      dex,
+      baseVault,
+      quoteVault,
+    });
+
+    // Subscribe to both vault accounts
+    const vaultsToSubscribe = [];
+    if (!this.subscribedVaults.has(baseVault)) {
+      vaultsToSubscribe.push(baseVault);
+      this.subscribedVaults.add(baseVault);
+    }
+    if (!this.subscribedVaults.has(quoteVault)) {
+      vaultsToSubscribe.push(quoteVault);
+      this.subscribedVaults.add(quoteVault);
+    }
+
+    if (vaultsToSubscribe.length > 0 && this.stream) {
+      try {
+        const request: SubscribeRequest = {
+          accounts: {
+            [`vault_${poolAddress.slice(0, 8)}`]: {
+              owner: [SPL_TOKEN_PROGRAM.toBase58()],
+              account: vaultsToSubscribe,
+              filters: [],
+            },
+          },
+          slots: {},
+          transactions: {},
+          transactionsStatus: {},
+          blocks: {},
+          blocksMeta: {},
+          entry: {},
+          accountsDataSlice: [],
+          commitment: CommitmentLevel.CONFIRMED,
+        };
+
+        this.stream.write(request);
+        console.log(`[PoolMonitor] Subscribed to vaults for ${dex} pool ${poolAddress.slice(0, 8)}...`);
+      } catch (err) {
+        console.error(`[PoolMonitor] Failed to subscribe to vaults:`, err);
+      }
+    }
+
+    // Limit vault subscriptions to prevent memory issues
+    if (this.subscribedVaults.size > 10000) {
+      // Remove oldest vaults (first entries in the Set)
+      const toRemove = Array.from(this.subscribedVaults).slice(0, 1000);
+      for (const vault of toRemove) {
+        this.subscribedVaults.delete(vault);
+        this.vaultToPool.delete(vault);
+      }
+    }
+  }
+
+  /**
+   * Get current liquidity for a pool with vault tracking
+   */
+  getPoolLiquidity(poolAddress: string): number {
+    const poolInfo = this.poolVaultBalances.get(poolAddress);
+    if (!poolInfo) return 0;
+
+    const WSOL_MINT = 'So11111111111111111111111111111111111111112';
+    const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+    const USDT_MINT = 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB';
+
+    if (poolInfo.baseMint === WSOL_MINT) {
+      return poolInfo.baseBalance / 1e9;
+    } else if (poolInfo.quoteMint === WSOL_MINT) {
+      return poolInfo.quoteBalance / 1e9;
+    } else if (poolInfo.baseMint === USDC_MINT || poolInfo.baseMint === USDT_MINT) {
+      return poolInfo.baseBalance / 1e6;
+    } else if (poolInfo.quoteMint === USDC_MINT || poolInfo.quoteMint === USDT_MINT) {
+      return poolInfo.quoteBalance / 1e6;
+    } else {
+      // Non-SOL pair - use geometric mean estimate
+      const geomMean = Math.sqrt(poolInfo.baseBalance * poolInfo.quoteBalance);
+      return geomMean / 1e11;
+    }
+  }
+
+  // ============================================
   // TOKEN-2022 METADATA PARSING (pump.fun since Nov 2025)
   // ============================================
 
@@ -888,6 +1140,11 @@ export class PoolMonitor {
       // The account pubkey IS the mint address for mint accounts
       const mint = accountInfo.pubkey ? new PublicKey(accountInfo.pubkey).toBase58() : null;
       if (!mint) return;
+
+      // Register this mint so we can map bonding curve → mint later
+      // This is how we discover which token a Pump.fun bonding curve belongs to
+      this.registerPumpFunMint(mint);
+      this.token2022Parsed++;
 
       // Look for metadata extension in TLV format
       // Extensions start after byte 82 (standard mint) + 1 (account type)
@@ -1060,18 +1317,53 @@ export class PoolMonitor {
       const baseVault = new PublicKey(data.subarray(168, 200)).toBase58();
       const quoteVault = new PublicKey(data.subarray(200, 232)).toBase58();
 
-      // Try to read reserve amounts if data is long enough
-      let liquiditySol = 30; // Default estimate
+      // Read reserve amounts from pool account - Raydium CPMM stores reserves directly
+      let liquiditySol = 0;
+      let token0Amount = 0;
+      let token1Amount = 0;
+      const WSOL_MINT = 'So11111111111111111111111111111111111111112';
+      const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+      const USDT_MINT = 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB';
+
       if (data.length >= 354) {
-        const token0Amount = Number(data.readBigUInt64LE(338));
-        const token1Amount = Number(data.readBigUInt64LE(346));
+        token0Amount = Number(data.readBigUInt64LE(338));
+        token1Amount = Number(data.readBigUInt64LE(346));
 
-        // Determine which is SOL (quote) based on which mint is the base
-        const solAmount = mint0 === baseMint ? token1Amount : token0Amount;
-        liquiditySol = solAmount / 1_000_000_000;
+        // Determine liquidity based on what tokens are in the pair
+        if (mint0 === WSOL_MINT) {
+          liquiditySol = token0Amount / 1_000_000_000; // 9 decimals
+        } else if (mint1 === WSOL_MINT) {
+          liquiditySol = token1Amount / 1_000_000_000; // 9 decimals
+        } else if (mint0 === USDC_MINT || mint0 === USDT_MINT) {
+          liquiditySol = token0Amount / 1_000_000; // 6 decimals, ~= SOL value
+        } else if (mint1 === USDC_MINT || mint1 === USDT_MINT) {
+          liquiditySol = token1Amount / 1_000_000; // 6 decimals, ~= SOL value
+        } else {
+          // Non-SOL/stablecoin pair - estimate from reserves
+          // Use geometric mean of reserves as liquidity proxy
+          // Most memecoins have 6-9 decimals, normalize to reasonable SOL estimate
+          const geomMean = Math.sqrt(token0Amount * token1Amount);
+          // Scale down: 1e12 geometric mean ≈ 10 SOL liquidity
+          liquiditySol = geomMean / 1e11;
+        }
 
-        // Sanity check
-        if (liquiditySol > 10000 || liquiditySol < 0) liquiditySol = 30;
+        // Sanity check - cap at reasonable values
+        if (liquiditySol > 100000) liquiditySol = 100000;
+        if (liquiditySol < 0) liquiditySol = 0;
+      }
+
+      // Calculate SOL price per token for position tracking
+      // This avoids confusion about token ordering in handlePositionPriceUpdate
+      let priceSOLperToken = 0;
+      if (mint0 === WSOL_MINT && token0Amount > 0 && token1Amount > 0) {
+        // SOL is token0 (9 decimals), memecoin is token1 (assume 6 decimals)
+        priceSOLperToken = (token0Amount / 1e9) / (token1Amount / 1e6);
+      } else if (mint1 === WSOL_MINT && token0Amount > 0 && token1Amount > 0) {
+        // SOL is token1 (9 decimals), memecoin is token0 (assume 6 decimals)
+        priceSOLperToken = (token1Amount / 1e9) / (token0Amount / 1e6);
+      } else if (token0Amount > 0 && token1Amount > 0) {
+        // Non-SOL pair: use ratio as rough price estimate
+        priceSOLperToken = token1Amount / token0Amount;
       }
 
       return {
@@ -1083,6 +1375,12 @@ export class PoolMonitor {
           lpMint,
           baseVault,
           quoteVault,
+          // Store raw reserves for reference
+          token0Amount,
+          token1Amount,
+          // Pre-calculated price for position tracking
+          virtualSolReserves: priceSOLperToken,  // Repurpose: SOL per token price
+          virtualTokenReserves: (mint0 === WSOL_MINT) ? 1 : ((mint1 === WSOL_MINT) ? 2 : 0),  // Flag: which token is SOL
         },
       };
     } catch { return null; }
@@ -1150,9 +1448,9 @@ export class PoolMonitor {
       const quoteVault = new PublicKey(data.subarray(432, 464)).toBase58();
 
       // For AMM V4, the actual reserve amounts are in the vault accounts, not in this account
-      // We'll use a default estimate; accurate liquidity requires fetching vault balances
-      // But for new pools, we can estimate based on typical initial liquidity
-      const liquiditySol = 50; // Conservative estimate for Raydium pools
+      // Accurate liquidity requires fetching vault balances
+      // Don't fabricate - mark as unknown
+      const liquiditySol = 0; // Unknown without vault reads
 
       return {
         poolAddress: 'parsed',
@@ -1185,39 +1483,97 @@ export class PoolMonitor {
       // [46:48]   feeRate (u16)
       // [48:50]   protocolFeeRate (u16)
       // [50:66]   liquidity (u128)
-      // [66:82]   sqrtPrice (u128)
-      // [82:86]   tickCurrentIndex (i32)
-      // [86:94]   protocolFeeOwedA (u64)
-      // [94:102]  protocolFeeOwedB (u64)
-      // [101:133] tokenMintA (32 bytes) - Note: overlaps with above, actual offset is 102
-      // [133:165] tokenMintB (32 bytes)
-      // [165:197] tokenVaultA (32 bytes)
-      // [197:229] tokenVaultB (32 bytes)
-      // [229:261] feeGrowthGlobalA (u128)
-      // [245:277] feeGrowthGlobalB (u128)
+      // [66:82]   sqrtPrice (u128) - Q64.64 fixed-point
+      // [81:85]   tickCurrentIndex (i32)
+      // [85:93]   protocolFeeOwedA (u64)
+      // [93:101]  protocolFeeOwedB (u64)
+      // [101:133] tokenMintA (32 bytes)
+      // [133:165] tokenVaultA (32 bytes)
+      // [165:181] feeGrowthGlobalA (u128)
+      // [181:213] tokenMintB (32 bytes)
+      // [213:245] tokenVaultB (32 bytes)
       // ... more fields
 
-      // Correct offsets based on Orca SDK
+      const WSOL_MINT = 'So11111111111111111111111111111111111111112';
+
+      // Correct offsets based on Orca Whirlpool SDK (verified from official docs)
       const tokenMintA = new PublicKey(data.subarray(101, 133)).toBase58();
-      const tokenMintB = new PublicKey(data.subarray(133, 165)).toBase58();
+      const tokenMintB = new PublicKey(data.subarray(181, 213)).toBase58();  // After feeGrowthGlobalA
       const baseMint = this.isValidMint(tokenMintA) ? tokenMintA : (this.isValidMint(tokenMintB) ? tokenMintB : null);
       if (!baseMint) return null;
 
-      const tokenVaultA = new PublicKey(data.subarray(165, 197)).toBase58();
-      const tokenVaultB = new PublicKey(data.subarray(197, 229)).toBase58();
+      const tokenVaultA = new PublicKey(data.subarray(133, 165)).toBase58();
+      const tokenVaultB = new PublicKey(data.subarray(213, 245)).toBase58();
 
-      // Read liquidity (u128 at offset 50, we'll use lower 64 bits)
-      let liquiditySol = 30; // Default estimate
-      if (data.length >= 66) {
-        const liquidityLow = Number(data.readBigUInt64LE(50));
-        // Liquidity in Whirlpool is sqrt(x*y), not direct SOL amount
-        // For estimation, we'll use a conservative default
-        // Real liquidity would need price calculation
-        if (liquidityLow > 0 && liquidityLow < 1e18) {
-          // Very rough estimate: liquidity / 1e9 as proxy for SOL
-          liquiditySol = Math.min(1000, liquidityLow / 1e9);
-          if (liquiditySol < 0.1) liquiditySol = 30;
-        }
+      // Read sqrtPrice (u128 at offset 65) - Q64.64 fixed-point format
+      // Price = (sqrtPrice / 2^64)^2 = sqrtPrice^2 / 2^128
+      // We read lower 64 bits and upper 64 bits separately
+      let sqrtPriceX64 = 0n;
+      let priceTokenBPerA = 0;
+
+      if (data.length >= 81) {
+        const sqrtPriceLow = data.readBigUInt64LE(65);
+        const sqrtPriceHigh = data.readBigUInt64LE(73);
+        sqrtPriceX64 = (sqrtPriceHigh << 64n) | sqrtPriceLow;
+
+        // Calculate price: (sqrtPrice / 2^64)^2
+        // For numerical stability, we divide by 2^64 first, then square
+        const sqrtPriceFloat = Number(sqrtPriceX64) / (2 ** 64);
+        priceTokenBPerA = sqrtPriceFloat * sqrtPriceFloat;
+      }
+
+      // Read liquidity (u128 at offset 49)
+      const liquidityLow = Number(data.readBigUInt64LE(49));
+
+      // Determine which token is SOL and calculate SOL-denominated values
+      const solIsTokenA = tokenMintA === WSOL_MINT;
+      const solIsTokenB = tokenMintB === WSOL_MINT;
+
+      let liquiditySol = 0;
+      let token0Amount = 0;
+      let token1Amount = 0;
+
+      if (solIsTokenB && priceTokenBPerA > 0) {
+        // TokenB is SOL, price = SOL per TokenA (the memecoin)
+        // This is what we want for price calculation
+        // Estimate liquidity as sqrt(L) * sqrt(price) for rough SOL value
+        const sqrtL = Math.sqrt(liquidityLow);
+        liquiditySol = Math.min(10000, (sqrtL * Math.sqrt(priceTokenBPerA)) / 1e9);
+
+        // For token0Amount/token1Amount, we use the price ratio
+        // token0 = memecoin, token1 = SOL
+        token0Amount = liquidityLow / 1e6;  // Rough memecoin amount (6 decimals)
+        token1Amount = (liquidityLow * priceTokenBPerA) / 1e9;  // SOL amount (9 decimals)
+      } else if (solIsTokenA && priceTokenBPerA > 0) {
+        // TokenA is SOL, price = TokenB per SOL
+        // We need to invert: SOL per TokenB = 1 / priceTokenBPerA
+        const priceSOLperToken = priceTokenBPerA > 0 ? 1 / priceTokenBPerA : 0;
+        const sqrtL = Math.sqrt(liquidityLow);
+        liquiditySol = Math.min(10000, sqrtL / 1e9);
+
+        // token0 = SOL, token1 = memecoin
+        token0Amount = liquidityLow / 1e9;
+        token1Amount = (liquidityLow / priceTokenBPerA) / 1e6;
+      } else {
+        // Non-SOL pair - rough estimate
+        liquiditySol = Math.min(1000, liquidityLow / 1e12);
+        token0Amount = liquidityLow / 1e6;
+        token1Amount = liquidityLow / 1e6;
+      }
+
+      // Calculate the actual SOL price per token (for position tracking)
+      // This avoids precision loss from storing raw sqrtPrice as Number
+      let priceSOLperToken = 0;
+      if (solIsTokenB && priceTokenBPerA > 0) {
+        // TokenB is SOL, price is directly priceTokenBPerA
+        // Adjust for decimals: SOL (9 decimals), memecoin (6 decimals)
+        priceSOLperToken = priceTokenBPerA * (1e6 / 1e9);
+      } else if (solIsTokenA && priceTokenBPerA > 0) {
+        // TokenA is SOL, need to invert
+        priceSOLperToken = (1 / priceTokenBPerA) * (1e6 / 1e9);
+      } else if (priceTokenBPerA > 0) {
+        // Non-SOL pair: use raw price as estimate
+        priceSOLperToken = priceTokenBPerA;
       }
 
       return {
@@ -1228,9 +1584,120 @@ export class PoolMonitor {
           liquiditySol,
           baseVault: tokenVaultA,
           quoteVault: tokenVaultB,
+          token0Amount,
+          token1Amount,
+          // Store calculated price directly (avoids bigint precision loss)
+          virtualSolReserves: priceSOLperToken,  // Repurpose: actual SOL price per token
+          virtualTokenReserves: solIsTokenB ? 1 : (solIsTokenA ? 2 : 0),  // Flag: 1=SOL is tokenB, 2=SOL is tokenA
         },
       };
     } catch { return null; }
+  }
+
+  // Map bonding curve address → mint address (populated by Token-2022 observations)
+  private bondingCurveToMint: Map<string, string> = new Map();
+
+  /**
+   * Derive Pump.fun bonding curve PDA from mint address
+   * Seeds: ["bonding-curve", mint]
+   */
+  private deriveBondingCurvePDA(mint: string): string {
+    const [pda] = PublicKey.findProgramAddressSync(
+      [Buffer.from('bonding-curve'), new PublicKey(mint).toBytes()],
+      DEX_PROGRAMS.PUMP_FUN
+    );
+    return pda.toBase58();
+  }
+
+  /**
+   * Register a mint → bonding curve mapping (called when we observe Token-2022 mints)
+   */
+  registerPumpFunMint(mint: string): void {
+    try {
+      const bondingCurve = this.deriveBondingCurvePDA(mint);
+      this.bondingCurveToMint.set(bondingCurve, mint);
+      // Check if we have a pending bonding curve waiting for this mint
+      const pending = this.pendingBondingCurves.get(bondingCurve);
+      if (pending && pending.poolData) {
+        // Found a match! Complete the event
+        pending.poolData.baseMint = mint;
+        this.pendingBondingCurves.delete(bondingCurve);
+
+        // Continue processing the pool event
+        this.processPumpFunPool(pending.poolData, pending.pubkey, pending.slot, pending.timestamp, mint);
+      }
+
+      // Clean up old pending bonding curves
+      const cutoff = Date.now() - PoolMonitor.PENDING_BC_MAX_AGE_MS;
+      for (const [bc, data] of this.pendingBondingCurves) {
+        if (data.timestamp < cutoff) {
+          this.pendingBondingCurves.delete(bc);
+        }
+      }
+
+      // Cap size
+      if (this.bondingCurveToMint.size > 10000) {
+        const first = this.bondingCurveToMint.keys().next().value;
+        if (first) this.bondingCurveToMint.delete(first);
+      }
+    } catch {
+      // Invalid mint - ignore
+    }
+  }
+
+  /**
+   * Process a Pump.fun pool event once we have the mint
+   */
+  private processPumpFunPool(
+    poolData: NonNullable<ReturnType<typeof this.parsePoolData>>,
+    pubkey: string,
+    slot: number,
+    timestamp: number,
+    mint: string
+  ): void {
+    const dex = 'PUMP_FUN' as const;
+
+    // Generate unique key for dedup
+    const poolKey = `${dex}:${mint}:${poolData.quoteMint || 'unknown'}`;
+    if (this.seenAccounts.has(poolKey)) return;
+    this.seenAccounts.add(poolKey);
+
+    // Track for graduation detection
+    if (this.pumpFunTokens.size < PoolMonitor.MAX_PUMP_FUN_TOKENS) {
+      this.pumpFunTokens.set(mint, timestamp);
+    }
+
+    const event: PoolEvent = {
+      type: 'new_pool',
+      dex,
+      poolAddress: pubkey,
+      baseMint: mint,
+      quoteMint: poolData.quoteMint,
+      timestamp,
+      slot,
+      tokenName: undefined,
+      tokenSymbol: undefined,
+      enrichedData: poolData.enrichedData,
+    };
+
+    // Try immediate metadata lookup
+    const metadata = this.metadataCache.get(mint);
+    if (metadata) {
+      event.tokenName = metadata.name;
+      event.tokenSymbol = metadata.symbol;
+      this.metadataHits++;
+      this.sendPoolEvent(dex, event);
+    } else {
+      // Queue for metadata retry
+      this.queueForMetadataRetry(dex, event);
+    }
+  }
+
+  /**
+   * Look up mint from bonding curve address
+   */
+  getMintFromBondingCurve(bondingCurve: string): string | undefined {
+    return this.bondingCurveToMint.get(bondingCurve);
   }
 
   private parsePumpFun(data: Buffer): {
@@ -1239,48 +1706,47 @@ export class PoolMonitor {
     quoteMint?: string;
     enrichedData?: PoolEvent['enrichedData'];
   } | null {
-    if (data.length !== PUMP_FUN_BONDING_CURVE_SIZE) return null;
+    // Pump.fun bonding curve accounts are 151 bytes
+    if (data.length < 151) return null;
     try {
       const discriminator = data.subarray(0, 8);
       if (!discriminator.equals(PUMP_FUN_BONDING_CURVE_DISCRIMINATOR)) return null;
 
-      // Parse mint (bytes 8-40)
-      const mintBytes = data.subarray(8, 40);
-      const baseMint = new PublicKey(mintBytes).toBase58();
-      if (baseMint === '11111111111111111111111111111111' || baseMint.startsWith('1111111111')) return null;
-
-      // Parse reserves and supply from bonding curve data
+      // Parse from bonding curve data
       // Pump.fun bonding curve layout (151 bytes):
-      // [0:8]   discriminator
-      // [8:40]  mint pubkey (32 bytes)
-      // [40:48] virtualTokenReserves (u64)
-      // [48:56] virtualSolReserves (u64)
-      // [56:64] realTokenReserves (u64)
-      // [64:72] realSolReserves (u64)
-      // [72:80] tokenTotalSupply (u64)
-      // [80:81] complete (bool)
-      const virtualTokenReserves = data.readBigUInt64LE(40);
-      const virtualSolReserves = data.readBigUInt64LE(48);
-      const realTokenReserves = data.readBigUInt64LE(56);
-      const realSolReserves = data.readBigUInt64LE(64);
-      const tokenSupply = data.readBigUInt64LE(72);
-      const complete = data.readUInt8(80) === 1;
+      // [0:8]    discriminator (u64)
+      // [8:16]   virtualTokenReserves (u64)
+      // [16:24]  virtualSolReserves (u64)  ← REAL SOL data (~30 SOL typical)
+      // [24:32]  realTokenReserves (u64)
+      // [32:40]  realSolReserves (u64)
+      // [40:48]  tokenTotalSupply (u64)
+      // [48:49]  complete (bool)
+      // [49:81]  creator pubkey (32 bytes)
+      // [81:...]  additional padding to 151 bytes
+      // NOTE: The mint is NOT stored in the account - must use bondingCurve→mint mapping
+
+      const virtualTokenReserves = data.readBigUInt64LE(8);
+      const virtualSolReserves = data.readBigUInt64LE(16);
+      const realTokenReserves = data.readBigUInt64LE(24);
+      const realSolReserves = data.readBigUInt64LE(32);
+      const tokenSupply = data.readBigUInt64LE(40);
+      const complete = data.readUInt8(48) === 1;
 
       // Calculate liquidity in SOL (lamports to SOL)
       // Use virtualSolReserves as it represents market liquidity
-      // Divide by 1e9 to convert lamports to SOL
-      // Cap to reasonable range (Pump.fun typically 0.1 - 500 SOL)
-      let liquiditySol = Number(virtualSolReserves) / 1_000_000_000;
+      const liquiditySol = Number(virtualSolReserves) / 1_000_000_000;
 
-      // Sanity check - if value is unreasonably high, the parsing might be wrong
-      // In that case, estimate from tokenSupply (typical pump.fun starts with ~30 SOL virtual)
-      if (liquiditySol > 1000 || liquiditySol < 0) {
-        liquiditySol = 30; // Default estimate for new pump.fun token
+      // Sanity check - Pump.fun bonding curves typically have 30-85 SOL
+      // Values outside 1-100 SOL range might indicate parsing issues
+      if (liquiditySol > 100 || liquiditySol < 1) {
+        return null; // Don't create event for invalid data
       }
 
+      // NOTE: baseMint is NOT in the account data - must be looked up from bondingCurve→mint mapping
+      // The caller (handleAccountUpdate) will do this lookup
       return {
         poolAddress: 'parsed',
-        baseMint,
+        baseMint: undefined, // Caller must look up from bondingCurve→mint mapping
         quoteMint: 'So11111111111111111111111111111111111111112',
         enrichedData: {
           virtualSolReserves: Number(virtualSolReserves),
@@ -1326,9 +1792,9 @@ export class PoolMonitor {
       const reserveX = new PublicKey(data.subarray(72, 104)).toBase58();
       const reserveY = new PublicKey(data.subarray(104, 136)).toBase58();
 
-      // Meteora DLMM pools are typically for established tokens with moderate liquidity
-      // Default estimate - actual amounts require vault account reads
-      const liquiditySol = 40; // Conservative estimate for Meteora pools
+      // Meteora DLMM pools - actual amounts require vault account reads
+      // Don't fabricate - mark as unknown
+      const liquiditySol = 0; // Unknown without vault reads
 
       return {
         poolAddress: 'parsed',
@@ -1350,6 +1816,9 @@ export class PoolMonitor {
   /**
    * Add a position pool to track for price updates
    * Called when TraderAgent opens a new position
+   *
+   * IMPORTANT: We subscribe to the specific pool account to get real-time updates.
+   * Without this, we only get updates when the account changes (trades happen).
    */
   addPositionTracking(poolAddress: string, tokenAddress: string, dex: keyof typeof DEX_PROGRAMS): void {
     this.positionPools.set(poolAddress, {
@@ -1358,6 +1827,46 @@ export class PoolMonitor {
       dex,
     });
     console.log(`[PoolMonitor] Tracking position: ${tokenAddress.slice(0, 8)}... on ${dex} (pool: ${poolAddress.slice(0, 8)}...)`);
+
+    // Subscribe to this specific pool account for real-time updates
+    this.subscribeToPoolAccount(poolAddress);
+  }
+
+  /**
+   * Subscribe to a specific pool account via Yellowstone
+   * This ensures we get updates for tracked positions even if no new pools are created
+   */
+  private subscribeToPoolAccount(poolAddress: string): void {
+    if (!this.stream) {
+      console.log(`[PoolMonitor] Cannot subscribe to pool - stream not connected`);
+      return;
+    }
+
+    try {
+      // Send additional subscription request for this specific account
+      const request: SubscribeRequest = {
+        accounts: {
+          [`position_${poolAddress.slice(0, 8)}`]: {
+            owner: [],
+            account: [poolAddress],  // Subscribe by specific account address
+            filters: [],
+          },
+        },
+        slots: {},
+        transactions: {},
+        transactionsStatus: {},
+        blocks: {},
+        blocksMeta: {},
+        entry: {},
+        accountsDataSlice: [],
+        commitment: CommitmentLevel.CONFIRMED,
+      };
+
+      this.stream.write(request);
+      console.log(`[PoolMonitor] Subscribed to pool account: ${poolAddress.slice(0, 8)}...`);
+    } catch (err) {
+      console.error(`[PoolMonitor] Failed to subscribe to pool ${poolAddress.slice(0, 8)}:`, err);
+    }
   }
 
   /**
@@ -1395,15 +1904,55 @@ export class PoolMonitor {
 
     // Parse pool data to get current reserves/price
     const poolData = this.parsePoolData(tracked.dex, data);
-    if (!poolData?.enrichedData) return;
+    if (!poolData?.enrichedData) {
+      console.log(`[PoolMonitor] Price update: ${tracked.tokenAddress.slice(0, 8)}... - no enrichedData (${tracked.dex})`);
+      return;
+    }
 
     // Calculate price from reserves
     let price = 0;
-    const { virtualSolReserves, virtualTokenReserves, liquiditySol } = poolData.enrichedData;
+    const enriched = poolData.enrichedData;
+    const WSOL_MINT = 'So11111111111111111111111111111111111111112';
 
-    if (virtualSolReserves && virtualTokenReserves && virtualTokenReserves > 0) {
-      // Price = SOL reserves / Token reserves (in SOL per token)
-      price = (virtualSolReserves / 1e9) / (virtualTokenReserves / 1e6); // Assuming 6 decimals
+    if (tracked.dex === 'PUMP_FUN' && enriched.virtualSolReserves && enriched.virtualTokenReserves) {
+      // Pump.fun bonding curve price
+      price = (enriched.virtualSolReserves / 1e9) / (enriched.virtualTokenReserves / 1e6);
+    } else if (tracked.dex === 'ORCA_WHIRLPOOL' && enriched.virtualSolReserves !== undefined) {
+      // Orca Whirlpool: virtualSolReserves contains pre-calculated SOL price per token
+      // (calculated in parseOrcaWhirlpool from sqrtPrice to avoid bigint precision loss)
+      price = enriched.virtualSolReserves;
+
+      // Sanity check: price should be small for typical memecoins
+      if (price <= 0 || price > 0.1) {
+        // Fallback to liquiditySol-based estimate if price is unreasonable
+        price = enriched.liquiditySol ? enriched.liquiditySol / 1e10 : 0;
+      }
+    } else if (tracked.dex === 'RAYDIUM_CPMM' && enriched.virtualSolReserves !== undefined && enriched.virtualSolReserves > 0) {
+      // Raydium CPMM: virtualSolReserves contains pre-calculated SOL price per token
+      price = enriched.virtualSolReserves;
+
+      // Sanity check: price should be small for typical memecoins
+      if (price > 0.1) {
+        // Fallback to liquiditySol-based estimate if price is unreasonable
+        price = enriched.liquiditySol ? enriched.liquiditySol / 1e10 : 0;
+      }
+    } else if (enriched.token0Amount && enriched.token1Amount) {
+      // Other AMM pools: use ratio as price estimate
+      const token0 = enriched.token0Amount;
+      const token1 = enriched.token1Amount;
+
+      if (token0 > 0 && token1 > 0) {
+        // Use ratio as rough price proxy
+        price = token1 / token0;
+      }
+    } else if (enriched.liquiditySol && enriched.liquiditySol > 0) {
+      // Fallback - use liquidity as rough price proxy
+      price = enriched.liquiditySol / 1e10;
+    }
+
+    // Debug: log calculated price
+    if (this.positionPools.size > 0 && this.positionPools.size <= 5) {
+      console.log(`[PoolMonitor] Price calc for ${tracked.tokenAddress.slice(0, 8)}...: ${price.toExponential(2)} (${tracked.dex})`);
     }
 
     // Check if price changed significantly
@@ -1412,6 +1961,7 @@ export class PoolMonitor {
       if (change < PoolMonitor.PRICE_CHANGE_THRESHOLD) {
         return; // Price hasn't changed enough to notify
       }
+      console.log(`[PoolMonitor] Price change: ${tracked.tokenAddress.slice(0, 8)}... ${(change * 100).toFixed(2)}% (threshold: ${PoolMonitor.PRICE_CHANGE_THRESHOLD * 100}%)`);
     }
 
     // Update last price
@@ -1423,7 +1973,7 @@ export class PoolMonitor {
         poolAddress,
         tokenAddress: tracked.tokenAddress,
         price,
-        liquiditySol: liquiditySol || 0,
+        liquiditySol: enriched.liquiditySol || 0,
         timestamp: Date.now(),
       };
 

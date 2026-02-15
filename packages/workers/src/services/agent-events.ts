@@ -16,6 +16,8 @@ export interface AgentEvent {
   data?: {
     tokenAddress?: string;
     tokenSymbol?: string;
+    mint?: string;
+    symbol?: string;
     score?: number;
     walletAddress?: string;
     bundleCount?: number;

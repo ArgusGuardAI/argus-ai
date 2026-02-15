@@ -29,7 +29,7 @@ export interface ActivityEvent {
   id: string;
   timestamp: number;
   agent: string;
-  type: 'scan' | 'alert' | 'analysis' | 'trade' | 'discovery' | 'comms';
+  type: 'scan' | 'alert' | 'analysis' | 'trade' | 'discovery' | 'comms' | 'council';
   message: string;
   severity: 'info' | 'warning' | 'critical';
   data?: {

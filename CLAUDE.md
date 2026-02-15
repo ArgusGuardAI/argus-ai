@@ -47,6 +47,63 @@ Development guidance for AI assistants working on the Solana Safeguard AI codeba
 
 ---
 
+## CRITICAL RULES - MUST FOLLOW
+
+### 1. NEVER REIMPLEMENT AGENT LOGIC
+
+**If an agent class exists in `packages/agents`, USE IT. Don't reimplement its logic.**
+
+The agents package exports production-tested classes:
+```typescript
+import { TraderAgent, ScoutAgent, AnalystAgent, HunterAgent } from '@argus/agents';
+```
+
+**WRONG** (reimplementing):
+```typescript
+// DON'T DO THIS - reimplementing TraderAgent logic
+let positions = [];
+function enterPosition() { ... }
+function exitPosition() { ... }
+function checkStopLoss() { ... }
+// 500+ lines of duplicate, buggy code
+```
+
+**RIGHT** (using actual agent):
+```typescript
+// DO THIS - use the actual TraderAgent
+const trader = new TraderAgent(messageBus, { paperTrading: true });
+trader.handlePriceUpdate(event);  // TraderAgent handles everything
+```
+
+### 2. PAPER TRADING USES REAL AGENTS
+
+Paper trading scripts in `packages/training/scripts/` MUST:
+1. Import and instantiate actual agent classes
+2. Pass `paperTrading: true` in config (no real transactions)
+3. Feed real market events to agents
+4. Let agents handle ALL position/exit logic
+
+This ensures:
+- Paper trading tests the SAME code that runs in production
+- Bug fixes apply everywhere (fix once)
+- Paper → Live transition is a config change, not a rewrite
+
+### 3. YELLOWSTONE IS THE SOURCE OF TRUTH
+
+- **NEVER** use DexScreener as primary data source when Yellowstone is available
+- Yellowstone provides real-time bonding curve data directly from chain
+- DexScreener is a FALLBACK only for graduated tokens
+- See JOURNAL.md for detailed rationale
+
+### 4. NO THIRD-PARTY APIs FOR CORE LOGIC
+
+- Use Yellowstone gRPC for pool/price data
+- Use your own RPC node (Hetzner 144.76.62.180)
+- DexScreener/RugCheck are fallbacks only, not primary sources
+- See JOURNAL.md for what went wrong when we violated this
+
+---
+
 ## Architecture
 
 ```
@@ -77,8 +134,10 @@ packages/
 │   ├── src/quick-analyzer.ts  # 2-call quick analysis
 │   ├── src/alert-manager.ts   # Telegram + Workers API alerts
 │   └── src/scammer-db.ts      # Local scammer database
-└── training/        # ML Training Data Collection
-    └── scripts/         # Data collection and feature extraction
+└── training/        # Paper Trading & ML Training
+    └── scripts/
+        ├── paper-trade-agi.ts  # Paper trading using ACTUAL TraderAgent
+        └── calc-pnl.ts         # P&L calculation utilities
 ```
 
 ---
@@ -103,6 +162,69 @@ npx wrangler pages deploy dist --project-name argusguard-website
 cd packages/workers
 npx wrangler deploy
 ```
+
+---
+
+## Paper Trading
+
+**CRITICAL: Paper trading scripts MUST use actual agent classes, not reimplementations.**
+
+### Running Paper Trading
+
+```bash
+cd packages/training
+pnpm paper-trade-agi
+```
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  paper-trade-agi.ts                                             │
+│                                                                 │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────────────┐ │
+│  │ PoolMonitor │───▶│ MessageBus  │───▶│ ACTUAL TraderAgent  │ │
+│  │ (Yellowstone)│    │             │    │ (from @argus/agents)│ │
+│  └─────────────┘    └─────────────┘    └─────────────────────┘ │
+│         │                                       │               │
+│         │ Yellowstone events                    │ Positions     │
+│         ▼                                       ▼               │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │ TraderAgent.handlePriceUpdate(event)                        ││
+│  │ - Stop loss / take profit (built-in)                        ││
+│  │ - Trailing stop (built-in)                                  ││
+│  │ - Position sizing (built-in)                                ││
+│  │ - All exit logic (built-in)                                 ││
+│  └─────────────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Paper → Live Transition
+
+Because paper trading uses the SAME TraderAgent:
+1. Paper trading: `new TraderAgent(bus, { paperTrading: true })`
+2. Live trading: `new TraderAgent(bus, { privateKey: '...' })`
+
+That's it. No code changes. Same logic, same protections.
+
+### What NOT to Do
+
+**NEVER reimplement trading logic in paper trading scripts:**
+
+```typescript
+// ❌ WRONG - reimplementing TraderAgent
+let positions = [];
+function enterPosition() { /* custom implementation */ }
+function exitPosition() { /* custom implementation */ }
+function checkStopLoss() { /* custom implementation */ }
+
+// ✅ RIGHT - using actual TraderAgent
+import { TraderAgent } from '@argus/agents';
+const trader = new TraderAgent(messageBus, config);
+// TraderAgent handles EVERYTHING
+```
+
+See JOURNAL.md entry "2024-02-13: CRITICAL LESSON" for why this matters.
 
 ### Cloudflare Projects
 | Project | Domain | Purpose |
